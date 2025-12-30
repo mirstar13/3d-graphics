@@ -1,0 +1,367 @@
+package main
+
+import "math"
+
+// LODLevel represents a single level of detail
+type LODLevel struct {
+	Mesh           *Mesh
+	MaxDistance    float64 // Distance at which this LOD should be used
+	ScreenCoverage float64 // Alternative: screen space coverage threshold (0.0 to 1.0)
+}
+
+// LODGroup manages multiple LOD levels for an object
+type LODGroup struct {
+	Levels           []LODLevel
+	CurrentLOD       int
+	UseScreenSpace   bool    // Use screen space coverage instead of distance
+	FadeTransition   bool    // Enable smooth fade between LOD levels
+	TransitionRange  float64 // Distance range for fade (percentage of max distance)
+	BoundingVolume   BoundingVolume
+	LastUpdatePos    Point
+	LastUpdateLOD    int
+	UpdateHysteresis float64 // Prevent rapid LOD switching
+}
+
+// NewLODGroup creates a new LOD group
+func NewLODGroup() *LODGroup {
+	return &LODGroup{
+		Levels:           make([]LODLevel, 0),
+		CurrentLOD:       0,
+		UseScreenSpace:   false,
+		FadeTransition:   false,
+		TransitionRange:  0.1,
+		UpdateHysteresis: 5.0, // 5 units of distance before switching LOD
+	}
+}
+
+// AddLOD adds a level of detail
+func (lg *LODGroup) AddLOD(mesh *Mesh, maxDistance float64) {
+	level := LODLevel{
+		Mesh:        mesh,
+		MaxDistance: maxDistance,
+	}
+	lg.Levels = append(lg.Levels, level)
+
+	// Sort LODs by distance (closest first)
+	lg.sortLODs()
+
+	// Update bounding volume to encompass highest detail mesh
+	if len(lg.Levels) > 0 && lg.BoundingVolume == nil {
+		lg.BoundingVolume = ComputeMeshBounds(lg.Levels[0].Mesh)
+	}
+}
+
+// AddLODWithScreenCoverage adds a LOD level with screen space coverage
+func (lg *LODGroup) AddLODWithScreenCoverage(mesh *Mesh, screenCoverage float64) {
+	level := LODLevel{
+		Mesh:           mesh,
+		ScreenCoverage: screenCoverage,
+	}
+	lg.Levels = append(lg.Levels, level)
+	lg.UseScreenSpace = true
+}
+
+// sortLODs sorts LOD levels by distance (ascending)
+func (lg *LODGroup) sortLODs() {
+	// Simple bubble sort (fine for small number of LODs)
+	n := len(lg.Levels)
+	for i := 0; i < n-1; i++ {
+		for j := 0; j < n-i-1; j++ {
+			if lg.Levels[j].MaxDistance > lg.Levels[j+1].MaxDistance {
+				lg.Levels[j], lg.Levels[j+1] = lg.Levels[j+1], lg.Levels[j]
+			}
+		}
+	}
+}
+
+// SelectLOD selects the appropriate LOD level based on camera distance
+func (lg *LODGroup) SelectLOD(worldPos Point, camera *Camera) int {
+	if len(lg.Levels) == 0 {
+		return -1
+	}
+
+	if lg.UseScreenSpace {
+		return lg.selectLODScreenSpace(worldPos, camera)
+	}
+
+	return lg.selectLODDistance(worldPos, camera)
+}
+
+// selectLODDistance selects LOD based on distance
+func (lg *LODGroup) selectLODDistance(worldPos Point, camera *Camera) int {
+	camPos := camera.GetPosition()
+
+	// Calculate distance from camera to object
+	dx := worldPos.X - camPos.X
+	dy := worldPos.Y - camPos.Y
+	dz := worldPos.Z - camPos.Z
+	distance := math.Sqrt(dx*dx + dy*dy + dz*dz)
+
+	// Apply hysteresis to prevent rapid switching
+	if lg.CurrentLOD >= 0 && lg.CurrentLOD < len(lg.Levels) {
+		currentMaxDist := lg.Levels[lg.CurrentLOD].MaxDistance
+
+		// If we're within hysteresis range of current LOD, keep it
+		if math.Abs(distance-currentMaxDist) < lg.UpdateHysteresis {
+			return lg.CurrentLOD
+		}
+	}
+
+	// Select LOD based on distance
+	selectedLOD := len(lg.Levels) - 1 // Default to lowest detail
+
+	for i, level := range lg.Levels {
+		if distance <= level.MaxDistance {
+			selectedLOD = i
+			break
+		}
+	}
+
+	return selectedLOD
+}
+
+// selectLODScreenSpace selects LOD based on screen space coverage
+func (lg *LODGroup) selectLODScreenSpace(worldPos Point, camera *Camera) int {
+	// Calculate approximate screen space coverage
+	coverage := lg.calculateScreenCoverage(worldPos, camera)
+
+	selectedLOD := len(lg.Levels) - 1
+
+	for i, level := range lg.Levels {
+		if coverage >= level.ScreenCoverage {
+			selectedLOD = i
+			break
+		}
+	}
+
+	return selectedLOD
+}
+
+// calculateScreenCoverage estimates screen space coverage (0.0 to 1.0)
+func (lg *LODGroup) calculateScreenCoverage(worldPos Point, camera *Camera) float64 {
+	if lg.BoundingVolume == nil {
+		return 0.0
+	}
+
+	camPos := camera.GetPosition()
+	dx := worldPos.X - camPos.X
+	dy := worldPos.Y - camPos.Y
+	dz := worldPos.Z - camPos.Z
+	distance := math.Sqrt(dx*dx + dy*dy + dz*dz)
+
+	if distance < 0.001 {
+		return 1.0
+	}
+
+	// Approximate screen coverage using object radius and distance
+	radius := lg.BoundingVolume.GetRadius()
+
+	// Project radius to screen space (simplified)
+	projectedSize := (radius * camera.FOV.X) / distance
+
+	// Normalize to 0-1 range (assuming FOV represents screen width in some units)
+	coverage := projectedSize / camera.FOV.X
+
+	if coverage > 1.0 {
+		coverage = 1.0
+	}
+	if coverage < 0.0 {
+		coverage = 0.0
+	}
+
+	return coverage
+}
+
+// Update updates the LOD selection
+func (lg *LODGroup) Update(worldPos Point, camera *Camera) {
+	lg.LastUpdatePos = worldPos
+	lg.CurrentLOD = lg.SelectLOD(worldPos, camera)
+	lg.LastUpdateLOD = lg.CurrentLOD
+}
+
+// GetCurrentMesh returns the currently active LOD mesh
+func (lg *LODGroup) GetCurrentMesh() *Mesh {
+	if lg.CurrentLOD < 0 || lg.CurrentLOD >= len(lg.Levels) {
+		return nil
+	}
+	return lg.Levels[lg.CurrentLOD].Mesh
+}
+
+// GetLODLevel returns the LOD level at index
+func (lg *LODGroup) GetLODLevel(index int) *LODLevel {
+	if index < 0 || index >= len(lg.Levels) {
+		return nil
+	}
+	return &lg.Levels[index]
+}
+
+// GetLODCount returns the number of LOD levels
+func (lg *LODGroup) GetLODCount() int {
+	return len(lg.Levels)
+}
+
+// SceneNode extension for LOD support
+func (sn *SceneNode) SetLODGroup(lodGroup *LODGroup) {
+	// Store LOD group as the node's object
+	// When rendering, the LOD system will select appropriate mesh
+	sn.AddTag("lod-enabled")
+	sn.Object = lodGroup
+}
+
+// GetLODGroup retrieves LOD group if node has one
+func (sn *SceneNode) GetLODGroup() *LODGroup {
+	if lodGroup, ok := sn.Object.(*LODGroup); ok {
+		return lodGroup
+	}
+	return nil
+}
+
+// UpdateLODs updates all LOD groups in the scene
+func (s *Scene) UpdateLODs() {
+	lodNodes := s.FindNodesByTag("lod-enabled")
+
+	for _, node := range lodNodes {
+		if lodGroup, ok := node.Object.(*LODGroup); ok {
+			worldPos := node.Transform.GetWorldPosition()
+			lodGroup.Update(worldPos, s.Camera)
+		}
+	}
+}
+
+// SimplifyMesh creates a simplified version of a mesh (placeholder implementation)
+// In a real engine, this would use algorithms like:
+// - Edge collapse (quadric error metrics)
+// - Vertex clustering
+// - Progressive meshes
+func SimplifyMesh(mesh *Mesh, targetRatio float64) *Mesh {
+	// Placeholder: Just return original mesh
+	// In production, implement mesh simplification algorithms
+
+	if targetRatio >= 1.0 {
+		return mesh
+	}
+
+	// For now, return a copy with fewer triangles (very naive approach)
+	simplified := NewMesh()
+	simplified.Position = mesh.Position
+
+	// Simple decimation: skip some triangles
+	skipRate := int(1.0 / targetRatio)
+	if skipRate < 1 {
+		skipRate = 1
+	}
+
+	for i, tri := range mesh.Triangles {
+		if i%skipRate == 0 {
+			simplified.AddTriangle(tri)
+		}
+	}
+
+	for i, quad := range mesh.Quads {
+		if i%skipRate == 0 {
+			simplified.AddQuad(quad)
+		}
+	}
+
+	return simplified
+}
+
+// GenerateLODChain generates multiple LOD levels from a base mesh
+func GenerateLODChain(baseMesh *Mesh, numLevels int) *LODGroup {
+	lodGroup := NewLODGroup()
+
+	// Add highest detail (original mesh)
+	lodGroup.AddLOD(baseMesh, 50.0)
+
+	// Generate progressively simpler LODs
+	for i := 1; i < numLevels; i++ {
+		ratio := 1.0 - (float64(i) / float64(numLevels))
+		simplifiedMesh := SimplifyMesh(baseMesh, ratio)
+
+		distance := 50.0 * float64(i+1)
+		lodGroup.AddLOD(simplifiedMesh, distance)
+	}
+
+	return lodGroup
+}
+
+// GetLODStats returns statistics about LOD usage
+type LODStats struct {
+	TotalLODGroups int
+	ActiveLOD0     int // Highest detail
+	ActiveLOD1     int
+	ActiveLOD2     int
+	ActiveLODOther int
+	TotalTriangles int
+}
+
+func (s *Scene) GetLODStats() LODStats {
+	stats := LODStats{}
+	lodNodes := s.FindNodesByTag("lod-enabled")
+
+	stats.TotalLODGroups = len(lodNodes)
+
+	for _, node := range lodNodes {
+		if lodGroup, ok := node.Object.(*LODGroup); ok {
+			switch lodGroup.CurrentLOD {
+			case 0:
+				stats.ActiveLOD0++
+			case 1:
+				stats.ActiveLOD1++
+			case 2:
+				stats.ActiveLOD2++
+			default:
+				stats.ActiveLODOther++
+			}
+
+			// Count triangles in current LOD
+			currentMesh := lodGroup.GetCurrentMesh()
+			if currentMesh != nil {
+				stats.TotalTriangles += len(currentMesh.Triangles)
+				stats.TotalTriangles += len(currentMesh.Quads) * 2 // Quads = 2 triangles
+			}
+		}
+	}
+
+	return stats
+}
+
+// Make LODGroup implement Drawable interface
+func (lg *LODGroup) Draw(renderer *Renderer, camera *Camera) {
+	mesh := lg.GetCurrentMesh()
+	if mesh != nil {
+		mesh.Draw(renderer, camera)
+	}
+}
+
+func (lg *LODGroup) DrawFilled(renderer *Renderer, camera *Camera) {
+	mesh := lg.GetCurrentMesh()
+	if mesh != nil {
+		mesh.DrawFilled(renderer, camera)
+	}
+}
+
+func (lg *LODGroup) Project(renderer *Renderer, camera *Camera) {
+	mesh := lg.GetCurrentMesh()
+	if mesh != nil {
+		mesh.Project(renderer, camera)
+	}
+}
+
+func (lg *LODGroup) RotateLocal(axis byte, angle float64) {
+	// Rotate all LOD meshes
+	for i := range lg.Levels {
+		if lg.Levels[i].Mesh != nil {
+			lg.Levels[i].Mesh.RotateLocal(axis, angle)
+		}
+	}
+}
+
+func (lg *LODGroup) RotateGlobal(axis byte, angle float64) {
+	// Rotate all LOD meshes
+	for i := range lg.Levels {
+		if lg.Levels[i].Mesh != nil {
+			lg.Levels[i].Mesh.RotateGlobal(axis, angle)
+		}
+	}
+}
