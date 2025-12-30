@@ -51,7 +51,7 @@ func main() {
 	fmt.Println(" 17 - Combined Advanced Demo")
 	fmt.Println(" 18 - Stress Test Demo")
 	fmt.Println()
-	fmt.Print("Enter choice (1-11): ")
+	fmt.Print("Enter choice (1-18): ")
 
 	var choice int
 	fmt.Scanln(&choice)
@@ -83,7 +83,7 @@ func main() {
 	// Create scene
 	scene := NewScene()
 
-	// Configure camera based on demo
+	// IMPORTANT: Configure camera with GOOD defaults before building scene
 	configureCamera(scene.Camera, demoType)
 
 	// Setup lighting
@@ -108,20 +108,7 @@ func main() {
 	cameraController := NewCameraController(scene.Camera)
 
 	// Configure camera controller based on demo
-	switch demoType {
-	case DemoSolarSystem:
-		cameraController.SetOrbitRadius(100.0)
-	case DemoRobotArm:
-		cameraController.SetOrbitRadius(60.0)
-	case DemoSpinningCubes:
-		cameraController.SetOrbitRadius(80.0)
-	case DemoOrbitingObjects:
-		cameraController.SetOrbitRadius(70.0)
-	case DemoWaveGrid:
-		cameraController.SetOrbitRadius(60.0)
-	case DemoHelix:
-		cameraController.SetOrbitRadius(70.0)
-	}
+	configureCameraController(cameraController, demoType)
 
 	// Clear screen
 	fmt.Print("\033[2J\033[H")
@@ -162,20 +149,88 @@ func main() {
 	renderer.RenderLoop(scene, fps, updateFunc)
 }
 
-// configureCamera sets up camera based on demo
+// configureCamera sets up camera based on demo - WITH PROPER POSITIONING
 func configureCamera(camera *Camera, demoType int) {
 	camera.DZ = 0.0
 	camera.Near = 0.5
+	camera.FOV = Point{X: 60.0, Y: 30.0, Z: 0}
 
+	// Position camera based on demo scene size
 	switch demoType {
 	case DemoSolarSystem:
-		camera.Far = 200.0
+		camera.Transform.SetPosition(0, 30, -100)
+		camera.Transform.SetRotation(-0.2, 0, 0)
+		camera.Far = 300.0
+
 	case DemoRobotArm:
-		camera.Far = 150.0
-	case DemoSpinningCubes:
+		camera.Transform.SetPosition(0, 10, -60)
+		camera.Transform.SetRotation(0, 0, 0)
 		camera.Far = 200.0
+
+	case DemoSpinningCubes:
+		camera.Transform.SetPosition(0, 0, -80)
+		camera.Transform.SetRotation(0, 0, 0)
+		camera.Far = 300.0
+
+	case DemoOrbitingObjects:
+		camera.Transform.SetPosition(0, 20, -80)
+		camera.Transform.SetRotation(-0.2, 0, 0)
+		camera.Far = 200.0
+
+	case DemoWaveGrid:
+		camera.Transform.SetPosition(0, 30, -50)
+		camera.Transform.SetRotation(-0.4, 0, 0)
+		camera.Far = 200.0
+
+	case DemoHelix:
+		camera.Transform.SetPosition(0, 0, -60)
+		camera.Transform.SetRotation(0, 0, 0)
+		camera.Far = 200.0
+
+	case DemoWireframe:
+		camera.Transform.SetPosition(0, 0, -50)
+		camera.Transform.SetRotation(0, 0, 0)
+		camera.Far = 200.0
+
 	default:
-		camera.Far = 150.0
+		// Default safe position - can see origin from distance
+		camera.Transform.SetPosition(0, 10, -60)
+		camera.Transform.SetRotation(0, 0, 0)
+		camera.Far = 300.0
+	}
+}
+
+// configureCameraController sets controller parameters
+func configureCameraController(controller *CameraController, demoType int) {
+	switch demoType {
+	case DemoSolarSystem:
+		controller.SetOrbitRadius(120.0)
+		controller.SetOrbitCenter(0, 0, 0)
+		controller.EnableAutoOrbit(true)
+
+	case DemoRobotArm:
+		controller.SetOrbitRadius(60.0)
+		controller.EnableAutoOrbit(true)
+
+	case DemoSpinningCubes:
+		controller.SetOrbitRadius(100.0)
+		controller.EnableAutoOrbit(true)
+
+	case DemoOrbitingObjects:
+		controller.SetOrbitRadius(90.0)
+		controller.EnableAutoOrbit(true)
+
+	case DemoWaveGrid:
+		controller.SetOrbitRadius(70.0)
+		controller.EnableAutoOrbit(true)
+
+	case DemoHelix:
+		controller.SetOrbitRadius(80.0)
+		controller.EnableAutoOrbit(true)
+
+	default:
+		controller.SetOrbitRadius(80.0)
+		controller.EnableAutoOrbit(true)
 	}
 }
 
@@ -248,7 +303,7 @@ func animateSceneDemo(scene *Scene, demoType int, time float64) {
 		AnimateWaveGrid(scene, time)
 	case DemoHelix:
 		AnimateHelix(scene, time)
-	case DemoWireframe: // NEW
+	case DemoWireframe:
 		AnimateWireframe(scene, time)
 	case DemoAdvancedSystems:
 		AnimateAdvancedSystems(scene, time)

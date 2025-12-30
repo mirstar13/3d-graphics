@@ -67,15 +67,13 @@ func (sim *SilentInputManager) Start() {
 
 				sim.mutex.Lock()
 
-				// Handle character keys
 				if char != 0 {
 					sim.keys[char] = true
 				}
 
-				// Handle special keys
 				switch key {
 				case keyboard.KeyEsc:
-					sim.keys['x'] = true // Quit
+					sim.keys['x'] = true
 				case keyboard.KeyArrowUp:
 					sim.keys['i'] = true
 				case keyboard.KeyArrowDown:
@@ -103,7 +101,7 @@ func (sim *SilentInputManager) Stop() {
 	keyboard.Close()
 }
 
-// SetKey manually sets a key state (for programmatic control)
+// SetKey manually sets a key state
 func (sim *SilentInputManager) SetKey(key rune, pressed bool) {
 	sim.mutex.Lock()
 	defer sim.mutex.Unlock()
@@ -120,12 +118,12 @@ func (sim *SilentInputManager) GetInputState() InputState {
 		Backward: sim.keys['s'] || sim.keys['S'],
 		Left:     sim.keys['a'] || sim.keys['A'],
 		Right:    sim.keys['d'] || sim.keys['D'],
-		Up:       sim.keys['e'] || sim.keys['E'],
-		Down:     sim.keys['q'] || sim.keys['Q'],
-		RotLeft:  sim.keys['j'] || sim.keys['J'],
-		RotRight: sim.keys['l'] || sim.keys['L'],
-		RotUp:    sim.keys['i'] || sim.keys['I'],
-		RotDown:  sim.keys['k'] || sim.keys['K'],
+		Up:       sim.keys['e'] || sim.keys['E'], // E = move up
+		Down:     sim.keys['q'] || sim.keys['Q'], // Q = move down
+		RotLeft:  sim.keys['j'] || sim.keys['J'], // J = rotate left
+		RotRight: sim.keys['l'] || sim.keys['L'], // L = rotate right
+		RotUp:    sim.keys['i'] || sim.keys['I'], // I = rotate up
+		RotDown:  sim.keys['k'] || sim.keys['K'], // K = rotate down
 		SpeedUp:  sim.keys['+'] || sim.keys['='],
 		SlowDown: sim.keys['-'] || sim.keys['_'],
 		Reset:    sim.keys['r'] || sim.keys['R'],
@@ -152,10 +150,11 @@ type CameraController struct {
 	OrbitRadius     float64
 	OrbitSpeed      float64
 	OrbitAngle      float64
+	OrbitHeight     float64
 	OrbitCenter     Point
 }
 
-// NewCameraController creates a camera controller with transform-based movement
+// NewCameraController creates a camera controller
 func NewCameraController(camera *Camera) *CameraController {
 	pos := camera.GetPosition()
 	pitch, yaw, roll := camera.GetRotation()
@@ -168,37 +167,42 @@ func NewCameraController(camera *Camera) *CameraController {
 		InitialRotation: Point{X: pitch, Y: yaw, Z: roll},
 		InitialDZ:       camera.DZ,
 		AutoOrbit:       true,
-		OrbitRadius:     50.0,
+		OrbitRadius:     80.0,
 		OrbitSpeed:      0.01,
 		OrbitAngle:      0.0,
+		OrbitHeight:     20.0,
 		OrbitCenter:     Point{X: 0, Y: 0, Z: 0},
 	}
 }
 
-// Update processes input and updates camera using transform-based movement
+// Update processes input and updates camera
 func (cc *CameraController) Update(input InputState) {
-	// Check if user pressed any movement key - disable auto-orbit
+	// Check if user pressed any control key - disable auto-orbit
 	if input.Forward || input.Backward || input.Left || input.Right ||
 		input.Up || input.Down || input.RotLeft || input.RotRight ||
 		input.RotUp || input.RotDown {
 		cc.AutoOrbit = false
 	}
 
-	// Auto-orbit mode
+	// Auto-orbit mode - circle around center while looking at it
 	if cc.AutoOrbit {
 		cc.OrbitAngle += cc.OrbitSpeed
 
 		// Calculate orbit position
 		x := cc.OrbitCenter.X + cc.OrbitRadius*math.Cos(cc.OrbitAngle)
-		y := cc.OrbitCenter.Y + 20*math.Sin(cc.OrbitAngle*0.5)
 		z := cc.OrbitCenter.Z + cc.OrbitRadius*math.Sin(cc.OrbitAngle)
+		y := cc.OrbitCenter.Y + cc.OrbitHeight
 
+		// Set camera position
 		cc.Camera.SetPosition(x, y, z)
+
+		// Always look at the center
 		cc.Camera.LookAt(cc.OrbitCenter)
+
 		return
 	}
 
-	// Manual control mode - use transform-based movement
+	// Manual control mode
 
 	// WASD Movement (relative to camera orientation)
 	if input.Forward {
@@ -214,7 +218,7 @@ func (cc *CameraController) Update(input InputState) {
 		cc.Camera.MoveRight(-cc.MoveSpeed)
 	}
 
-	// Q/E - Vertical movement (world space up/down)
+	// Q/E - Vertical movement (WORLD space up/down)
 	if input.Up {
 		cc.Camera.MoveUp(cc.MoveSpeed)
 	}
@@ -222,7 +226,12 @@ func (cc *CameraController) Update(input InputState) {
 		cc.Camera.MoveUp(-cc.MoveSpeed)
 	}
 
-	// Camera rotation (IJKL or arrow keys)
+	// IJKL - Camera rotation
+	// J = rotate left (yaw left)
+	// L = rotate right (yaw right)
+	// I = rotate up (pitch up)
+	// K = rotate down (pitch down)
+
 	if input.RotLeft {
 		cc.Camera.RotateYaw(-cc.RotationSpeed)
 	}
@@ -230,20 +239,10 @@ func (cc *CameraController) Update(input InputState) {
 		cc.Camera.RotateYaw(cc.RotationSpeed)
 	}
 	if input.RotUp {
-		cc.Camera.RotatePitch(cc.RotationSpeed)
-		// Clamp pitch to prevent gimbal lock
-		pitch, _, _ := cc.Camera.GetRotation()
-		if pitch > math.Pi/2-0.1 {
-			cc.Camera.Transform.Rotation.X = math.Pi/2 - 0.1
-		}
+		cc.Camera.RotatePitch(-cc.RotationSpeed)
 	}
 	if input.RotDown {
-		cc.Camera.RotatePitch(-cc.RotationSpeed)
-		// Clamp pitch to prevent gimbal lock
-		pitch, _, _ := cc.Camera.GetRotation()
-		if pitch < -math.Pi/2+0.1 {
-			cc.Camera.Transform.Rotation.X = -math.Pi/2 + 0.1
-		}
+		cc.Camera.RotatePitch(cc.RotationSpeed)
 	}
 
 	// Speed adjustment
@@ -263,7 +262,7 @@ func (cc *CameraController) Update(input InputState) {
 	// Reset
 	if input.Reset {
 		cc.Camera.SetPosition(cc.InitialPosition.X, cc.InitialPosition.Y, cc.InitialPosition.Z)
-		cc.Camera.SetRotation(cc.InitialRotation.Y, cc.InitialRotation.X)
+		cc.Camera.SetRotation(cc.InitialRotation.X, cc.InitialRotation.Y, cc.InitialRotation.Z)
 		cc.Camera.DZ = cc.InitialDZ
 		cc.OrbitAngle = 0.0
 		cc.AutoOrbit = true
@@ -281,7 +280,20 @@ func (cc *CameraController) SetOrbitRadius(radius float64) {
 	cc.OrbitRadius = radius
 }
 
+// SetOrbitHeight sets the height offset for auto-orbit
+func (cc *CameraController) SetOrbitHeight(height float64) {
+	cc.OrbitHeight = height
+}
+
 // EnableAutoOrbit enables or disables auto-orbit mode
 func (cc *CameraController) EnableAutoOrbit(enable bool) {
 	cc.AutoOrbit = enable
+
+	// If enabling, reset angle to current position
+	if enable {
+		pos := cc.Camera.GetPosition()
+		dx := pos.X - cc.OrbitCenter.X
+		dz := pos.Z - cc.OrbitCenter.Z
+		cc.OrbitAngle = math.Atan2(dz, dx)
+	}
 }

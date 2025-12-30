@@ -95,17 +95,34 @@ func (t *Transform) Translate(dx, dy, dz float64) {
 	t.MarkDirty()
 }
 
-// Rotate rotates the transform by delta angles (converts to quaternion internally)
+// Rotate rotates the transform by delta angles
 func (t *Transform) Rotate(dpitch, dyaw, droll float64) {
 	deltaQuat := QuaternionFromEuler(dpitch, dyaw, droll)
-	t.Rotation = t.Rotation.Multiply(deltaQuat).Normalize()
+	// Left-multiply for local-space rotation
+	t.Rotation = deltaQuat.Multiply(t.Rotation).Normalize()
 	t.MarkDirty()
 }
 
 // RotateAxisAngle rotates around an arbitrary axis
 func (t *Transform) RotateAxisAngle(axis Point, angle float64) {
-	deltaQuat := QuaternionFromAxisAngle(axis, angle)
-	t.Rotation = t.Rotation.Multiply(deltaQuat).Normalize()
+	// Normalize axis
+	length := math.Sqrt(axis.X*axis.X + axis.Y*axis.Y + axis.Z*axis.Z)
+	if length < 1e-10 {
+		return // Invalid axis
+	}
+	normalizedAxis := Point{
+		X: axis.X / length,
+		Y: axis.Y / length,
+		Z: axis.Z / length,
+	}
+
+	// Create quaternion from axis-angle
+	deltaQuat := QuaternionFromAxisAngle(normalizedAxis, angle)
+
+	// Multiply on the LEFT for local-space rotation
+	// q_new = q_delta * q_current
+	t.Rotation = deltaQuat.Multiply(t.Rotation).Normalize()
+
 	t.MarkDirty()
 }
 
@@ -220,12 +237,81 @@ func (t *Transform) LookAt(target Point) {
 	dy /= length
 	dz /= length
 
-	// Calculate yaw and pitch
-	yaw := math.Atan2(dx, dz)
-	distXZ := math.Sqrt(dx*dx + dz*dz)
-	pitch := -math.Atan2(dy, distXZ)
+	// Build a look-at rotation matrix
+	// Forward = direction to target (we want +Z to point at target)
+	forward := Point{X: dx, Y: dy, Z: dz}
 
-	t.SetRotation(pitch, yaw, 0)
+	// Up vector (world up)
+	worldUp := Point{X: 0, Y: 1, Z: 0}
+
+	// Right = forward × up
+	rightX, rightY, rightZ := crossProduct(forward.X, forward.Y, forward.Z, worldUp.X, worldUp.Y, worldUp.Z)
+	rightLen := math.Sqrt(rightX*rightX + rightY*rightY + rightZ*rightZ)
+
+	if rightLen < 1e-10 {
+		// Forward and up are parallel, choose arbitrary right
+		rightX, rightY, rightZ = 1, 0, 0
+	} else {
+		rightX /= rightLen
+		rightY /= rightLen
+		rightZ /= rightLen
+	}
+
+	// Up = right × forward (to ensure orthogonality)
+	upX, upY, upZ := crossProduct(rightX, rightY, rightZ, forward.X, forward.Y, forward.Z)
+
+	// Build rotation matrix from basis vectors
+	// Note: Our forward is +Z, right is +X, up is +Y
+	rotMatrix := Matrix4x4{M: [16]float64{
+		rightX, upX, forward.X, 0,
+		rightY, upY, forward.Y, 0,
+		rightZ, upZ, forward.Z, 0,
+		0, 0, 0, 1,
+	}}
+
+	// Convert matrix to quaternion
+	t.Rotation = MatrixToQuaternion(rotMatrix)
+	t.MarkDirty()
+}
+
+// MatrixToQuaternion converts a rotation matrix to a quaternion
+func MatrixToQuaternion(m Matrix4x4) Quaternion {
+	// Extract rotation part
+	m00, m01, m02 := m.M[0], m.M[1], m.M[2]
+	m10, m11, m12 := m.M[4], m.M[5], m.M[6]
+	m20, m21, m22 := m.M[8], m.M[9], m.M[10]
+
+	trace := m00 + m11 + m22
+
+	var q Quaternion
+
+	if trace > 0 {
+		s := math.Sqrt(trace+1.0) * 2
+		q.W = 0.25 * s
+		q.X = (m21 - m12) / s
+		q.Y = (m02 - m20) / s
+		q.Z = (m10 - m01) / s
+	} else if m00 > m11 && m00 > m22 {
+		s := math.Sqrt(1.0+m00-m11-m22) * 2
+		q.W = (m21 - m12) / s
+		q.X = 0.25 * s
+		q.Y = (m01 + m10) / s
+		q.Z = (m02 + m20) / s
+	} else if m11 > m22 {
+		s := math.Sqrt(1.0+m11-m00-m22) * 2
+		q.W = (m02 - m20) / s
+		q.X = (m01 + m10) / s
+		q.Y = 0.25 * s
+		q.Z = (m12 + m21) / s
+	} else {
+		s := math.Sqrt(1.0+m22-m00-m11) * 2
+		q.W = (m10 - m01) / s
+		q.X = (m02 + m20) / s
+		q.Y = (m12 + m21) / s
+		q.Z = 0.25 * s
+	}
+
+	return q.Normalize()
 }
 
 // SetParent sets the parent transform and marks dirty

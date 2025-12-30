@@ -68,7 +68,7 @@ func (r *Renderer) SetLightingSystem(ls *LightingSystem) {
 func (r *Renderer) ClearBuffers() {
 	for y := 0; y < r.Height; y++ {
 		for x := 0; x < r.Width; x++ {
-			r.Surface[y][x] = r.Charset[0]
+			r.Surface[y][x] = ' '
 			r.ColorBuffer[y][x] = ColorBlack
 			r.ZBuffer[y][x] = math.Inf(1)
 		}
@@ -84,7 +84,7 @@ func (r *Renderer) RenderScene(scene *Scene) {
 		r.LightingSystem.SetCamera(scene.Camera)
 	}
 
-	// Get all renderable nodes (NOT transformed objects)
+	// Get all renderable nodes
 	nodes := scene.GetRenderableNodes()
 
 	// Render each node - transform on-the-fly
@@ -411,13 +411,11 @@ func (r *Renderer) RenderFilled(obj Drawable, camera *Camera) {
 
 // Present writes the rendered frame to screen
 func (r *Renderer) Present() {
-	// Save cursor position
-	fmt.Fprintf(r.Writer, "\033[s")
-	// Move to home without clearing (reduces flicker)
-	fmt.Fprintf(r.Writer, "\033[H")
-
 	builder := strings.Builder{}
-	builder.Grow(r.Height * r.Width * 20)
+	builder.Grow(r.Height * r.Width * 25)
+
+	// Move cursor to home position
+	builder.WriteString("\033[H")
 
 	if r.UseColor {
 		currentColor := ColorBlack
@@ -432,17 +430,23 @@ func (r *Renderer) Present() {
 				}
 				builder.WriteRune(char)
 			}
-			builder.WriteString(ColorReset())
+
+			// Clear to end of line
+			builder.WriteString("\033[K")
+
 			if i < r.Height-1 {
 				builder.WriteByte('\n')
 			}
-			currentColor = ColorBlack
 		}
+		builder.WriteString(ColorReset())
 	} else {
 		for i := 0; i < r.Height; i++ {
 			for j := 0; j < r.Width; j++ {
 				builder.WriteRune(r.Surface[i][j])
 			}
+
+			builder.WriteString("\033[K")
+
 			if i < r.Height-1 {
 				builder.WriteByte('\n')
 			}
@@ -452,21 +456,31 @@ func (r *Renderer) Present() {
 	// Write everything at once
 	r.Writer.WriteString(builder.String())
 	r.Writer.Flush()
-
-	// Restore cursor
-	fmt.Fprintf(r.Writer, "\033[u")
 }
 
 // RenderLoop starts the main render loop
 type UpdateFunc func(scene *Scene, dt float64)
 
+// RenderLoop starts the main render loop
 func (r *Renderer) RenderLoop(scene *Scene, fps float64, updateFunc UpdateFunc) {
 	if r.Writer == nil {
 		panic("Renderer writer is nil")
 	}
 
+	// Enter alternate screen buffer
+	r.Writer.WriteString("\033[?1049h")
+	// Hide cursor
 	r.Writer.WriteString("\033[?25l")
+	// Clear screen
+	r.Writer.WriteString("\033[2J\033[H")
 	r.Writer.Flush()
+
+	// Ensure cleanup on exit
+	defer func() {
+		r.Writer.WriteString("\033[?25h")
+		r.Writer.WriteString("\033[?1049l")
+		r.Writer.Flush()
+	}()
 
 	dt := 1.0 / fps
 	ticker := time.NewTicker(time.Duration(dt*1000) * time.Millisecond)
@@ -534,11 +548,8 @@ func (r *Renderer) ShowDebugLine(camera *Camera, fps float64) {
 
 	// Only update if changed
 	if debugLine != r.lastDebugLine {
-		// Move cursor to debug line position (below render area)
-		fmt.Fprintf(r.Writer, "\033[s")                 // Save cursor
-		fmt.Fprintf(r.Writer, "\033[%d;1H", r.Height+2) // Move to debug line
-		fmt.Fprintf(r.Writer, "\033[K%s", debugLine)    // Clear line and write
-		fmt.Fprintf(r.Writer, "\033[u")                 // Restore cursor
+		fmt.Fprintf(r.Writer, "\033[%d;1H", r.Height+1)
+		fmt.Fprintf(r.Writer, "\033[K%s", debugLine)
 		r.Writer.Flush()
 		r.lastDebugLine = debugLine
 	}
