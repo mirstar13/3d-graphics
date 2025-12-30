@@ -20,6 +20,7 @@ type Renderer struct {
 	UseColor       bool
 	LightingSystem *LightingSystem
 	ShowDebugInfo  bool
+	debugBuffer    strings.Builder
 	lastDebugLine  string
 }
 
@@ -83,39 +84,13 @@ func (r *Renderer) RenderScene(scene *Scene) {
 		r.LightingSystem.SetCamera(scene.Camera)
 	}
 
-	// Get all renderable objects
-	renderables := scene.GetRenderableObjects()
+	// Get all renderable nodes (NOT transformed objects)
+	nodes := scene.GetRenderableNodes()
 
-	// Render each object
-	for _, obj := range renderables {
-		switch v := obj.(type) {
-		case *Triangle:
-			if r.IsTriangleVisible(v, scene.Camera) {
-				r.RenderTriangle(v, scene.Camera)
-			}
-
-		case *Quad:
-			// Convert quad to triangles and render
-			triangles := ConvertQuadToTriangles(v)
-			for _, tri := range triangles {
-				if r.IsTriangleVisible(tri, scene.Camera) {
-					r.RenderTriangle(tri, scene.Camera)
-				}
-			}
-
-		case *Mesh:
-			r.RenderMesh(v, scene.Camera)
-
-		case *Line:
-			r.RenderLine(v, scene.Camera)
-
-		case *Circle:
-			r.RenderCircle(v, scene.Camera)
-
-		default:
-			// Fallback
-			r.RenderFilled(obj, scene.Camera)
-		}
+	// Render each node - transform on-the-fly
+	for _, node := range nodes {
+		worldMatrix := node.Transform.GetWorldMatrix()
+		r.RenderNodeWithMatrix(node, worldMatrix, scene.Camera)
 	}
 }
 
@@ -204,6 +179,169 @@ func (r *Renderer) RenderLineWithColor(line *Line, camera *Camera, color Color) 
 	r.drawLineWithColorAndZ(sx0, sy0, sx1, sy1, zStart, zEnd, color)
 }
 
+// RenderNodeWithMatrix renders a node with a given world matrix (NO COPYING!)
+func (r *Renderer) RenderNodeWithMatrix(node *SceneNode, worldMatrix Matrix4x4, camera *Camera) {
+	switch obj := node.Object.(type) {
+	case *Triangle:
+		r.RenderTriangleWithMatrix(obj, worldMatrix, camera)
+
+	case *Quad:
+		r.RenderQuadWithMatrix(obj, worldMatrix, camera)
+
+	case *Mesh:
+		r.RenderMeshWithMatrix(obj, worldMatrix, camera)
+
+	case *Line:
+		r.RenderLineWithMatrix(obj, worldMatrix, camera)
+
+	case *Circle:
+		r.RenderCircleWithMatrix(obj, worldMatrix, camera)
+	}
+}
+
+// RenderTriangleWithMatrix renders a triangle with world matrix (transforms on-the-fly)
+func (r *Renderer) RenderTriangleWithMatrix(tri *Triangle, worldMatrix Matrix4x4, camera *Camera) {
+	// Transform vertices on-the-fly
+	p0 := worldMatrix.TransformPoint(tri.P0)
+	p1 := worldMatrix.TransformPoint(tri.P1)
+	p2 := worldMatrix.TransformPoint(tri.P2)
+
+	// Check visibility in world space
+	v0 := camera.TransformToViewSpace(p0)
+	v1 := camera.TransformToViewSpace(p1)
+	v2 := camera.TransformToViewSpace(p2)
+
+	if v0.Z <= camera.Near && v1.Z <= camera.Near && v2.Z <= camera.Near {
+		return // All behind near plane
+	}
+
+	// Create temporary triangle for rendering (only this one allocation)
+	transformed := &Triangle{
+		P0:           p0,
+		P1:           p1,
+		P2:           p2,
+		char:         tri.char,
+		Material:     tri.Material,
+		UseSetNormal: tri.UseSetNormal,
+	}
+
+	// Transform normal if set
+	if tri.UseSetNormal && tri.Normal != nil {
+		transformedNormal := worldMatrix.TransformDirection(*tri.Normal)
+		transformed.Normal = &transformedNormal
+	}
+
+	// Render
+	if tri.Material.Wireframe {
+		r.RenderTriangleWireframe(transformed, camera)
+	} else {
+		transformed.DrawFilled(r, camera)
+	}
+}
+
+// RenderQuadWithMatrix renders a quad with world matrix
+func (r *Renderer) RenderQuadWithMatrix(quad *Quad, worldMatrix Matrix4x4, camera *Camera) {
+	// Transform vertices on-the-fly
+	p0 := worldMatrix.TransformPoint(quad.P0)
+	p1 := worldMatrix.TransformPoint(quad.P1)
+	p2 := worldMatrix.TransformPoint(quad.P2)
+	p3 := worldMatrix.TransformPoint(quad.P3)
+
+	// Create temporary quad
+	transformed := &Quad{
+		P0:           p0,
+		P1:           p1,
+		P2:           p2,
+		P3:           p3,
+		Material:     quad.Material,
+		UseSetNormal: quad.UseSetNormal,
+	}
+
+	if quad.UseSetNormal && quad.Normal != nil {
+		transformedNormal := worldMatrix.TransformDirection(*quad.Normal)
+		transformed.Normal = &transformedNormal
+	}
+
+	// Convert to triangles and render
+	triangles := ConvertQuadToTriangles(transformed)
+	for _, tri := range triangles {
+		if r.IsTriangleVisible(tri, camera) {
+			if tri.Material.Wireframe {
+				r.RenderTriangleWireframe(tri, camera)
+			} else {
+				tri.DrawFilled(r, camera)
+			}
+		}
+	}
+}
+
+// RenderMeshWithMatrix renders a mesh with world matrix (transforms on-the-fly)
+func (r *Renderer) RenderMeshWithMatrix(mesh *Mesh, worldMatrix Matrix4x4, camera *Camera) {
+	// Transform mesh position
+	meshPos := worldMatrix.TransformPoint(mesh.Position)
+
+	// Render quads
+	for _, quad := range mesh.Quads {
+		// Apply mesh position offset
+		offsetQuad := &Quad{
+			P0:           Point{X: quad.P0.X + meshPos.X, Y: quad.P0.Y + meshPos.Y, Z: quad.P0.Z + meshPos.Z},
+			P1:           Point{X: quad.P1.X + meshPos.X, Y: quad.P1.Y + meshPos.Y, Z: quad.P1.Z + meshPos.Z},
+			P2:           Point{X: quad.P2.X + meshPos.X, Y: quad.P2.Y + meshPos.Y, Z: quad.P2.Z + meshPos.Z},
+			P3:           Point{X: quad.P3.X + meshPos.X, Y: quad.P3.Y + meshPos.Y, Z: quad.P3.Z + meshPos.Z},
+			Material:     quad.Material,
+			UseSetNormal: quad.UseSetNormal,
+			Normal:       quad.Normal,
+		}
+		r.RenderQuadWithMatrix(offsetQuad, IdentityMatrix(), camera)
+	}
+
+	// Render triangles
+	for _, tri := range mesh.Triangles {
+		offsetTri := &Triangle{
+			P0:           Point{X: tri.P0.X + meshPos.X, Y: tri.P0.Y + meshPos.Y, Z: tri.P0.Z + meshPos.Z},
+			P1:           Point{X: tri.P1.X + meshPos.X, Y: tri.P1.Y + meshPos.Y, Z: tri.P1.Z + meshPos.Z},
+			P2:           Point{X: tri.P2.X + meshPos.X, Y: tri.P2.Y + meshPos.Y, Z: tri.P2.Z + meshPos.Z},
+			char:         tri.char,
+			Material:     tri.Material,
+			UseSetNormal: tri.UseSetNormal,
+			Normal:       tri.Normal,
+		}
+
+		if r.IsTriangleVisible(offsetTri, camera) {
+			if tri.Material.Wireframe {
+				r.RenderTriangleWireframe(offsetTri, camera)
+			} else {
+				offsetTri.DrawFilled(r, camera)
+			}
+		}
+	}
+}
+
+// RenderLineWithMatrix renders a line with world matrix
+func (r *Renderer) RenderLineWithMatrix(line *Line, worldMatrix Matrix4x4, camera *Camera) {
+	start := worldMatrix.TransformPoint(line.Start)
+	end := worldMatrix.TransformPoint(line.End)
+
+	transformedLine := &Line{Start: start, End: end}
+	r.RenderLine(transformedLine, camera)
+}
+
+// RenderCircleWithMatrix renders a circle with world matrix
+func (r *Renderer) RenderCircleWithMatrix(circle *Circle, worldMatrix Matrix4x4, camera *Camera) {
+	center := worldMatrix.TransformPoint(circle.Center)
+	points := make([]Point, len(circle.Points))
+	for i, p := range circle.Points {
+		points[i] = worldMatrix.TransformPoint(p)
+	}
+
+	transformedCircle := &Circle{
+		Center: center,
+		Radius: circle.Radius,
+		Points: points,
+	}
+	r.RenderCircle(transformedCircle, camera)
+}
+
 // drawLineWithColorAndZ draws colored line with z-buffer
 func (r *Renderer) drawLineWithColorAndZ(x0, y0, x1, y1 int, z0, z1 float64, color Color) {
 	dx := x1 - x0
@@ -273,7 +411,9 @@ func (r *Renderer) RenderFilled(obj Drawable, camera *Camera) {
 
 // Present writes the rendered frame to screen
 func (r *Renderer) Present() {
+	// Save cursor position
 	fmt.Fprintf(r.Writer, "\033[s")
+	// Move to home without clearing (reduces flicker)
 	fmt.Fprintf(r.Writer, "\033[H")
 
 	builder := strings.Builder{}
@@ -309,8 +449,11 @@ func (r *Renderer) Present() {
 		}
 	}
 
-	r.Writer.Write([]byte(builder.String()))
+	// Write everything at once
+	r.Writer.WriteString(builder.String())
 	r.Writer.Flush()
+
+	// Restore cursor
 	fmt.Fprintf(r.Writer, "\033[u")
 }
 
@@ -368,23 +511,34 @@ func (r *Renderer) ShowDebugLine(camera *Camera, fps float64) {
 	pos := camera.GetPosition()
 	pitch, yaw, roll := camera.GetRotation()
 
-	fpsStr := fmt.Sprintf("FPS: %.1f", fps)
-	camInfoStr := fmt.Sprintf("Pos:(%.1f,%.1f,%.1f) Rot:(P:%.2f Y:%.2f R:%.2f)",
+	// Build debug string
+	r.debugBuffer.Reset()
+	r.debugBuffer.WriteString(fmt.Sprintf("FPS: %.1f", fps))
+
+	// Calculate padding
+	camInfo := fmt.Sprintf("Pos:(%.1f,%.1f,%.1f) Rot:(P:%.2f Y:%.2f R:%.2f)",
 		pos.X, pos.Y, pos.Z, pitch*180/3.14159, yaw*180/3.14159, roll*180/3.14159)
 
-	totalLen := len(fpsStr) + len(camInfoStr)
+	totalLen := r.debugBuffer.Len() + len(camInfo)
 	padding := r.Width - totalLen
 	if padding < 1 {
 		padding = 1
 	}
 
-	debugLine := fmt.Sprintf("%s%s%s", fpsStr, strings.Repeat(" ", padding), camInfoStr)
+	for i := 0; i < padding; i++ {
+		r.debugBuffer.WriteByte(' ')
+	}
+	r.debugBuffer.WriteString(camInfo)
 
+	debugLine := r.debugBuffer.String()
+
+	// Only update if changed
 	if debugLine != r.lastDebugLine {
-		fmt.Fprintf(r.Writer, "\033[s")
-		fmt.Fprintf(r.Writer, "\033[%d;1H", r.Height+1)
-		fmt.Fprintf(r.Writer, "\033[K%s", debugLine)
-		fmt.Fprintf(r.Writer, "\033[u")
+		// Move cursor to debug line position (below render area)
+		fmt.Fprintf(r.Writer, "\033[s")                 // Save cursor
+		fmt.Fprintf(r.Writer, "\033[%d;1H", r.Height+2) // Move to debug line
+		fmt.Fprintf(r.Writer, "\033[K%s", debugLine)    // Clear line and write
+		fmt.Fprintf(r.Writer, "\033[u")                 // Restore cursor
 		r.Writer.Flush()
 		r.lastDebugLine = debugLine
 	}

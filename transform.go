@@ -2,32 +2,61 @@ package main
 
 import "math"
 
-// Transform represents position, rotation, and scale in 3D space
+// Transform represents position, rotation, and scale in 3D space with caching
 type Transform struct {
-	Position Point // Local position
-	Rotation Point // Euler angles (X=pitch, Y=yaw, Z=roll) in radians
-	Scale    Point // Scale factors (usually 1, 1, 1)
+	Position Point      // Local position
+	Rotation Quaternion // Rotation as quaternion (no gimbal lock!)
+	Scale    Point      // Scale factors (usually 1, 1, 1)
 	Parent   *Transform
+
+	// Cache for performance
+	worldMatrix        Matrix4x4
+	localMatrix        Matrix4x4
+	inverseMatrix      Matrix4x4
+	worldMatrixDirty   bool
+	localMatrixDirty   bool
+	inverseMatrixDirty bool
 }
 
 // NewTransform creates a new transform at the origin
 func NewTransform() *Transform {
 	return &Transform{
-		Position: Point{X: 0, Y: 0, Z: 0},
-		Rotation: Point{X: 0, Y: 0, Z: 0},
-		Scale:    Point{X: 1, Y: 1, Z: 1},
-		Parent:   nil,
+		Position:           Point{X: 0, Y: 0, Z: 0},
+		Rotation:           IdentityQuaternion(),
+		Scale:              Point{X: 1, Y: 1, Z: 1},
+		Parent:             nil,
+		worldMatrix:        IdentityMatrix(),
+		localMatrix:        IdentityMatrix(),
+		inverseMatrix:      IdentityMatrix(),
+		worldMatrixDirty:   true,
+		localMatrixDirty:   true,
+		inverseMatrixDirty: true,
 	}
 }
 
 // NewTransformAt creates a transform at a specific position
 func NewTransformAt(x, y, z float64) *Transform {
-	return &Transform{
-		Position: Point{X: x, Y: y, Z: z},
-		Rotation: Point{X: 0, Y: 0, Z: 0},
-		Scale:    Point{X: 1, Y: 1, Z: 1},
-		Parent:   nil,
+	t := NewTransform()
+	t.SetPosition(x, y, z)
+	return t
+}
+
+// MarkDirty marks all cached matrices as needing recalculation
+// and propagates to children
+func (t *Transform) MarkDirty() {
+	if !t.worldMatrixDirty { // Only propagate if we weren't already dirty
+		t.worldMatrixDirty = true
+		t.localMatrixDirty = true
+		t.inverseMatrixDirty = true
+
+		// Propagate to all children recursively
+		t.markChildrenDirty()
 	}
+}
+
+func (t *Transform) markChildrenDirty() {
+	// This will be called by SceneNode to mark children
+	// We can't do it here because Transform doesn't know about SceneNode
 }
 
 // SetPosition sets the local position
@@ -35,13 +64,19 @@ func (t *Transform) SetPosition(x, y, z float64) {
 	t.Position.X = x
 	t.Position.Y = y
 	t.Position.Z = z
+	t.MarkDirty()
 }
 
-// SetRotation sets the rotation (pitch, yaw, roll)
+// SetRotation sets the rotation (pitch, yaw, roll) - converts to quaternion
 func (t *Transform) SetRotation(pitch, yaw, roll float64) {
-	t.Rotation.X = pitch
-	t.Rotation.Y = yaw
-	t.Rotation.Z = roll
+	t.Rotation = QuaternionFromEuler(pitch, yaw, roll)
+	t.MarkDirty()
+}
+
+// SetRotationQuaternion sets rotation directly from quaternion
+func (t *Transform) SetRotationQuaternion(q Quaternion) {
+	t.Rotation = q.Normalize()
+	t.MarkDirty()
 }
 
 // SetScale sets the scale
@@ -49,6 +84,7 @@ func (t *Transform) SetScale(x, y, z float64) {
 	t.Scale.X = x
 	t.Scale.Y = y
 	t.Scale.Z = z
+	t.MarkDirty()
 }
 
 // Translate moves the transform by a delta in local space
@@ -56,139 +92,113 @@ func (t *Transform) Translate(dx, dy, dz float64) {
 	t.Position.X += dx
 	t.Position.Y += dy
 	t.Position.Z += dz
+	t.MarkDirty()
 }
 
-// Rotate rotates the transform by delta angles
+// Rotate rotates the transform by delta angles (converts to quaternion internally)
 func (t *Transform) Rotate(dpitch, dyaw, droll float64) {
-	t.Rotation.X += dpitch
-	t.Rotation.Y += dyaw
-	t.Rotation.Z += droll
+	deltaQuat := QuaternionFromEuler(dpitch, dyaw, droll)
+	t.Rotation = t.Rotation.Multiply(deltaQuat).Normalize()
+	t.MarkDirty()
 }
 
-// GetWorldPosition returns the world-space position
-func (t *Transform) GetWorldPosition() Point {
-	if t.Parent == nil {
-		return t.Position
-	}
-
-	// Transform local position by parent's transform
-	return t.Parent.TransformPoint(t.Position)
+// RotateAxisAngle rotates around an arbitrary axis
+func (t *Transform) RotateAxisAngle(axis Point, angle float64) {
+	deltaQuat := QuaternionFromAxisAngle(axis, angle)
+	t.Rotation = t.Rotation.Multiply(deltaQuat).Normalize()
+	t.MarkDirty()
 }
 
-// GetWorldRotation returns the world-space rotation
-func (t *Transform) GetWorldRotation() Point {
-	if t.Parent == nil {
-		return t.Rotation
+// GetWorldMatrix returns the cached world transformation matrix
+func (t *Transform) GetWorldMatrix() Matrix4x4 {
+	if t.worldMatrixDirty {
+		localMat := t.GetLocalMatrix()
+		if t.Parent != nil {
+			// Check if parent is dirty and force update
+			parentMat := t.Parent.GetWorldMatrix()
+			t.worldMatrix = parentMat.Multiply(localMat)
+		} else {
+			t.worldMatrix = localMat
+		}
+		t.worldMatrixDirty = false
+		// Don't clear inverse here - let it be lazy
 	}
-
-	// Combine with parent rotation
-	parentRot := t.Parent.GetWorldRotation()
-	return Point{
-		X: t.Rotation.X + parentRot.X,
-		Y: t.Rotation.Y + parentRot.Y,
-		Z: t.Rotation.Z + parentRot.Z,
-	}
+	return t.worldMatrix
 }
 
-// TransformPoint transforms a point from local space to world space
+// GetLocalMatrix returns the cached local transformation matrix
+func (t *Transform) GetLocalMatrix() Matrix4x4 {
+	if t.localMatrixDirty {
+		t.localMatrix = ComposeMatrix(t.Position, t.Rotation, t.Scale)
+		t.localMatrixDirty = false
+	}
+	return t.localMatrix
+}
+
+// GetInverseMatrix returns the cached inverse world matrix
+func (t *Transform) GetInverseMatrix() Matrix4x4 {
+	if t.inverseMatrixDirty {
+		t.inverseMatrix = t.GetWorldMatrix().Invert()
+		t.inverseMatrixDirty = false
+	}
+	return t.inverseMatrix
+}
+
+// TransformPoint transforms a point from local space to world space (CACHED)
 func (t *Transform) TransformPoint(p Point) Point {
-	// Apply scale
-	x := p.X * t.Scale.X
-	y := p.Y * t.Scale.Y
-	z := p.Z * t.Scale.Z
-
-	// Apply rotation (yaw -> pitch -> roll order)
-	// Yaw (Y-axis rotation)
-	cosYaw := math.Cos(t.Rotation.Y)
-	sinYaw := math.Sin(t.Rotation.Y)
-	xRot := x*cosYaw - z*sinYaw
-	zRot := x*sinYaw + z*cosYaw
-	x = xRot
-	z = zRot
-
-	// Pitch (X-axis rotation)
-	cosPitch := math.Cos(t.Rotation.X)
-	sinPitch := math.Sin(t.Rotation.X)
-	yRot := y*cosPitch - z*sinPitch
-	zRot = y*sinPitch + z*cosPitch
-	y = yRot
-	z = zRot
-
-	// Roll (Z-axis rotation)
-	cosRoll := math.Cos(t.Rotation.Z)
-	sinRoll := math.Sin(t.Rotation.Z)
-	xRot = x*cosRoll - y*sinRoll
-	yRot = x*sinRoll + y*cosRoll
-	x = xRot
-	y = yRot
-
-	// Apply translation
-	x += t.Position.X
-	y += t.Position.Y
-	z += t.Position.Z
-
-	// If we have a parent, transform by parent as well
-	if t.Parent != nil {
-		return t.Parent.TransformPoint(Point{X: x, Y: y, Z: z})
-	}
-
-	return Point{X: x, Y: y, Z: z}
+	return t.GetWorldMatrix().TransformPoint(p)
 }
 
-// TransformDirection transforms a direction vector (ignores position and scale)
-func (t *Transform) TransformDirection(dir Point) Point {
-	x := dir.X
-	y := dir.Y
-	z := dir.Z
-
-	// Apply rotation only
-	// Yaw (Y-axis rotation)
-	cosYaw := math.Cos(t.Rotation.Y)
-	sinYaw := math.Sin(t.Rotation.Y)
-	xRot := x*cosYaw - z*sinYaw
-	zRot := x*sinYaw + z*cosYaw
-	x = xRot
-	z = zRot
-
-	// Pitch (X-axis rotation)
-	cosPitch := math.Cos(t.Rotation.X)
-	sinPitch := math.Sin(t.Rotation.X)
-	yRot := y*cosPitch - z*sinPitch
-	zRot = y*sinPitch + z*cosPitch
-	y = yRot
-	z = zRot
-
-	// Roll (Z-axis rotation)
-	cosRoll := math.Cos(t.Rotation.Z)
-	sinRoll := math.Sin(t.Rotation.Z)
-	xRot = x*cosRoll - y*sinRoll
-	yRot = x*sinRoll + y*cosRoll
-	x = xRot
-	y = yRot
-
-	// If we have a parent, transform by parent's rotation as well
-	if t.Parent != nil {
-		return t.Parent.TransformDirection(Point{X: x, Y: y, Z: z})
-	}
-
-	return Point{X: x, Y: y, Z: z}
+// TransformDirection transforms a direction vector (CACHED)
+func (t *Transform) TransformDirection(d Point) Point {
+	return t.GetWorldMatrix().TransformDirection(d)
 }
 
-// GetForwardVector returns the forward direction in world space
+// InverseTransformPoint transforms a world-space point to local space (CACHED)
+func (t *Transform) InverseTransformPoint(worldPoint Point) Point {
+	return t.GetInverseMatrix().TransformPoint(worldPoint)
+}
+
+// GetWorldPosition returns the world-space position (CACHED)
+func (t *Transform) GetWorldPosition() Point {
+	mat := t.GetWorldMatrix()
+	return Point{X: mat.M[3], Y: mat.M[7], Z: mat.M[11]}
+}
+
+// GetWorldRotation returns the world-space rotation as Euler angles
+func (t *Transform) GetWorldRotation() Point {
+	// Get world rotation quaternion
+	worldQuat := t.Rotation
+	if t.Parent != nil {
+		// Combine with parent rotation
+		parentRot := t.Parent.GetWorldRotationQuaternion()
+		worldQuat = parentRot.Multiply(t.Rotation).Normalize()
+	}
+
+	pitch, yaw, roll := worldQuat.ToEuler()
+	return Point{X: pitch, Y: yaw, Z: roll}
+}
+
+// GetWorldRotationQuaternion returns world rotation as quaternion
+func (t *Transform) GetWorldRotationQuaternion() Quaternion {
+	if t.Parent != nil {
+		return t.Parent.GetWorldRotationQuaternion().Multiply(t.Rotation).Normalize()
+	}
+	return t.Rotation
+}
+
+// GetForwardVector returns the forward direction in world space (CACHED)
 func (t *Transform) GetForwardVector() Point {
-	// Forward is (0, 0, 1) in local space
 	return t.TransformDirection(Point{X: 0, Y: 0, Z: 1})
 }
 
-// GetRightVector returns the right direction in world space
+// GetRightVector returns the right direction in world space (CACHED)
 func (t *Transform) GetRightVector() Point {
-	// Right is (1, 0, 0) in local space
 	return t.TransformDirection(Point{X: 1, Y: 0, Z: 0})
 }
 
-// GetUpVector returns the up direction in world space
+// GetUpVector returns the up direction in world space (CACHED)
 func (t *Transform) GetUpVector() Point {
-	// Up is (0, 1, 0) in local space
 	return t.TransformDirection(Point{X: 0, Y: 1, Z: 0})
 }
 
@@ -201,61 +211,30 @@ func (t *Transform) LookAt(target Point) {
 	dy := target.Y - worldPos.Y
 	dz := target.Z - worldPos.Z
 
-	// Calculate yaw (rotation around Y)
-	t.Rotation.Y = math.Atan2(dx, dz)
+	// Normalize
+	length := math.Sqrt(dx*dx + dy*dy + dz*dz)
+	if length < 1e-10 {
+		return
+	}
+	dx /= length
+	dy /= length
+	dz /= length
 
-	// Calculate pitch (rotation around X)
+	// Calculate yaw and pitch
+	yaw := math.Atan2(dx, dz)
 	distXZ := math.Sqrt(dx*dx + dz*dz)
-	t.Rotation.X = -math.Atan2(dy, distXZ)
+	pitch := -math.Atan2(dy, distXZ)
+
+	t.SetRotation(pitch, yaw, 0)
 }
 
-// SetParent sets the parent transform
+// SetParent sets the parent transform and marks dirty
 func (t *Transform) SetParent(parent *Transform) {
 	t.Parent = parent
+	t.MarkDirty()
 }
 
-// InverseTransformPoint transforms a world-space point to local space
-func (t *Transform) InverseTransformPoint(worldPoint Point) Point {
-	// If we have a parent, first transform to parent's local space
-	p := worldPoint
-	if t.Parent != nil {
-		p = t.Parent.InverseTransformPoint(worldPoint)
-	}
-
-	// Remove translation
-	x := p.X - t.Position.X
-	y := p.Y - t.Position.Y
-	z := p.Z - t.Position.Z
-
-	// Remove rotation (in reverse order: roll -> pitch -> yaw)
-	// Roll (Z-axis rotation) - inverse
-	cosRoll := math.Cos(-t.Rotation.Z)
-	sinRoll := math.Sin(-t.Rotation.Z)
-	xRot := x*cosRoll - y*sinRoll
-	yRot := x*sinRoll + y*cosRoll
-	x = xRot
-	y = yRot
-
-	// Pitch (X-axis rotation) - inverse
-	cosPitch := math.Cos(-t.Rotation.X)
-	sinPitch := math.Sin(-t.Rotation.X)
-	yRot = y*cosPitch - z*sinPitch
-	zRot := y*sinPitch + z*cosPitch
-	y = yRot
-	z = zRot
-
-	// Yaw (Y-axis rotation) - inverse
-	cosYaw := math.Cos(-t.Rotation.Y)
-	sinYaw := math.Sin(-t.Rotation.Y)
-	xRot = x*cosYaw - z*sinYaw
-	zRot = x*sinYaw + z*cosYaw
-	x = xRot
-	z = zRot
-
-	// Remove scale
-	x /= t.Scale.X
-	y /= t.Scale.Y
-	z /= t.Scale.Z
-
-	return Point{X: x, Y: y, Z: z}
+// Legacy compatibility methods (for backward compatibility)
+func (t *Transform) GetRotation() (pitch, yaw, roll float64) {
+	return t.Rotation.ToEuler()
 }

@@ -1,6 +1,9 @@
 package main
 
-import "math"
+import (
+	"math"
+	"sort"
+)
 
 // OctreeNode represents a node in the octree
 type OctreeNode struct {
@@ -364,30 +367,28 @@ func (bvh *BVH) surfaceArea(bounds *AABB) float64 {
 	return 2.0 * (size.X*size.Y + size.Y*size.Z + size.Z*size.X)
 }
 
-// sortObjectsAlongAxis sorts objects along the specified axis
 func (bvh *BVH) sortObjectsAlongAxis(start, end, axis int) {
-	// Simple bubble sort (for small ranges)
-	for i := start; i < end-1; i++ {
-		for j := start; j < end-i-1; j++ {
-			center1 := bvh.ObjectBounds[j].GetCenter()
-			center2 := bvh.ObjectBounds[j+1].GetCenter()
+	sort.Slice(bvh.Objects[start:end], func(i, j int) bool {
+		center1 := bvh.ObjectBounds[start+i].GetCenter()
+		center2 := bvh.ObjectBounds[start+j].GetCenter()
 
-			var val1, val2 float64
-			switch axis {
-			case 0:
-				val1, val2 = center1.X, center2.X
-			case 1:
-				val1, val2 = center1.Y, center2.Y
-			case 2:
-				val1, val2 = center1.Z, center2.Z
-			}
-
-			if val1 > val2 {
-				bvh.Objects[j], bvh.Objects[j+1] = bvh.Objects[j+1], bvh.Objects[j]
-				bvh.ObjectBounds[j], bvh.ObjectBounds[j+1] = bvh.ObjectBounds[j+1], bvh.ObjectBounds[j]
-			}
+		switch axis {
+		case 0:
+			return center1.X < center2.X
+		case 1:
+			return center1.Y < center2.Y
+		case 2:
+			return center1.Z < center2.Z
 		}
+		return false
+	})
+
+	// Also sort bounds array in parallel
+	sortedBounds := make([]*AABB, end-start)
+	for i := 0; i < end-start; i++ {
+		sortedBounds[i] = bvh.ObjectBounds[start+i]
 	}
+	copy(bvh.ObjectBounds[start:end], sortedBounds)
 }
 
 // Query returns objects intersecting with bounds

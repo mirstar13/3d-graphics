@@ -52,7 +52,7 @@ func (cam *Camera) MoveBy(dx, dy, dz float64) {
 
 // TransformToViewSpace transforms a world-space point to camera/view space
 func (cam *Camera) TransformToViewSpace(p Point) Point {
-	// Convert world point to camera's local space
+	// Use cached inverse matrix
 	return cam.Transform.InverseTransformPoint(p)
 }
 

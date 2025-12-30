@@ -103,29 +103,37 @@ func (s *Scene) FindNodesByTag(tag string) []*SceneNode {
 // GetRenderableObjects returns all objects ready for rendering
 // Applies transforms and filters disabled nodes
 func (s *Scene) GetRenderableObjects() []Drawable {
-	drawables := make([]Drawable, 0)
-	s.collectRenderables(s.Root, &drawables)
+	// This is now just a legacy wrapper
+	nodes := s.GetRenderableNodes()
+	drawables := make([]Drawable, len(nodes))
+	for i, node := range nodes {
+		drawables[i] = node.Object
+	}
 	return drawables
 }
 
-func (s *Scene) collectRenderables(node *SceneNode, drawables *[]Drawable) {
+// collectRenderables now just collects nodes, doesn't transform
+func (s *Scene) collectRenderables(node *SceneNode, renderables *[]*SceneNode) {
 	if !node.IsEnabled() {
 		return
 	}
 
-	// Add this node's object WITHOUT frustum culling here
-	// Frustum culling should happen at render time on individual primitives
+	// Just add the node itself - transformation happens during rendering
 	if node.Object != nil {
-		transformed := node.TransformSceneObject()
-		if transformed != nil {
-			*drawables = append(*drawables, transformed)
-		}
+		*renderables = append(*renderables, node)
 	}
 
-	// Always recurse to children (don't cull parent hierarchies)
+	// Recurse to children
 	for _, child := range node.Children {
-		s.collectRenderables(child, drawables)
+		s.collectRenderables(child, renderables)
 	}
+}
+
+// GetRenderableNodes returns scene nodes (not transformed objects)
+func (s *Scene) GetRenderableNodes() []*SceneNode {
+	nodes := make([]*SceneNode, 0)
+	s.collectRenderables(s.Root, &nodes)
+	return nodes
 }
 
 // Update updates all nodes in the scene
@@ -141,6 +149,8 @@ func (s *Scene) updateNodeRecursive(node *SceneNode, dt float64) {
 	// Call update callback if node has one
 	if node.OnUpdate != nil {
 		node.OnUpdate(node, dt)
+		// After update callback, ensure transform is marked if changed
+		// (the callback might have modified the transform)
 	}
 
 	// Recursively update children
@@ -337,12 +347,12 @@ func (sn *SceneNode) TransformSceneObject() Drawable {
 	return sn.Object
 }
 
-// RotateLocal rotates this node around its local axes
+// Update the existing methods to use this
 func (sn *SceneNode) RotateLocal(dpitch, dyaw, droll float64) {
 	sn.Transform.Rotate(dpitch, dyaw, droll)
+	sn.MarkTransformDirty()
 }
 
-// TranslateLocal moves this node in its local space
 func (sn *SceneNode) TranslateLocal(dx, dy, dz float64) {
 	right := sn.Transform.GetRightVector()
 	up := sn.Transform.GetUpVector()
@@ -351,6 +361,18 @@ func (sn *SceneNode) TranslateLocal(dx, dy, dz float64) {
 	sn.Transform.Position.X += right.X*dx + up.X*dy + forward.X*dz
 	sn.Transform.Position.Y += right.Y*dx + up.Y*dy + forward.Y*dz
 	sn.Transform.Position.Z += right.Z*dx + up.Z*dy + forward.Z*dz
+	sn.Transform.MarkDirty()
+	sn.MarkTransformDirty()
+}
+
+// MarkTransformDirty marks this node's transform and all children as dirty
+func (sn *SceneNode) MarkTransformDirty() {
+	sn.Transform.MarkDirty()
+
+	// Propagate to all children
+	for _, child := range sn.Children {
+		child.MarkTransformDirty()
+	}
 }
 
 // OnUpdate is called each frame for this node (optional)
