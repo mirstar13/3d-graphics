@@ -158,13 +158,15 @@ func (r *OpenGLRenderer) Initialize() error {
 		return fmt.Errorf("failed to initialize OpenGL: %v", err)
 	}
 
+	gl.Disable(gl.CULL_FACE) // Disable face culling for now
+
 	version := gl.GoStr(gl.GetString(gl.VERSION))
 	fmt.Printf("[OpenGL] Version: %s\n", version)
 
 	// Configure OpenGL
 	gl.Enable(gl.DEPTH_TEST)
 	gl.DepthFunc(gl.LESS)
-	gl.Enable(gl.CULL_FACE)
+	// gl.Enable(gl.CULL_FACE)
 	gl.CullFace(gl.BACK)
 	gl.FrontFace(gl.CCW)
 	gl.ClearColor(0.0, 0.0, 0.0, 1.0)
@@ -424,22 +426,22 @@ func (r *OpenGLRenderer) updateMatrices(modelUniform, viewUniform, projUniform i
 	r.uploadMatrix(viewUniform, viewMatrix)
 
 	// Projection matrix
-	projMatrix := r.buildProjectionMatrix()
+	projMatrix := r.buildProjectionMatrix(r.Camera)
 	r.uploadMatrix(projUniform, projMatrix)
 }
 
-func (r *OpenGLRenderer) buildProjectionMatrix() Matrix4x4 {
-	if r.Camera == nil {
-		return IdentityMatrix()
-	}
-
-	fovY := r.Camera.FOV.Y * math.Pi / 180.0
+func (r *OpenGLRenderer) buildProjectionMatrix(camera *Camera) Matrix4x4 {
+	// Use a proper FOV for OpenGL (the custom renderer uses FOV as a scaling factor, not an angle)
+	// We'll use 60 degrees vertical FOV for a good view
+	fovYDegrees := 60.0
+	fovY := fovYDegrees * math.Pi / 180.0
 	aspect := float64(r.width) / float64(r.height)
-	near := r.Camera.Near
-	far := r.Camera.Far
+	near := camera.Near
+	far := camera.Far
 
 	f := 1.0 / math.Tan(fovY/2.0)
 
+	// Standard OpenGL perspective projection matrix
 	return Matrix4x4{M: [16]float64{
 		f / aspect, 0, 0, 0,
 		0, f, 0, 0,

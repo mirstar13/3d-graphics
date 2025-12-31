@@ -491,37 +491,31 @@ func configureCameraController(controller *CameraController, demoType int) {
 	case DemoSolarSystem:
 		controller.SetOrbitRadius(120.0)
 		controller.SetOrbitCenter(0, 0, 0)
-		controller.EnableAutoOrbit(true)
 	case DemoRobotArm:
 		controller.SetOrbitRadius(60.0)
 		controller.SetOrbitCenter(0, 0, 0)
-		controller.EnableAutoOrbit(true)
 	case DemoSpinningCubes:
 		controller.SetOrbitRadius(100.0)
 		controller.SetOrbitCenter(0, 0, 0)
-		controller.EnableAutoOrbit(true)
 	case DemoOrbitingObjects:
 		controller.SetOrbitRadius(90.0)
 		controller.SetOrbitCenter(0, 0, 0)
-		controller.EnableAutoOrbit(true)
 	case DemoWaveGrid:
 		controller.SetOrbitRadius(70.0)
 		controller.SetOrbitCenter(0, 0, 0)
-		controller.EnableAutoOrbit(true)
 	case DemoHelix:
 		controller.SetOrbitRadius(80.0)
 		controller.SetOrbitCenter(0, 0, 0)
-		controller.EnableAutoOrbit(true)
 	case DemoStressTest:
 		controller.SetOrbitRadius(200.0)
 		controller.SetOrbitCenter(0, 0, 0)
 		controller.SetOrbitHeight(50.0)
-		controller.EnableAutoOrbit(true)
 	default:
 		controller.SetOrbitRadius(80.0)
 		controller.SetOrbitCenter(0, 0, 0)
-		controller.EnableAutoOrbit(true)
 	}
+
+	controller.EnableAutoOrbit(false)
 }
 
 func setupLighting(camera *Camera, demoType int) *LightingSystem {
