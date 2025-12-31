@@ -229,6 +229,19 @@ func (ot *Octree) getObjectBounds(node *SceneNode) *AABB {
 				return TransformAABB(aabb, worldTransform)
 			}
 		}
+	case *LODGroupWithTransitions:
+		if obj.BoundingVolume != nil {
+			if aabb, ok := obj.BoundingVolume.(*AABB); ok {
+				return TransformAABB(aabb, worldTransform)
+			}
+		}
+	case *Triangle:
+		localBounds := ComputeTriangleBounds(obj)
+		return TransformAABB(localBounds, worldTransform)
+	case *Quad:
+		points := []Point{obj.P0, obj.P1, obj.P2, obj.P3}
+		localBounds := NewAABBFromPoints(points)
+		return TransformAABB(localBounds, worldTransform)
 	}
 	return nil
 }
@@ -477,6 +490,19 @@ func (bvh *BVH) computeObjectBounds(node *SceneNode) *AABB {
 				return TransformAABB(aabb, worldTransform)
 			}
 		}
+	case *LODGroupWithTransitions:
+		if obj.BoundingVolume != nil {
+			if aabb, ok := obj.BoundingVolume.(*AABB); ok {
+				return TransformAABB(aabb, worldTransform)
+			}
+		}
+	case *Triangle:
+		localBounds := ComputeTriangleBounds(obj)
+		return TransformAABB(localBounds, worldTransform)
+	case *Quad:
+		points := []Point{obj.P0, obj.P1, obj.P2, obj.P3}
+		localBounds := NewAABBFromPoints(points)
+		return TransformAABB(localBounds, worldTransform)
 	}
 
 	// Default fallback
@@ -561,6 +587,19 @@ func (s *Scene) computeNodeBounds(node *SceneNode) *AABB {
 				return TransformAABB(aabb, worldTransform)
 			}
 		}
+	case *LODGroupWithTransitions:
+		if obj.BoundingVolume != nil {
+			if aabb, ok := obj.BoundingVolume.(*AABB); ok {
+				return TransformAABB(aabb, worldTransform)
+			}
+		}
+	case *Triangle:
+		localBounds := ComputeTriangleBounds(obj)
+		return TransformAABB(localBounds, worldTransform)
+	case *Quad:
+		points := []Point{obj.P0, obj.P1, obj.P2, obj.P3}
+		localBounds := NewAABBFromPoints(points)
+		return TransformAABB(localBounds, worldTransform)
 	}
 	return nil
 }

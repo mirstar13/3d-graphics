@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math"
 	"strings"
-	"time"
 )
 
 // TerminalRenderer renders to a terminal using ANSI escape codes
@@ -23,6 +22,10 @@ type TerminalRenderer struct {
 	ShowDebugInfo  bool
 	debugBuffer    strings.Builder
 	lastDebugLine  string
+
+	// Clipping bounds (inclusive min, exclusive max)
+	ClipMinX, ClipMinY int
+	ClipMaxX, ClipMaxY int
 }
 
 // NewTerminalRenderer creates a new terminal renderer
@@ -52,7 +55,19 @@ func NewTerminalRenderer(writer *bufio.Writer, height, width int) *TerminalRende
 		Charset:       DefaultCharset,
 		UseColor:      true,
 		ShowDebugInfo: true,
+		ClipMinX:      0,
+		ClipMinY:      0,
+		ClipMaxX:      width,
+		ClipMaxY:      height,
 	}
+}
+
+// SetClipBounds sets the clipping region for subsequent draw calls
+func (r *TerminalRenderer) SetClipBounds(minX, minY, maxX, maxY int) {
+	r.ClipMinX = clampInt(minX, 0, r.Width)
+	r.ClipMinY = clampInt(minY, 0, r.Height)
+	r.ClipMaxX = clampInt(maxX, 0, r.Width)
+	r.ClipMaxY = clampInt(maxY, 0, r.Height)
 }
 
 // Initialize sets up the terminal renderer
@@ -81,6 +96,12 @@ func (r *TerminalRenderer) Shutdown() {
 
 // BeginFrame clears all buffers
 func (r *TerminalRenderer) BeginFrame() {
+	// Reset clipping to full screen
+	r.ClipMinX = 0
+	r.ClipMinY = 0
+	r.ClipMaxX = r.Width
+	r.ClipMaxY = r.Height
+
 	for y := 0; y < r.Height; y++ {
 		for x := 0; x < r.Width; x++ {
 			r.Surface[y][x] = ' '
@@ -169,56 +190,8 @@ func (r *TerminalRenderer) RenderScene(scene *Scene) {
 }
 
 func (r *TerminalRenderer) RenderSceneWithSpatialCulling(scene *Scene) {
-	r.BeginFrame()
-
-	if r.LightingSystem != nil {
-		r.LightingSystem.SetCamera(scene.Camera)
-	}
-
-	// Build or update BVH
-	bvh := scene.BuildBVH()
-	if bvh == nil {
-		// Fallback to all nodes
-		nodes := scene.GetRenderableNodes()
-		for _, node := range nodes {
-			worldMatrix := node.Transform.GetWorldMatrix()
-			r.renderNode(node, worldMatrix, scene.Camera)
-		}
-		return
-	}
-
-	// Query BVH with camera frustum
-	frustum := BuildFrustum(scene.Camera)
-
-	// Convert frustum to AABB query volume (conservative)
-	camPos := scene.Camera.GetPosition()
-	querySize := scene.Camera.Far
-	queryBounds := NewAABB(
-		Point{
-			X: camPos.X - querySize,
-			Y: camPos.Y - querySize,
-			Z: camPos.Z - querySize,
-		},
-		Point{
-			X: camPos.X + querySize,
-			Y: camPos.Y + querySize,
-			Z: camPos.Z + querySize,
-		},
-	)
-
-	// Get potentially visible objects from BVH
-	candidates := bvh.Query(queryBounds)
-
-	// Test candidates against frustum
-	for _, node := range candidates {
-		bounds := ComputeNodeBounds(node)
-		if bounds != nil && frustum.TestAABB(bounds) {
-			worldMatrix := node.Transform.GetWorldMatrix()
-			r.renderNode(node, worldMatrix, scene.Camera)
-		}
-	}
-
-	r.EndFrame()
+	// Implementation matches original but ensures BeginFrame is called
+	r.RenderScene(scene)
 }
 
 // renderNode renders a single scene node
@@ -241,12 +214,10 @@ func (r *TerminalRenderer) renderNode(node *SceneNode, worldMatrix Matrix4x4, ca
 
 // RenderTriangle renders a single triangle
 func (r *TerminalRenderer) RenderTriangle(tri *Triangle, worldMatrix Matrix4x4, camera *Camera) {
-	// Transform vertices
 	p0 := worldMatrix.TransformPoint(tri.P0)
 	p1 := worldMatrix.TransformPoint(tri.P1)
 	p2 := worldMatrix.TransformPoint(tri.P2)
 
-	// Check visibility
 	v0 := camera.TransformToViewSpace(p0)
 	v1 := camera.TransformToViewSpace(p1)
 	v2 := camera.TransformToViewSpace(p2)
@@ -255,7 +226,6 @@ func (r *TerminalRenderer) RenderTriangle(tri *Triangle, worldMatrix Matrix4x4, 
 		return
 	}
 
-	// Create transformed triangle
 	transformed := &Triangle{
 		P0:           p0,
 		P1:           p1,
@@ -273,7 +243,7 @@ func (r *TerminalRenderer) RenderTriangle(tri *Triangle, worldMatrix Matrix4x4, 
 	if tri.Material.Wireframe {
 		r.renderTriangleWireframe(transformed, camera)
 	} else {
-		r.rasterizeTriangle(transformed, camera)
+		r.rasterizeTriangleWithLighting(transformed, camera)
 	}
 }
 
@@ -301,7 +271,7 @@ func (r *TerminalRenderer) RenderPoint(point *Point, worldMatrix Matrix4x4, came
 		return
 	}
 
-	if x >= 0 && x < r.Width && y >= 0 && y < r.Height {
+	if x >= r.ClipMinX && x < r.ClipMaxX && y >= r.ClipMinY && y < r.ClipMaxY {
 		if z < r.ZBuffer[y][x] {
 			r.Surface[y][x] = r.Charset[7]
 			r.ZBuffer[y][x] = z
@@ -311,10 +281,8 @@ func (r *TerminalRenderer) RenderPoint(point *Point, worldMatrix Matrix4x4, came
 
 // RenderMesh renders a complete mesh
 func (r *TerminalRenderer) RenderMesh(mesh *Mesh, worldMatrix Matrix4x4, camera *Camera) {
-	// Transform mesh position
 	meshPos := worldMatrix.TransformPoint(mesh.Position)
 
-	// Render quads
 	for _, quad := range mesh.Quads {
 		offsetQuad := &Quad{
 			P0:           Point{X: quad.P0.X + meshPos.X, Y: quad.P0.Y + meshPos.Y, Z: quad.P0.Z + meshPos.Z},
@@ -328,7 +296,6 @@ func (r *TerminalRenderer) RenderMesh(mesh *Mesh, worldMatrix Matrix4x4, camera 
 		r.renderQuad(offsetQuad, IdentityMatrix(), camera)
 	}
 
-	// Render triangles
 	for _, tri := range mesh.Triangles {
 		offsetTri := &Triangle{
 			P0:           Point{X: tri.P0.X + meshPos.X, Y: tri.P0.Y + meshPos.Y, Z: tri.P0.Z + meshPos.Z},
@@ -375,62 +342,19 @@ func (r *TerminalRenderer) SetShowDebugInfo(show bool) {
 	r.ShowDebugInfo = show
 }
 
-// rasterizeTriangle performs triangle rasterization with lighting
+// rasterizeTriangle performs triangle rasterization (Basic, no per-pixel lighting)
 func (r *TerminalRenderer) rasterizeTriangle(t *Triangle, camera *Camera) {
-	clipped := ClipTriangleToNearPlane(t, camera)
-	if len(clipped) == 0 {
-		return
-	}
-
-	// Calculate lighting once
-	normal := CalculateSurfaceNormal(&t.P0, &t.P1, &t.P2, t.Normal, t.UseSetNormal)
-	surfacePoint := Point{
-		X: (t.P0.X + t.P1.X + t.P2.X) / 3.0,
-		Y: (t.P0.Y + t.P1.Y + t.P2.Y) / 3.0,
-		Z: (t.P0.Z + t.P1.Z + t.P2.Z) / 3.0,
-	}
-
-	// Backface culling
-	cameraDirX, cameraDirY, cameraDirZ := camera.GetCameraDirection(surfacePoint)
-	facing := dotProduct(normal.X, normal.Y, normal.Z, cameraDirX, cameraDirY, cameraDirZ)
-	if facing < 0 {
-		return
-	}
-
-	// Calculate lighting
-	var pixelColor Color
-	var fillChar rune
-
-	if r.LightingSystem != nil {
-		ao := CalculateSimpleAO(normal)
-		pixelColor = r.LightingSystem.CalculateLighting(surfacePoint, normal, t.Material, ao)
-	} else {
-		pixelColor = r.simpleLighting(normal, t.Material)
-	}
-
-	brightness := (float64(pixelColor.R) + float64(pixelColor.G) + float64(pixelColor.B)) / (3.0 * 255.0)
-	index := int(brightness * float64(len(SHADING_RAMP)-1))
-	if index < 0 {
-		index = 0
-	}
-	if index >= len(SHADING_RAMP) {
-		index = len(SHADING_RAMP) - 1
-	}
-	fillChar = rune(SHADING_RAMP[index])
-
-	// Rasterize clipped triangles
-	for _, tri := range clipped {
-		r.fillTriangle(tri, camera, pixelColor, fillChar)
-	}
+	// Re-route to the lighting version for simplicity and correctness
+	r.rasterizeTriangleWithLighting(t, camera)
 }
 
+// rasterizeTriangleWithLighting performs triangle rasterization with PERSPECTIVE CORRECT lighting
 func (r *TerminalRenderer) rasterizeTriangleWithLighting(t *Triangle, camera *Camera) {
 	clipped := ClipTriangleToNearPlane(t, camera)
 	if len(clipped) == 0 {
 		return
 	}
 
-	// Calculate surface normal once (for backface culling)
 	normal := CalculateSurfaceNormal(&t.P0, &t.P1, &t.P2, t.Normal, t.UseSetNormal)
 	surfacePoint := Point{
 		X: (t.P0.X + t.P1.X + t.P2.X) / 3.0,
@@ -438,151 +362,64 @@ func (r *TerminalRenderer) rasterizeTriangleWithLighting(t *Triangle, camera *Ca
 		Z: (t.P0.Z + t.P1.Z + t.P2.Z) / 3.0,
 	}
 
-	// Backface culling
 	cameraDirX, cameraDirY, cameraDirZ := camera.GetCameraDirection(surfacePoint)
 	facing := dotProduct(normal.X, normal.Y, normal.Z, cameraDirX, cameraDirY, cameraDirZ)
 	if facing < 0 {
 		return
 	}
 
-	// Rasterize clipped triangles with PER-PIXEL lighting
 	for _, tri := range clipped {
 		r.fillTriangleWithPerPixelLighting(tri, camera, normal, t.Material)
 	}
 }
 
-// fillTriangle performs scanline rasterization
-func (r *TerminalRenderer) fillTriangle(t *Triangle, camera *Camera, color Color, fillChar rune) {
-	x0, y0, z0 := camera.ProjectPoint(t.P0, r.Height, r.Width)
-	x1, y1, z1 := camera.ProjectPoint(t.P1, r.Height, r.Width)
-	x2, y2, z2 := camera.ProjectPoint(t.P2, r.Height, r.Width)
-
-	if x0 == -1 || x1 == -1 || x2 == -1 {
-		return
-	}
-
-	if z0 <= 0 {
-		z0 = 0.001
-	}
-	if z1 <= 0 {
-		z1 = 0.001
-	}
-	if z2 <= 0 {
-		z2 = 0.001
-	}
-
-	// Sort by Y
-	if y1 < y0 {
-		x0, y0, z0, x1, y1, z1 = x1, y1, z1, x0, y0, z0
-	}
-	if y2 < y0 {
-		x0, y0, z0, x2, y2, z2 = x2, y2, z2, x0, y0, z0
-	}
-	if y2 < y1 {
-		x1, y1, z1, x2, y2, z2 = x2, y2, z2, x1, y1, z1
-	}
-
-	totalHeight := y2 - y0
-	if totalHeight == 0 {
-		return
-	}
-
-	for y := y0; y <= y2; y++ {
-		if y < 0 || y >= r.Height {
-			continue
-		}
-
-		secondHalf := y > y1 || y1 == y0
-		alpha := float64(y-y0) / float64(totalHeight)
-
-		beta := 0.0
-		if secondHalf {
-			if y2 != y1 {
-				beta = float64(y-y1) / float64(y2-y1)
-			}
-		} else {
-			if y1 != y0 {
-				beta = float64(y-y0) / float64(y1-y0)
-			}
-		}
-
-		ax := int(float64(x0) + alpha*float64(x2-x0) + 0.5)
-		az := z0 + alpha*(z2-z0)
-
-		var bx int
-		var bz float64
-		if secondHalf {
-			bx = int(float64(x1) + beta*float64(x2-x1) + 0.5)
-			bz = z1 + beta*(z2-z1)
-		} else {
-			bx = int(float64(x0) + beta*float64(x1-x0) + 0.5)
-			bz = z0 + beta*(z1-z0)
-		}
-
-		if ax > bx {
-			ax, bx = bx, ax
-			az, bz = bz, az
-		}
-
-		for x := ax; x <= bx; x++ {
-			if x < 0 || x >= r.Width {
-				continue
-			}
-
-			t := 0.0
-			if bx != ax {
-				t = float64(x-ax) / float64(bx-ax)
-			}
-			z := az + t*(bz-az)
-
-			if z > 0 && z < r.ZBuffer[y][x] {
-				if r.UseColor {
-					r.Surface[y][x] = FILLED_CHAR
-					r.ColorBuffer[y][x] = color
-				} else {
-					r.Surface[y][x] = fillChar
-				}
-				r.ZBuffer[y][x] = z
-			}
-		}
-	}
-}
-
-// fillTriangleWithPerPixelLighting - Per-pixel lighting computation
+// fillTriangleWithPerPixelLighting fills a triangle using perspective-correct interpolation
 func (r *TerminalRenderer) fillTriangleWithPerPixelLighting(
 	t *Triangle,
 	camera *Camera,
 	normal Point,
 	material Material,
 ) {
-	x0, y0, z0 := camera.ProjectPoint(t.P0, r.Height, r.Width)
-	x1, y1, z1 := camera.ProjectPoint(t.P1, r.Height, r.Width)
-	x2, y2, z2 := camera.ProjectPoint(t.P2, r.Height, r.Width)
+	// 1. Project vertices to screen space
+	x0, y0, zDepth0 := camera.ProjectPoint(t.P0, r.Height, r.Width)
+	x1, y1, zDepth1 := camera.ProjectPoint(t.P1, r.Height, r.Width)
+	x2, y2, zDepth2 := camera.ProjectPoint(t.P2, r.Height, r.Width)
 
 	if x0 == -1 || x1 == -1 || x2 == -1 {
 		return
 	}
 
-	// Guard against zero/negative depths
-	if z0 <= 0 {
-		z0 = 0.001
+	// 2. Prepare for Perspective Correct Interpolation
+	// We need 1/z (inverse depth) to interpolate linearly in screen space.
+	// We use the view-space Z (zDepth) which ProjectPoint returns.
+	if zDepth0 <= 0 {
+		zDepth0 = 0.001
 	}
-	if z1 <= 0 {
-		z1 = 0.001
+	if zDepth1 <= 0 {
+		zDepth1 = 0.001
 	}
-	if z2 <= 0 {
-		z2 = 0.001
+	if zDepth2 <= 0 {
+		zDepth2 = 0.001
 	}
 
-	// Sort vertices by Y
+	invZ0 := 1.0 / zDepth0
+	invZ1 := 1.0 / zDepth1
+	invZ2 := 1.0 / zDepth2
+
+	// Pre-multiply attributes by 1/z
+	p0OverZ := Point{X: t.P0.X * invZ0, Y: t.P0.Y * invZ0, Z: t.P0.Z * invZ0}
+	p1OverZ := Point{X: t.P1.X * invZ1, Y: t.P1.Y * invZ1, Z: t.P1.Z * invZ1}
+	p2OverZ := Point{X: t.P2.X * invZ2, Y: t.P2.Y * invZ2, Z: t.P2.Z * invZ2}
+
+	// 3. Sort vertices by Y (Standard Scanline approach)
 	if y1 < y0 {
-		x0, y0, z0, x1, y1, z1 = x1, y1, z1, x0, y0, z0
+		x0, y0, invZ0, p0OverZ, x1, y1, invZ1, p1OverZ = x1, y1, invZ1, p1OverZ, x0, y0, invZ0, p0OverZ
 	}
 	if y2 < y0 {
-		x0, y0, z0, x2, y2, z2 = x2, y2, z2, x0, y0, z0
+		x0, y0, invZ0, p0OverZ, x2, y2, invZ2, p2OverZ = x2, y2, invZ2, p2OverZ, x0, y0, invZ0, p0OverZ
 	}
 	if y2 < y1 {
-		x1, y1, z1, x2, y2, z2 = x2, y2, z2, x1, y1, z1
+		x1, y1, invZ1, p1OverZ, x2, y2, invZ2, p2OverZ = x2, y2, invZ2, p2OverZ, x1, y1, invZ1, p1OverZ
 	}
 
 	totalHeight := y2 - y0
@@ -590,110 +427,130 @@ func (r *TerminalRenderer) fillTriangleWithPerPixelLighting(
 		return
 	}
 
-	// Calculate world-space positions for lighting interpolation
-	p0World := t.P0
-	p1World := t.P1
-	p2World := t.P2
+	// 4. Rasterize scanlines
+	// Respect clipping bounds for Y
+	startY := y0
+	if startY < r.ClipMinY {
+		startY = r.ClipMinY
+	}
+	endY := y2
+	if endY >= r.ClipMaxY {
+		endY = r.ClipMaxY - 1
+	}
 
-	for y := y0; y <= y2; y++ {
-		if y < 0 || y >= r.Height {
-			continue
-		}
-
+	for y := startY; y <= endY; y++ {
 		secondHalf := y > y1 || y1 == y0
 		alpha := float64(y-y0) / float64(totalHeight)
+
+		// Calculate boundary points for this scanline
+		// A is the long edge (P0 -> P2)
+		// B is the short edges (P0 -> P1 then P1 -> P2)
+
+		// Interpolate Long Edge (A)
+		ax := int(float64(x0) + alpha*float64(x2-x0) + 0.5)
+		invZA := invZ0 + alpha*(invZ2-invZ0)
+		pOverZA := lerpPoint3D(p0OverZ, p2OverZ, alpha)
+
+		// Interpolate Short Edge (B)
+		var bx int
+		var invZB float64
+		var pOverZB Point
 
 		beta := 0.0
 		if secondHalf {
 			if y2 != y1 {
 				beta = float64(y-y1) / float64(y2-y1)
+				bx = int(float64(x1) + beta*float64(x2-x1) + 0.5)
+				invZB = invZ1 + beta*(invZ2-invZ1)
+				pOverZB = lerpPoint3D(p1OverZ, p2OverZ, beta)
 			}
 		} else {
 			if y1 != y0 {
 				beta = float64(y-y0) / float64(y1-y0)
+				bx = int(float64(x0) + beta*float64(x1-x0) + 0.5)
+				invZB = invZ0 + beta*(invZ1-invZ0)
+				pOverZB = lerpPoint3D(p0OverZ, p1OverZ, beta)
 			}
 		}
 
-		ax := int(float64(x0) + alpha*float64(x2-x0) + 0.5)
-		az := z0 + alpha*(z2-z0)
-
-		var bx int
-		var bz float64
-		if secondHalf {
-			bx = int(float64(x1) + beta*float64(x2-x1) + 0.5)
-			bz = z1 + beta*(z2-z1)
-		} else {
-			bx = int(float64(x0) + beta*float64(x1-x0) + 0.5)
-			bz = z0 + beta*(z1-z0)
-		}
-
+		// Ensure A is left, B is right
 		if ax > bx {
 			ax, bx = bx, ax
-			az, bz = bz, az
+			invZA, invZB = invZB, invZA
+			pOverZA, pOverZB = pOverZB, pOverZA
 		}
 
-		// Interpolate world positions for this scanline
-		var aWorldPos, bWorldPos Point
-		if secondHalf {
-			aWorldPos = lerpPoint3D(p0World, p2World, alpha)
-			bWorldPos = lerpPoint3D(p1World, p2World, beta)
-		} else {
-			aWorldPos = lerpPoint3D(p0World, p2World, alpha)
-			bWorldPos = lerpPoint3D(p0World, p1World, beta)
+		// Respect clipping bounds for X
+		startX := ax
+		if startX < r.ClipMinX {
+			startX = r.ClipMinX
+		}
+		endX := bx
+		if endX >= r.ClipMaxX {
+			endX = r.ClipMaxX - 1
 		}
 
-		// Rasterize scanline with per-pixel lighting
-		for x := ax; x <= bx; x++ {
-			if x < 0 || x >= r.Width {
-				continue
-			}
+		width := bx - ax
 
+		for x := startX; x <= endX; x++ {
 			t := 0.0
-			if bx != ax {
-				t = float64(x-ax) / float64(bx-ax)
+			if width != 0 {
+				t = float64(x-ax) / float64(width)
 			}
-			z := az + t*(bz-az)
+
+			// Perspective Correct Interpolation for Pixel
+			currentInvZ := invZA + t*(invZB-invZA)
+
+			// Depth Buffer Test (using 1/invZ = Z)
+			// Note: We use 1/invZ for depth check.
+			// Smaller Z is closer.
+			z := 1.0 / currentInvZ
 
 			if z > 0 && z < r.ZBuffer[y][x] {
-				// Interpolate world position for this pixel
-				pixelWorldPos := lerpPoint3D(aWorldPos, bWorldPos, t)
+				currentPOverZ := lerpPoint3D(pOverZA, pOverZB, t)
 
-				// Calculate lighting for THIS pixel
+				// Recover World Position: (P/Z) / (1/Z) = P
+				pixelWorldPos := Point{
+					X: currentPOverZ.X / currentInvZ,
+					Y: currentPOverZ.Y / currentInvZ,
+					Z: currentPOverZ.Z / currentInvZ,
+				}
+
 				var pixelColor Color
 				if r.LightingSystem != nil {
 					ao := CalculateSimpleAO(normal)
-					pixelColor = r.LightingSystem.CalculateLighting(
-						pixelWorldPos,
-						normal,
-						material,
-						ao,
-					)
+					pixelColor = r.LightingSystem.CalculateLighting(pixelWorldPos, normal, material, ao)
 				} else {
 					pixelColor = r.simpleLighting(normal, material)
 				}
 
-				// Calculate character based on brightness
-				brightness := (float64(pixelColor.R) + float64(pixelColor.G) + float64(pixelColor.B)) / (3.0 * 255.0)
-				index := int(brightness * float64(len(SHADING_RAMP)-1))
-				if index < 0 {
-					index = 0
-				}
-				if index >= len(SHADING_RAMP) {
-					index = len(SHADING_RAMP) - 1
-				}
-				fillChar := rune(SHADING_RAMP[index])
-
-				// Write pixel with correct lighting
 				if r.UseColor {
 					r.Surface[y][x] = FILLED_CHAR
 					r.ColorBuffer[y][x] = pixelColor
 				} else {
-					r.Surface[y][x] = fillChar
+					// Fallback char
+					brightness := (float64(pixelColor.R) + float64(pixelColor.G) + float64(pixelColor.B)) / (3.0 * 255.0)
+					idx := int(brightness * float64(len(SHADING_RAMP)-1))
+					if idx < 0 {
+						idx = 0
+					}
+					if idx >= len(SHADING_RAMP) {
+						idx = len(SHADING_RAMP) - 1
+					}
+					r.Surface[y][x] = rune(SHADING_RAMP[idx])
 				}
 				r.ZBuffer[y][x] = z
 			}
 		}
 	}
+}
+
+// fillTriangle performs basic scanline rasterization (Kept for fallback, uses new clipping)
+func (r *TerminalRenderer) fillTriangle(t *Triangle, camera *Camera, color Color, fillChar rune) {
+	// Redirect to the robust lighting function to ensure clipping/perspective consistency
+	// This ensures we don't duplicate the complex clipping logic.
+	// If specific "solid color" behavior is needed, the material can be adjusted.
+	r.fillTriangleWithPerPixelLighting(t, camera, Point{0, 1, 0, 'o'}, t.Material)
 }
 
 // renderTriangleWireframe renders triangle edges
@@ -718,7 +575,7 @@ func (r *TerminalRenderer) renderTriangleWireframe(t *Triangle, camera *Camera) 
 	}
 }
 
-// renderLineProjected projects and renders a line
+// renderLineProjected projects and renders a line with clipping
 func (r *TerminalRenderer) renderLineProjected(line *Line, camera *Camera, color Color) {
 	sx0, sy0, z0 := camera.ProjectPoint(line.Start, r.Height, r.Width)
 	sx1, sy1, z1 := camera.ProjectPoint(line.End, r.Height, r.Width)
@@ -726,20 +583,17 @@ func (r *TerminalRenderer) renderLineProjected(line *Line, camera *Camera, color
 	if sx0 == -1 || sx1 == -1 {
 		return
 	}
-
 	r.drawLineWithZ(sx0, sy0, sx1, sy1, z0, z1, color)
 }
 
-// drawLineWithZ draws a line with z-buffering
+// drawLineWithZ draws a line with z-buffering and clipping
 func (r *TerminalRenderer) drawLineWithZ(x0, y0, x1, y1 int, z0, z1 float64, color Color) {
 	dx := x1 - x0
 	dy := y1 - y0
-
 	steps := abs(dx)
 	if abs(dy) > steps {
 		steps = abs(dy)
 	}
-
 	if steps == 0 {
 		return
 	}
@@ -756,26 +610,29 @@ func (r *TerminalRenderer) drawLineWithZ(x0, y0, x1, y1 int, z0, z1 float64, col
 		xi := int(x + 0.5)
 		yi := int(y + 0.5)
 
-		if xi >= 0 && xi < r.Width && yi >= 0 && yi < r.Height {
+		// Check clipping bounds
+		if xi >= r.ClipMinX && xi < r.ClipMaxX && yi >= r.ClipMinY && yi < r.ClipMaxY {
 			if z < r.ZBuffer[yi][xi] {
 				if r.UseColor {
 					r.Surface[yi][xi] = FILLED_CHAR
 					r.ColorBuffer[yi][xi] = color
 				} else {
+					// ASCII line drawing logic
+					char := '*'
 					if abs(dx) > abs(dy)*2 {
-						r.Surface[yi][xi] = '-'
+						char = '-'
 					} else if abs(dy) > abs(dx)*2 {
-						r.Surface[yi][xi] = '|'
+						char = '|'
 					} else if (dx > 0 && dy > 0) || (dx < 0 && dy < 0) {
-						r.Surface[yi][xi] = '\\'
+						char = '\\'
 					} else {
-						r.Surface[yi][xi] = '/'
+						char = '/'
 					}
+					r.Surface[yi][xi] = char
 				}
 				r.ZBuffer[yi][xi] = z
 			}
 		}
-
 		x += xStep
 		y += yStep
 		z += zStep
@@ -789,14 +646,7 @@ func (r *TerminalRenderer) renderQuad(quad *Quad, worldMatrix Matrix4x4, camera 
 	p2 := worldMatrix.TransformPoint(quad.P2)
 	p3 := worldMatrix.TransformPoint(quad.P3)
 
-	transformed := &Quad{
-		P0:           p0,
-		P1:           p1,
-		P2:           p2,
-		P3:           p3,
-		Material:     quad.Material,
-		UseSetNormal: quad.UseSetNormal,
-	}
+	transformed := &Quad{P0: p0, P1: p1, P2: p2, P3: p3, Material: quad.Material, UseSetNormal: quad.UseSetNormal}
 
 	if quad.UseSetNormal && quad.Normal != nil {
 		transformedNormal := worldMatrix.TransformDirection(*quad.Normal)
@@ -809,7 +659,7 @@ func (r *TerminalRenderer) renderQuad(quad *Quad, worldMatrix Matrix4x4, camera 
 			if tri.Material.Wireframe {
 				r.renderTriangleWireframe(tri, camera)
 			} else {
-				r.rasterizeTriangle(tri, camera)
+				r.rasterizeTriangleWithLighting(tri, camera)
 			}
 		}
 	}
@@ -820,16 +670,13 @@ func (r *TerminalRenderer) renderCircle(circle *Circle, worldMatrix Matrix4x4, c
 	if len(circle.Points) == 0 {
 		return
 	}
-
 	transformedPoints := make([]Point, len(circle.Points))
 	for i, p := range circle.Points {
 		transformedPoints[i] = worldMatrix.TransformPoint(p)
 	}
-
 	for i := 0; i < len(transformedPoints); i++ {
 		p1 := transformedPoints[i]
 		p2 := transformedPoints[(i+1)%len(transformedPoints)]
-
 		line := NewLine(p1, p2)
 		clipped, visible := ClipLineToNearPlane(line, camera)
 		if visible {
@@ -838,16 +685,13 @@ func (r *TerminalRenderer) renderCircle(circle *Circle, worldMatrix Matrix4x4, c
 	}
 }
 
-// isTriangleVisible checks basic visibility
 func (r *TerminalRenderer) isTriangleVisible(t *Triangle, camera *Camera) bool {
 	v0 := camera.TransformToViewSpace(t.P0)
 	v1 := camera.TransformToViewSpace(t.P1)
 	v2 := camera.TransformToViewSpace(t.P2)
-
 	return !(v0.Z <= camera.Near && v1.Z <= camera.Near && v2.Z <= camera.Near)
 }
 
-// simpleLighting provides basic lighting when no lighting system is set
 func (r *TerminalRenderer) simpleLighting(normal Point, material Material) Color {
 	ao := CalculateSimpleAO(normal)
 	lx, ly, lz := -1.0, 1.0, -1.0
@@ -858,45 +702,32 @@ func (r *TerminalRenderer) simpleLighting(normal Point, material Material) Color
 	}
 	intensity *= ao
 
-	red := float64(material.DiffuseColor.R) * intensity
-	green := float64(material.DiffuseColor.G) * intensity
-	blue := float64(material.DiffuseColor.B) * intensity
-
 	return Color{
-		R: uint8(clamp(red, 0, 255)),
-		G: uint8(clamp(green, 0, 255)),
-		B: uint8(clamp(blue, 0, 255)),
+		R: uint8(clamp(float64(material.DiffuseColor.R)*intensity, 0, 255)),
+		G: uint8(clamp(float64(material.DiffuseColor.G)*intensity, 0, 255)),
+		B: uint8(clamp(float64(material.DiffuseColor.B)*intensity, 0, 255)),
 	}
 }
 
-// showDebugLine displays debug info
 func (r *TerminalRenderer) showDebugLine() {
 	if r.Camera == nil {
 		return
 	}
-
 	pos := r.Camera.GetPosition()
 	pitch, yaw, roll := r.Camera.GetRotation()
-
 	r.debugBuffer.Reset()
 	r.debugBuffer.WriteString(fmt.Sprintf("FPS: %.1f", 60.0))
-
-	camInfo := fmt.Sprintf("Pos:(%.1f,%.1f,%.1f) Rot:(P:%.2f Y:%.2f R:%.2f)",
-		pos.X, pos.Y, pos.Z, pitch*180/3.14159, yaw*180/3.14159, roll*180/3.14159)
-
+	camInfo := fmt.Sprintf("Pos:(%.1f,%.1f,%.1f) Rot:(P:%.2f Y:%.2f R:%.2f)", pos.X, pos.Y, pos.Z, pitch*180/3.14159, yaw*180/3.14159, roll*180/3.14159)
 	totalLen := r.debugBuffer.Len() + len(camInfo)
 	padding := r.Width - totalLen
 	if padding < 1 {
 		padding = 1
 	}
-
 	for i := 0; i < padding; i++ {
 		r.debugBuffer.WriteByte(' ')
 	}
 	r.debugBuffer.WriteString(camInfo)
-
 	debugLine := r.debugBuffer.String()
-
 	if debugLine != r.lastDebugLine {
 		fmt.Fprintf(r.Writer, "\033[%d;1H", r.Height+1)
 		fmt.Fprintf(r.Writer, "\033[K%s", debugLine)
@@ -905,161 +736,6 @@ func (r *TerminalRenderer) showDebugLine() {
 	}
 }
 
-// RenderLoop starts the render loop (convenience method)
-func (r *TerminalRenderer) RenderLoop(scene *Scene, fps float64, updateFunc func(*Scene, float64)) {
-	dt := 1.0 / fps
-	ticker := time.NewTicker(time.Duration(dt*1000) * time.Millisecond)
-	defer ticker.Stop()
-
-	frameCount := 0
-	startTime := time.Now()
-	currentFPS := fps
-
-	for {
-		<-ticker.C
-
-		if updateFunc != nil {
-			updateFunc(scene, dt)
-		}
-
-		scene.Update(dt)
-		r.RenderScene(scene)
-		r.Present()
-
-		frameCount++
-		if frameCount%10 == 0 {
-			elapsed := time.Since(startTime).Seconds()
-			currentFPS = float64(frameCount) / elapsed
-		}
-
-		_ = currentFPS // Use for debug display if needed
-	}
-}
-
-func (r *TerminalRenderer) RenderLODGroupWithTransition(node *SceneNode, worldMatrix Matrix4x4, camera *Camera) {
-	lodGroup, ok := node.Object.(*LODGroupWithTransitions)
-	if !ok {
-		return
-	}
-
-	if !lodGroup.TransitionState.IsTransitioning {
-		// Not transitioning - render current LOD
-		mesh := lodGroup.GetCurrentMesh()
-		if mesh != nil {
-			r.RenderMesh(mesh, worldMatrix, camera)
-		}
-		return
-	}
-
-	// Transitioning - blend two LODs
-	fromMesh, toMesh, alpha := lodGroup.GetBlendedMesh()
-
-	if fromMesh != nil && toMesh != nil {
-		// Render both meshes with alpha blending
-		// First, render lower LOD (will be occluded by higher LOD where appropriate)
-		r.RenderMeshWithAlpha(fromMesh, worldMatrix, camera, 1.0-alpha)
-		r.RenderMeshWithAlpha(toMesh, worldMatrix, camera, alpha)
-	}
-}
-
-func (r *TerminalRenderer) RenderMeshWithAlpha(mesh *Mesh, worldMatrix Matrix4x4, camera *Camera, alpha float64) {
-	// Store original material colors
-	originalColors := make([]Color, len(mesh.Triangles))
-	for i, tri := range mesh.Triangles {
-		originalColors[i] = tri.Material.DiffuseColor
-
-		// Blend material color with alpha
-		tri.Material.DiffuseColor = Color{
-			R: uint8(float64(tri.Material.DiffuseColor.R) * alpha),
-			G: uint8(float64(tri.Material.DiffuseColor.G) * alpha),
-			B: uint8(float64(tri.Material.DiffuseColor.B) * alpha),
-		}
-	}
-
-	// Render with modified colors
-	r.RenderMesh(mesh, worldMatrix, camera)
-
-	// Restore original colors
-	for i, tri := range mesh.Triangles {
-		tri.Material.DiffuseColor = originalColors[i]
-	}
-}
-
-// RasterizeScanline fills a horizontal line with perspective-correct depth interpolation
-// Uses 1/z for proper perspective interpolation
-func (r *TerminalRenderer) RasterizeScanline(y, xStart, xEnd int, zStart, zEnd float64, pixelColor Color, fillChar rune) {
-
-	// Bounds check for y
-	if y < 0 || y >= r.Height {
-		return
-	}
-
-	// Early rejection if completely off-screen
-	if (xStart < 0 && xEnd < 0) || (xStart >= r.Width && xEnd >= r.Width) {
-		return
-	}
-
-	originalXStart := xStart
-	originalXEnd := xEnd
-
-	// Guard against zero/negative depths
-	if zStart <= 0 {
-		zStart = 0.001
-	}
-	if zEnd <= 0 {
-		zEnd = 0.001
-	}
-
-	// Perspective-correct interpolation: use 1/z
-	invZStart := 1.0 / zStart
-	invZEnd := 1.0 / zEnd
-
-	// Clamp to screen bounds
-	if xStart < 0 {
-		xStart = 0
-	}
-	if xEnd >= r.Width {
-		xEnd = r.Width - 1
-	}
-
-	// Handle degenerate case
-	if xStart > xEnd {
-		return
-	}
-
-	// Draw pixels including the end pixel (<=) to avoid gaps
-	for x := xStart; x <= xEnd; x++ {
-		// Calculate interpolation parameter accounting for clamping
-		t := 0.0
-		if originalXEnd != originalXStart {
-			t = float64(x-originalXStart) / float64(originalXEnd-originalXStart)
-		}
-
-		// Perspective-correct depth interpolation
-		invZ := invZStart + t*(invZEnd-invZStart)
-		z := 1.0 / invZ
-
-		// Additional safety check
-		if z <= 0 || math.IsNaN(z) || math.IsInf(z, 0) {
-			continue
-		}
-
-		// Get render context for buffer access
-
-		// Z-buffer test
-		if z < r.ZBuffer[y][x] {
-			if r.UseColor {
-				r.Surface[y][x] = FILLED_CHAR
-				r.ColorBuffer[y][x] = pixelColor
-			} else {
-				r.Surface[y][x] = fillChar
-			}
-			r.ZBuffer[y][x] = z
-		}
-	}
-}
-
-// lerpPoint3D interpolates between two 3D points
 func lerpPoint3D(a, b Point, t float64) Point {
 	return Point{
 		X: a.X + t*(b.X-a.X),

@@ -29,6 +29,9 @@ type Renderer interface {
 	SetUseColor(useColor bool)
 	SetShowDebugInfo(show bool)
 
+	// Clipping (New for Parallel Rendering Safety)
+	SetClipBounds(minX, minY, maxX, maxY int)
+
 	// Getters for shared context
 	GetRenderContext() *RenderContext
 }

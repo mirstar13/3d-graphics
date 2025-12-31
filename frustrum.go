@@ -22,6 +22,9 @@ const (
 	FrustumFar
 )
 
+// Degrees to Radians conversion factor
+const DegToRad = math.Pi / 180.0
+
 // BuildFrustum constructs view frustum from camera parameters
 func BuildFrustum(camera *Camera) ViewFrustum {
 	frustum := ViewFrustum{}
@@ -34,11 +37,9 @@ func BuildFrustum(camera *Camera) ViewFrustum {
 	up := camera.GetUpVectorPoint()
 
 	// Calculate frustum dimensions at near and far planes
-	nearHeight := 2.0 * math.Tan(camera.FOV.Y/2.0) * camera.Near
-	nearWidth := 2.0 * math.Tan(camera.FOV.X/2.0) * camera.Near
-
-	// farHeight := 2.0 * math.Tan(camera.FOV.Y/2.0) * camera.Far
-	// farWidth := 2.0 * math.Tan(camera.FOV.X/2.0) * camera.Far
+	// Convert FOV degrees to radians before Tan
+	nearHeight := 2.0 * math.Tan((camera.FOV.Y/2.0)*DegToRad) * camera.Near
+	nearWidth := 2.0 * math.Tan((camera.FOV.X/2.0)*DegToRad) * camera.Near
 
 	// Near and far plane centers
 	nearCenter := Point{
@@ -264,11 +265,13 @@ func BuildFrustumSimple(camera *Camera) ViewFrustum {
 	up := camera.GetUpVectorPoint()
 
 	// Simplified plane calculations
-	halfFOVX := camera.FOV.X / 2.0
-	halfFOVY := camera.FOV.Y / 2.0
+	// FIX: Use DegToRad conversion. Camera FOV is in degrees.
+	halfFOVXRad := (camera.FOV.X / 2.0) * DegToRad
+	halfFOVYRad := (camera.FOV.Y / 2.0) * DegToRad
 
-	angleX := math.Atan(halfFOVX)
-	angleY := math.Atan(halfFOVY)
+	// Use angles directly (no Atan)
+	angleX := halfFOVXRad
+	angleY := halfFOVYRad
 
 	// Near plane
 	frustum.Planes[FrustumNear].Normal = forward
