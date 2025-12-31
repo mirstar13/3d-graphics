@@ -86,8 +86,14 @@ func main() {
 	fmt.Println()
 	fmt.Print("Enter backend choice (1-3, default=1): ")
 
-	var backendChoice BackendType
-	fmt.Scanln(&backendChoice)
+	fmt.Scanln(&choice)
+
+	if choice < 1 || choice > 3 {
+		fmt.Println("Invalid choice, using Terminal Backend")
+		choice = 1
+	}
+
+	backendChoice := BackendType(choice - 1)
 
 	// Configure rendering mode
 	fmt.Println()
@@ -182,6 +188,8 @@ func getBackendName(backend BackendType) string {
 	switch backend {
 	case BackendTerminal:
 		return "Terminal"
+	case BackendOpenGL:
+		return "OpenGL"
 	case BackendVulkan:
 		return "Vulkan"
 	default:
@@ -233,33 +241,19 @@ func runEngine(demoType int, config EngineConfig) {
 		termRenderer.SetUseColor(config.UseColor)
 		termRenderer.SetShowDebugInfo(config.ShowDebugInfo)
 		baseRenderer = termRenderer
-	case BackendVulkan:
-		// Use the CGO-based Vulkan renderer
-		baseRenderer = NewVulkanRenderer(800, 600)
-		baseRenderer.SetUseColor(config.UseColor)
-		baseRenderer.SetShowDebugInfo(config.ShowDebugInfo)
 	case BackendOpenGL:
 		// Use the CGO-based OpenGL renderer
 		baseRenderer = NewOpenGLRenderer(800, 600)
 		baseRenderer.SetUseColor(config.UseColor)
 		baseRenderer.SetShowDebugInfo(config.ShowDebugInfo)
-	default:
-		fmt.Println("Unsupported backend, exiting.")
-		return
-	}
-
-	if config.Backend == BackendVulkan {
+	case BackendVulkan:
 		// Use the CGO-based Vulkan renderer
 		baseRenderer = NewVulkanRenderer(800, 600)
 		baseRenderer.SetUseColor(config.UseColor)
 		baseRenderer.SetShowDebugInfo(config.ShowDebugInfo)
-	} else {
-		// Use Terminal Renderer
-		writer := bufio.NewWriter(os.Stdout)
-		termRenderer := NewTerminalRenderer(writer, config.Height, config.Width)
-		termRenderer.SetUseColor(config.UseColor)
-		termRenderer.SetShowDebugInfo(config.ShowDebugInfo)
-		baseRenderer = termRenderer
+	default:
+		fmt.Println("Unsupported backend, exiting.")
+		return
 	}
 
 	// 2. Wrap with Profiler if enabled
