@@ -1,25 +1,30 @@
 package main
 
+// ============================================================================
+// SCENE SYSTEM (REFACTORED - NO DRAWABLE INTERFACE)
+// ============================================================================
+
 // SceneNode represents a node in the scene graph
+// Object can be any geometry type: *Triangle, *Quad, *Line, *Mesh, *Circle, *Point
 type SceneNode struct {
 	Transform *Transform
-	Object    Drawable
+	Object    interface{} // Can be any geometry type
 	Children  []*SceneNode
 	Parent    *SceneNode
 	Name      string
 	Enabled   bool
-	Tags      []string                  // For grouping/filtering nodes
-	OnUpdate  func(*SceneNode, float64) // Optional update callback
+	Tags      []string
+	OnUpdate  func(*SceneNode, float64)
 }
 
-// Scene manages the entire scene graph and provides high-level API
+// Scene manages the scene graph
 type Scene struct {
 	Root     *SceneNode
-	AllNodes map[string]*SceneNode // Map by name for fast lookup
-	Camera   *Camera               // Active camera for this scene
+	AllNodes map[string]*SceneNode
+	Camera   *Camera
 }
 
-// NewScene creates a new empty scene
+// NewScene creates a new scene
 func NewScene() *Scene {
 	root := &SceneNode{
 		Transform: NewTransform(),
@@ -51,8 +56,8 @@ func NewSceneNode(name string) *SceneNode {
 	}
 }
 
-// NewSceneNodeWithObject creates a scene node with a drawable object
-func NewSceneNodeWithObject(name string, obj Drawable) *SceneNode {
+// NewSceneNodeWithObject creates a node with an object
+func NewSceneNodeWithObject(name string, obj interface{}) *SceneNode {
 	return &SceneNode{
 		Transform: NewTransform(),
 		Object:    obj,
@@ -64,13 +69,13 @@ func NewSceneNodeWithObject(name string, obj Drawable) *SceneNode {
 	}
 }
 
-// AddNode adds a node to the scene (as a child of root)
+// AddNode adds a node to the scene
 func (s *Scene) AddNode(node *SceneNode) {
 	s.Root.AddChild(node)
 	s.AllNodes[node.Name] = node
 }
 
-// AddNodeTo adds a node as a child of a specific parent
+// AddNodeTo adds a node as a child of a parent
 func (s *Scene) AddNodeTo(node *SceneNode, parent *SceneNode) {
 	parent.AddChild(node)
 	s.AllNodes[node.Name] = node
@@ -84,12 +89,12 @@ func (s *Scene) RemoveNode(node *SceneNode) {
 	delete(s.AllNodes, node.Name)
 }
 
-// FindNode finds a node by name (O(1) lookup)
+// FindNode finds a node by name
 func (s *Scene) FindNode(name string) *SceneNode {
 	return s.AllNodes[name]
 }
 
-// FindNodesByTag finds all nodes with a specific tag
+// FindNodesByTag finds all nodes with a tag
 func (s *Scene) FindNodesByTag(tag string) []*SceneNode {
 	results := make([]*SceneNode, 0)
 	for _, node := range s.AllNodes {
@@ -100,43 +105,28 @@ func (s *Scene) FindNodesByTag(tag string) []*SceneNode {
 	return results
 }
 
-// GetRenderableObjects returns all objects ready for rendering
-// Applies transforms and filters disabled nodes
-func (s *Scene) GetRenderableObjects() []Drawable {
-	// This is now just a legacy wrapper
-	nodes := s.GetRenderableNodes()
-	drawables := make([]Drawable, len(nodes))
-	for i, node := range nodes {
-		drawables[i] = node.Object
-	}
-	return drawables
-}
-
-// collectRenderables now just collects nodes, doesn't transform
-func (s *Scene) collectRenderables(node *SceneNode, renderables *[]*SceneNode) {
-	if !node.IsEnabled() {
-		return
-	}
-
-	// Just add the node itself - transformation happens during rendering
-	if node.Object != nil {
-		*renderables = append(*renderables, node)
-	}
-
-	// Recurse to children
-	for _, child := range node.Children {
-		s.collectRenderables(child, renderables)
-	}
-}
-
-// GetRenderableNodes returns scene nodes (not transformed objects)
+// GetRenderableNodes returns all nodes with objects
 func (s *Scene) GetRenderableNodes() []*SceneNode {
 	nodes := make([]*SceneNode, 0)
 	s.collectRenderables(s.Root, &nodes)
 	return nodes
 }
 
-// Update updates all nodes in the scene
+func (s *Scene) collectRenderables(node *SceneNode, renderables *[]*SceneNode) {
+	if !node.IsEnabled() {
+		return
+	}
+
+	if node.Object != nil {
+		*renderables = append(*renderables, node)
+	}
+
+	for _, child := range node.Children {
+		s.collectRenderables(child, renderables)
+	}
+}
+
+// Update updates all nodes
 func (s *Scene) Update(dt float64) {
 	s.updateNodeRecursive(s.Root, dt)
 }
@@ -146,20 +136,46 @@ func (s *Scene) updateNodeRecursive(node *SceneNode, dt float64) {
 		return
 	}
 
-	// Call update callback if node has one
 	if node.OnUpdate != nil {
 		node.OnUpdate(node, dt)
-		// After update callback, ensure transform is marked if changed
-		// (the callback might have modified the transform)
 	}
 
-	// Recursively update children
 	for _, child := range node.Children {
 		s.updateNodeRecursive(child, dt)
 	}
 }
 
-// AddChild adds a child node to this node
+// Clear removes all nodes except root
+func (s *Scene) Clear() {
+	s.Root.Children = make([]*SceneNode, 0)
+	s.AllNodes = map[string]*SceneNode{"Root": s.Root}
+}
+
+// GetAllNodes returns all nodes
+func (s *Scene) GetAllNodes() []*SceneNode {
+	nodes := make([]*SceneNode, 0, len(s.AllNodes))
+	for _, node := range s.AllNodes {
+		nodes = append(nodes, node)
+	}
+	return nodes
+}
+
+// GetEnabledNodes returns only enabled nodes
+func (s *Scene) GetEnabledNodes() []*SceneNode {
+	nodes := make([]*SceneNode, 0)
+	for _, node := range s.AllNodes {
+		if node.IsEnabled() {
+			nodes = append(nodes, node)
+		}
+	}
+	return nodes
+}
+
+// ============================================================================
+// SCENE NODE METHODS
+// ============================================================================
+
+// AddChild adds a child node
 func (sn *SceneNode) AddChild(child *SceneNode) {
 	if child.Parent != nil {
 		child.Parent.RemoveChild(child)
@@ -182,12 +198,12 @@ func (sn *SceneNode) RemoveChild(child *SceneNode) {
 	}
 }
 
-// SetEnabled enables or disables this node (affects rendering)
+// SetEnabled enables/disables the node
 func (sn *SceneNode) SetEnabled(enabled bool) {
 	sn.Enabled = enabled
 }
 
-// IsEnabled checks if this node is enabled (checks parent chain)
+// IsEnabled checks if the node is enabled
 func (sn *SceneNode) IsEnabled() bool {
 	if !sn.Enabled {
 		return false
@@ -198,12 +214,12 @@ func (sn *SceneNode) IsEnabled() bool {
 	return true
 }
 
-// AddTag adds a tag to this node
+// AddTag adds a tag
 func (sn *SceneNode) AddTag(tag string) {
 	sn.Tags = append(sn.Tags, tag)
 }
 
-// HasTag checks if this node has a specific tag
+// HasTag checks if the node has a tag
 func (sn *SceneNode) HasTag(tag string) bool {
 	for _, t := range sn.Tags {
 		if t == tag {
@@ -213,7 +229,7 @@ func (sn *SceneNode) HasTag(tag string) bool {
 	return false
 }
 
-// RemoveTag removes a tag from this node
+// RemoveTag removes a tag
 func (sn *SceneNode) RemoveTag(tag string) {
 	for i, t := range sn.Tags {
 		if t == tag {
@@ -223,7 +239,7 @@ func (sn *SceneNode) RemoveTag(tag string) {
 	}
 }
 
-// GetWorldTransform returns the world-space transform for a node
+// GetWorldTransform returns the world transform
 func (sn *SceneNode) GetWorldTransform() *Transform {
 	worldTransform := NewTransform()
 	worldPos := sn.Transform.GetWorldPosition()
@@ -236,15 +252,43 @@ func (sn *SceneNode) GetWorldTransform() *Transform {
 	return worldTransform
 }
 
+// RotateLocal rotates the node
+func (sn *SceneNode) RotateLocal(dpitch, dyaw, droll float64) {
+	sn.Transform.Rotate(dpitch, dyaw, droll)
+	sn.MarkTransformDirty()
+}
+
+// TranslateLocal translates in local space
+func (sn *SceneNode) TranslateLocal(dx, dy, dz float64) {
+	right := sn.Transform.GetRightVector()
+	up := sn.Transform.GetUpVector()
+	forward := sn.Transform.GetForwardVector()
+
+	sn.Transform.Position.X += right.X*dx + up.X*dy + forward.X*dz
+	sn.Transform.Position.Y += right.Y*dx + up.Y*dy + forward.Y*dz
+	sn.Transform.Position.Z += right.Z*dx + up.Z*dy + forward.Z*dz
+	sn.Transform.MarkDirty()
+	sn.MarkTransformDirty()
+}
+
+// MarkTransformDirty marks transform as dirty
+func (sn *SceneNode) MarkTransformDirty() {
+	sn.Transform.MarkDirty()
+
+	for _, child := range sn.Children {
+		child.MarkTransformDirty()
+	}
+}
+
 // TransformSceneObject applies the node's transform to its object
-func (sn *SceneNode) TransformSceneObject() Drawable {
+// Returns a transformed copy of the object for rendering/physics
+func (sn *SceneNode) TransformSceneObject() interface{} {
 	if sn.Object == nil {
 		return nil
 	}
 
 	worldTransform := sn.GetWorldTransform()
 
-	// Create a transformed copy based on object type
 	switch obj := sn.Object.(type) {
 	case *Triangle:
 		transformed := &Triangle{
@@ -256,7 +300,6 @@ func (sn *SceneNode) TransformSceneObject() Drawable {
 			UseSetNormal: obj.UseSetNormal,
 		}
 
-		// Transform the normal if it's set
 		if obj.UseSetNormal && obj.Normal != nil {
 			transformedNormal := worldTransform.TransformDirection(*obj.Normal)
 			transformed.Normal = &transformedNormal
@@ -274,7 +317,6 @@ func (sn *SceneNode) TransformSceneObject() Drawable {
 			UseSetNormal: obj.UseSetNormal,
 		}
 
-		// Transform the normal if it's set
 		if obj.UseSetNormal && obj.Normal != nil {
 			transformedNormal := worldTransform.TransformDirection(*obj.Normal)
 			transformed.Normal = &transformedNormal
@@ -313,7 +355,6 @@ func (sn *SceneNode) TransformSceneObject() Drawable {
 				UseSetNormal: tri.UseSetNormal,
 			}
 
-			// Transform the normal if it's set
 			if tri.UseSetNormal && tri.Normal != nil {
 				transformedNormal := worldTransform.TransformDirection(*tri.Normal)
 				transformed.Normal = &transformedNormal
@@ -332,7 +373,6 @@ func (sn *SceneNode) TransformSceneObject() Drawable {
 				UseSetNormal: quad.UseSetNormal,
 			}
 
-			// Transform the normal if it's set
 			if quad.UseSetNormal && quad.Normal != nil {
 				transformedNormal := worldTransform.TransformDirection(*quad.Normal)
 				transformed.Normal = &transformedNormal
@@ -347,56 +387,26 @@ func (sn *SceneNode) TransformSceneObject() Drawable {
 	return sn.Object
 }
 
-// Update the existing methods to use this
-func (sn *SceneNode) RotateLocal(dpitch, dyaw, droll float64) {
-	sn.Transform.Rotate(dpitch, dyaw, droll)
-	sn.MarkTransformDirty()
-}
+// ============================================================================
+// SCENE FACTORY METHODS
+// ============================================================================
 
-func (sn *SceneNode) TranslateLocal(dx, dy, dz float64) {
-	right := sn.Transform.GetRightVector()
-	up := sn.Transform.GetUpVector()
-	forward := sn.Transform.GetForwardVector()
-
-	sn.Transform.Position.X += right.X*dx + up.X*dy + forward.X*dz
-	sn.Transform.Position.Y += right.Y*dx + up.Y*dy + forward.Y*dz
-	sn.Transform.Position.Z += right.Z*dx + up.Z*dy + forward.Z*dz
-	sn.Transform.MarkDirty()
-	sn.MarkTransformDirty()
-}
-
-// MarkTransformDirty marks this node's transform and all children as dirty
-func (sn *SceneNode) MarkTransformDirty() {
-	sn.Transform.MarkDirty()
-
-	// Propagate to all children
-	for _, child := range sn.Children {
-		child.MarkTransformDirty()
-	}
-}
-
-// OnUpdate is called each frame for this node (optional)
-var OnUpdate func(*SceneNode, float64)
-
-// CreateCube creates a cube as a scene node
+// CreateCube creates a cube scene node
 func (s *Scene) CreateCube(name string, size float64, material Material) *SceneNode {
 	node := NewSceneNode(name)
 	mesh := NewMesh()
 	d := size
 
-	// Define 8 vertices of the cube
-	v0 := Point{X: -d, Y: -d, Z: -d} // 0: left-bottom-back
-	v1 := Point{X: d, Y: -d, Z: -d}  // 1: right-bottom-back
-	v2 := Point{X: d, Y: d, Z: -d}   // 2: right-top-back
-	v3 := Point{X: -d, Y: d, Z: -d}  // 3: left-top-back
-	v4 := Point{X: -d, Y: -d, Z: d}  // 4: left-bottom-front
-	v5 := Point{X: d, Y: -d, Z: d}   // 5: right-bottom-front
-	v6 := Point{X: d, Y: d, Z: d}    // 6: right-top-front
-	v7 := Point{X: -d, Y: d, Z: d}   // 7: left-top-front
+	v0 := Point{X: -d, Y: -d, Z: -d}
+	v1 := Point{X: d, Y: -d, Z: -d}
+	v2 := Point{X: d, Y: d, Z: -d}
+	v3 := Point{X: -d, Y: d, Z: -d}
+	v4 := Point{X: -d, Y: -d, Z: d}
+	v5 := Point{X: d, Y: -d, Z: d}
+	v6 := Point{X: d, Y: d, Z: d}
+	v7 := Point{X: -d, Y: d, Z: d}
 
-	// Helper function to create a quad with explicit normal
 	createQuad := func(p0, p1, p2, p3 Point, normal Point) {
-		// Create two triangles with the explicit normal
 		t1 := NewTriangle(p0, p1, p2, 'x').SetMaterial(material)
 		t1.SetNormal(normal)
 		mesh.AddTriangle(t1)
@@ -406,23 +416,11 @@ func (s *Scene) CreateCube(name string, size float64, material Material) *SceneN
 		mesh.AddTriangle(t2)
 	}
 
-	// Front face (Z+): looking at it from +Z direction
-	// Winding: counter-clockwise from outside
 	createQuad(v4, v5, v6, v7, Point{X: 0, Y: 0, Z: 1})
-
-	// Back face (Z-): looking at it from -Z direction
 	createQuad(v1, v0, v3, v2, Point{X: 0, Y: 0, Z: -1})
-
-	// Right face (X+): looking at it from +X direction
 	createQuad(v5, v1, v2, v6, Point{X: 1, Y: 0, Z: 0})
-
-	// Left face (X-): looking at it from -X direction
 	createQuad(v0, v4, v7, v3, Point{X: -1, Y: 0, Z: 0})
-
-	// Top face (Y+): looking at it from +Y direction
 	createQuad(v7, v6, v2, v3, Point{X: 0, Y: 1, Z: 0})
-
-	// Bottom face (Y-): looking at it from -Y direction
 	createQuad(v0, v1, v5, v4, Point{X: 0, Y: -1, Z: 0})
 
 	node.Object = mesh
@@ -430,7 +428,7 @@ func (s *Scene) CreateCube(name string, size float64, material Material) *SceneN
 	return node
 }
 
-// CreateSphere creates a sphere as a scene node
+// CreateSphere creates a sphere scene node
 func (s *Scene) CreateSphere(name string, radius float64, rings, sectors int, material Material) *SceneNode {
 	node := NewSceneNode(name)
 	mesh := GenerateSphere(radius, rings, sectors, material)
@@ -444,30 +442,4 @@ func (s *Scene) CreateEmpty(name string) *SceneNode {
 	node := NewSceneNode(name)
 	s.AddNode(node)
 	return node
-}
-
-// GetAllNodes returns all nodes in the scene
-func (s *Scene) GetAllNodes() []*SceneNode {
-	nodes := make([]*SceneNode, 0, len(s.AllNodes))
-	for _, node := range s.AllNodes {
-		nodes = append(nodes, node)
-	}
-	return nodes
-}
-
-// GetEnabledNodes returns only enabled nodes
-func (s *Scene) GetEnabledNodes() []*SceneNode {
-	nodes := make([]*SceneNode, 0)
-	for _, node := range s.AllNodes {
-		if node.IsEnabled() {
-			nodes = append(nodes, node)
-		}
-	}
-	return nodes
-}
-
-// Clear removes all nodes except root
-func (s *Scene) Clear() {
-	s.Root.Children = make([]*SceneNode, 0)
-	s.AllNodes = map[string]*SceneNode{"Root": s.Root}
 }

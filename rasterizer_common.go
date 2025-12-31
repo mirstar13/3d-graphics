@@ -1,7 +1,5 @@
 package main
 
-import "math"
-
 // SurfaceRenderContext holds all the data needed for rendering a surface
 type SurfaceRenderContext struct {
 	Camera       *Camera
@@ -116,77 +114,6 @@ func CalculateSurfaceLighting(ctx SurfaceRenderContext) (Color, rune) {
 	fillChar := rune(SHADING_RAMP[index])
 
 	return pixelColor, fillChar
-}
-
-// RasterizeScanline fills a horizontal line with perspective-correct depth interpolation
-// Uses 1/z for proper perspective interpolation
-func RasterizeScanline(renderer *Renderer, y, xStart, xEnd int, zStart, zEnd float64, pixelColor Color, fillChar rune) {
-	// Bounds check for y
-	if y < 0 || y >= renderer.Height {
-		return
-	}
-
-	// Early rejection if completely off-screen
-	if (xStart < 0 && xEnd < 0) || (xStart >= renderer.Width && xEnd >= renderer.Width) {
-		return
-	}
-
-	originalXStart := xStart
-	originalXEnd := xEnd
-
-	// Guard against zero/negative depths
-	if zStart <= 0 {
-		zStart = 0.001
-	}
-	if zEnd <= 0 {
-		zEnd = 0.001
-	}
-
-	// Perspective-correct interpolation: use 1/z
-	invZStart := 1.0 / zStart
-	invZEnd := 1.0 / zEnd
-
-	// Clamp to screen bounds
-	if xStart < 0 {
-		xStart = 0
-	}
-	if xEnd >= renderer.Width {
-		xEnd = renderer.Width - 1
-	}
-
-	// Handle degenerate case
-	if xStart > xEnd {
-		return
-	}
-
-	// Draw pixels including the end pixel (<=) to avoid gaps
-	for x := xStart; x <= xEnd; x++ {
-		// Calculate interpolation parameter accounting for clamping
-		t := 0.0
-		if originalXEnd != originalXStart {
-			t = float64(x-originalXStart) / float64(originalXEnd-originalXStart)
-		}
-
-		// Perspective-correct depth interpolation
-		invZ := invZStart + t*(invZEnd-invZStart)
-		z := 1.0 / invZ
-
-		// Additional safety check
-		if z <= 0 || math.IsNaN(z) || math.IsInf(z, 0) {
-			continue
-		}
-
-		// Z-buffer test
-		if z < renderer.ZBuffer[y][x] {
-			if renderer.UseColor {
-				renderer.Surface[y][x] = FILLED_CHAR
-				renderer.ColorBuffer[y][x] = pixelColor
-			} else {
-				renderer.Surface[y][x] = fillChar
-			}
-			renderer.ZBuffer[y][x] = z
-		}
-	}
 }
 
 // ClipToScreen checks if a bounding box is completely outside screen bounds

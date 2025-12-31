@@ -5,21 +5,21 @@ import "math"
 // LODLevel represents a single level of detail
 type LODLevel struct {
 	Mesh           *Mesh
-	MaxDistance    float64 // Distance at which this LOD should be used
-	ScreenCoverage float64 // Alternative: screen space coverage threshold (0.0 to 1.0)
+	MaxDistance    float64
+	ScreenCoverage float64
 }
 
 // LODGroup manages multiple LOD levels for an object
 type LODGroup struct {
 	Levels           []LODLevel
 	CurrentLOD       int
-	UseScreenSpace   bool    // Use screen space coverage instead of distance
-	FadeTransition   bool    // Enable smooth fade between LOD levels
-	TransitionRange  float64 // Distance range for fade (percentage of max distance)
+	UseScreenSpace   bool
+	FadeTransition   bool
+	TransitionRange  float64
 	BoundingVolume   BoundingVolume
 	LastUpdatePos    Point
 	LastUpdateLOD    int
-	UpdateHysteresis float64 // Prevent rapid LOD switching
+	UpdateHysteresis float64
 }
 
 // NewLODGroup creates a new LOD group
@@ -30,7 +30,7 @@ func NewLODGroup() *LODGroup {
 		UseScreenSpace:   false,
 		FadeTransition:   false,
 		TransitionRange:  0.1,
-		UpdateHysteresis: 5.0, // 5 units of distance before switching LOD
+		UpdateHysteresis: 5.0,
 	}
 }
 
@@ -41,11 +41,8 @@ func (lg *LODGroup) AddLOD(mesh *Mesh, maxDistance float64) {
 		MaxDistance: maxDistance,
 	}
 	lg.Levels = append(lg.Levels, level)
-
-	// Sort LODs by distance (closest first)
 	lg.sortLODs()
 
-	// Update bounding volume to encompass highest detail mesh
 	if len(lg.Levels) > 0 && lg.BoundingVolume == nil {
 		lg.BoundingVolume = ComputeMeshBounds(lg.Levels[0].Mesh)
 	}
@@ -61,9 +58,8 @@ func (lg *LODGroup) AddLODWithScreenCoverage(mesh *Mesh, screenCoverage float64)
 	lg.UseScreenSpace = true
 }
 
-// sortLODs sorts LOD levels by distance (ascending)
+// sortLODs sorts LOD levels by distance
 func (lg *LODGroup) sortLODs() {
-	// Simple bubble sort (fine for small number of LODs)
 	n := len(lg.Levels)
 	for i := 0; i < n-1; i++ {
 		for j := 0; j < n-i-1; j++ {
@@ -91,24 +87,19 @@ func (lg *LODGroup) SelectLOD(worldPos Point, camera *Camera) int {
 func (lg *LODGroup) selectLODDistance(worldPos Point, camera *Camera) int {
 	camPos := camera.GetPosition()
 
-	// Calculate distance from camera to object
 	dx := worldPos.X - camPos.X
 	dy := worldPos.Y - camPos.Y
 	dz := worldPos.Z - camPos.Z
 	distance := math.Sqrt(dx*dx + dy*dy + dz*dz)
 
-	// Apply hysteresis to prevent rapid switching
 	if lg.CurrentLOD >= 0 && lg.CurrentLOD < len(lg.Levels) {
 		currentMaxDist := lg.Levels[lg.CurrentLOD].MaxDistance
-
-		// If we're within hysteresis range of current LOD, keep it
 		if math.Abs(distance-currentMaxDist) < lg.UpdateHysteresis {
 			return lg.CurrentLOD
 		}
 	}
 
-	// Select LOD based on distance
-	selectedLOD := len(lg.Levels) - 1 // Default to lowest detail
+	selectedLOD := len(lg.Levels) - 1
 
 	for i, level := range lg.Levels {
 		if distance <= level.MaxDistance {
@@ -122,9 +113,7 @@ func (lg *LODGroup) selectLODDistance(worldPos Point, camera *Camera) int {
 
 // selectLODScreenSpace selects LOD based on screen space coverage
 func (lg *LODGroup) selectLODScreenSpace(worldPos Point, camera *Camera) int {
-	// Calculate approximate screen space coverage
 	coverage := lg.calculateScreenCoverage(worldPos, camera)
-
 	selectedLOD := len(lg.Levels) - 1
 
 	for i, level := range lg.Levels {
@@ -137,7 +126,7 @@ func (lg *LODGroup) selectLODScreenSpace(worldPos Point, camera *Camera) int {
 	return selectedLOD
 }
 
-// calculateScreenCoverage estimates screen space coverage (0.0 to 1.0)
+// calculateScreenCoverage estimates screen space coverage
 func (lg *LODGroup) calculateScreenCoverage(worldPos Point, camera *Camera) float64 {
 	if lg.BoundingVolume == nil {
 		return 0.0
@@ -153,13 +142,8 @@ func (lg *LODGroup) calculateScreenCoverage(worldPos Point, camera *Camera) floa
 		return 1.0
 	}
 
-	// Approximate screen coverage using object radius and distance
 	radius := lg.BoundingVolume.GetRadius()
-
-	// Project radius to screen space (simplified)
 	projectedSize := (radius * camera.FOV.X) / distance
-
-	// Normalize to 0-1 range (assuming FOV represents screen width in some units)
 	coverage := projectedSize / camera.FOV.X
 
 	if coverage > 1.0 {
@@ -200,10 +184,8 @@ func (lg *LODGroup) GetLODCount() int {
 	return len(lg.Levels)
 }
 
-// SceneNode extension for LOD support
+// SetLODGroup sets a LOD group on a node
 func (sn *SceneNode) SetLODGroup(lodGroup *LODGroup) {
-	// Store LOD group as the node's object
-	// When rendering, the LOD system will select appropriate mesh
 	sn.AddTag("lod-enabled")
 	sn.Object = lodGroup
 }
@@ -228,24 +210,15 @@ func (s *Scene) UpdateLODs() {
 	}
 }
 
-// SimplifyMesh creates a simplified version of a mesh (placeholder implementation)
-// In a real engine, this would use algorithms like:
-// - Edge collapse (quadric error metrics)
-// - Vertex clustering
-// - Progressive meshes
+// SimplifyMesh creates a simplified version of a mesh
 func SimplifyMesh(mesh *Mesh, targetRatio float64) *Mesh {
-	// Placeholder: Just return original mesh
-	// In production, implement mesh simplification algorithms
-
 	if targetRatio >= 1.0 {
 		return mesh
 	}
 
-	// For now, return a copy with fewer triangles (very naive approach)
 	simplified := NewMesh()
 	simplified.Position = mesh.Position
 
-	// Simple decimation: skip some triangles
 	skipRate := int(1.0 / targetRatio)
 	if skipRate < 1 {
 		skipRate = 1
@@ -269,15 +242,11 @@ func SimplifyMesh(mesh *Mesh, targetRatio float64) *Mesh {
 // GenerateLODChain generates multiple LOD levels from a base mesh
 func GenerateLODChain(baseMesh *Mesh, numLevels int) *LODGroup {
 	lodGroup := NewLODGroup()
-
-	// Add highest detail (original mesh)
 	lodGroup.AddLOD(baseMesh, 50.0)
 
-	// Generate progressively simpler LODs
 	for i := 1; i < numLevels; i++ {
 		ratio := 1.0 - (float64(i) / float64(numLevels))
 		simplifiedMesh := SimplifyMesh(baseMesh, ratio)
-
 		distance := 50.0 * float64(i+1)
 		lodGroup.AddLOD(simplifiedMesh, distance)
 	}
@@ -288,7 +257,7 @@ func GenerateLODChain(baseMesh *Mesh, numLevels int) *LODGroup {
 // GetLODStats returns statistics about LOD usage
 type LODStats struct {
 	TotalLODGroups int
-	ActiveLOD0     int // Highest detail
+	ActiveLOD0     int
 	ActiveLOD1     int
 	ActiveLOD2     int
 	ActiveLODOther int
@@ -314,54 +283,13 @@ func (s *Scene) GetLODStats() LODStats {
 				stats.ActiveLODOther++
 			}
 
-			// Count triangles in current LOD
 			currentMesh := lodGroup.GetCurrentMesh()
 			if currentMesh != nil {
 				stats.TotalTriangles += len(currentMesh.Triangles)
-				stats.TotalTriangles += len(currentMesh.Quads) * 2 // Quads = 2 triangles
+				stats.TotalTriangles += len(currentMesh.Quads) * 2
 			}
 		}
 	}
 
 	return stats
-}
-
-// Make LODGroup implement Drawable interface
-func (lg *LODGroup) Draw(renderer *Renderer, camera *Camera) {
-	mesh := lg.GetCurrentMesh()
-	if mesh != nil {
-		mesh.Draw(renderer, camera)
-	}
-}
-
-func (lg *LODGroup) DrawFilled(renderer *Renderer, camera *Camera) {
-	mesh := lg.GetCurrentMesh()
-	if mesh != nil {
-		mesh.DrawFilled(renderer, camera)
-	}
-}
-
-func (lg *LODGroup) Project(renderer *Renderer, camera *Camera) {
-	mesh := lg.GetCurrentMesh()
-	if mesh != nil {
-		mesh.Project(renderer, camera)
-	}
-}
-
-func (lg *LODGroup) RotateLocal(axis byte, angle float64) {
-	// Rotate all LOD meshes
-	for i := range lg.Levels {
-		if lg.Levels[i].Mesh != nil {
-			lg.Levels[i].Mesh.RotateLocal(axis, angle)
-		}
-	}
-}
-
-func (lg *LODGroup) RotateGlobal(axis byte, angle float64) {
-	// Rotate all LOD meshes
-	for i := range lg.Levels {
-		if lg.Levels[i].Mesh != nil {
-			lg.Levels[i].Mesh.RotateGlobal(axis, angle)
-		}
-	}
 }

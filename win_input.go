@@ -273,6 +273,7 @@ func (cc *CameraController) Update(input InputState) {
 // SetOrbitCenter sets the center point for auto-orbit
 func (cc *CameraController) SetOrbitCenter(x, y, z float64) {
 	cc.OrbitCenter = Point{X: x, Y: y, Z: z}
+
 }
 
 // SetOrbitRadius sets the radius for auto-orbit
@@ -289,7 +290,7 @@ func (cc *CameraController) SetOrbitHeight(height float64) {
 func (cc *CameraController) EnableAutoOrbit(enable bool) {
 	cc.AutoOrbit = enable
 
-	// If enabling, reset angle to current position
+	// If enabling, reset angle to current position and look at center
 	if enable {
 		pos := cc.Camera.GetPosition()
 		dx := pos.X - cc.OrbitCenter.X

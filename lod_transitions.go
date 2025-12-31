@@ -88,22 +88,17 @@ func NewLODGroupWithTransitions(mode LODTransitionMode, duration float64) *LODGr
 
 // UpdateWithTransition updates LOD selection with smooth transitions
 func (lg *LODGroupWithTransitions) UpdateWithTransition(worldPos Point, camera *Camera, dt float64) {
-	// Update transition
 	lg.TransitionState.UpdateTransition(dt)
 
-	// Compute distance to camera
 	camPos := camera.GetPosition()
 	dx := worldPos.X - camPos.X
 	dy := worldPos.Y - camPos.Y
 	dz := worldPos.Z - camPos.Z
 	distance := math.Sqrt(dx*dx + dy*dy + dz*dz)
 
-	// Check if we should change LOD
 	newLOD := lg.SelectLOD(worldPos, camera)
 
-	// Only start transition if not currently transitioning and LOD changed significantly
 	if !lg.TransitionState.IsTransitioning && newLOD != lg.CurrentLOD {
-		// Check if distance changed enough (hysteresis)
 		distanceChange := math.Abs(distance - lg.LastDistance)
 
 		if distanceChange > lg.UpdateHysteresis {
@@ -111,7 +106,6 @@ func (lg *LODGroupWithTransitions) UpdateWithTransition(worldPos Point, camera *
 		}
 	}
 
-	// If transition complete, update current LOD
 	if !lg.TransitionState.IsTransitioning {
 		lg.CurrentLOD = newLOD
 	}
@@ -147,28 +141,20 @@ type MorphedMesh struct {
 }
 
 // CreateMorphedMesh creates a morphed mesh between two LODs
-// Note: Both meshes must have compatible topology (same vertex order)
 func CreateMorphedMesh(fromMesh, toMesh *Mesh, t float64) *MorphedMesh {
-	// This is a simplified implementation
-	// Production geomorphing requires matching vertex correspondence
-
 	morphed := &MorphedMesh{
 		Triangles: make([]*Triangle, 0),
 	}
 
-	// For simplicity, morph only if triangle counts match
 	if len(fromMesh.Triangles) != len(toMesh.Triangles) {
-		// Can't morph - return fromMesh
 		morphed.Triangles = fromMesh.Triangles
 		return morphed
 	}
 
-	// Interpolate each triangle
 	for i := 0; i < len(fromMesh.Triangles); i++ {
 		fromTri := fromMesh.Triangles[i]
 		toTri := toMesh.Triangles[i]
 
-		// Lerp vertices
 		p0 := lerpPoint(fromTri.P0, toTri.P0, t)
 		p1 := lerpPoint(fromTri.P1, toTri.P1, t)
 		p2 := lerpPoint(fromTri.P2, toTri.P2, t)
@@ -176,7 +162,6 @@ func CreateMorphedMesh(fromMesh, toMesh *Mesh, t float64) *MorphedMesh {
 		tri := NewTriangle(p0, p1, p2, fromTri.char)
 		tri.Material = fromTri.Material
 
-		// Lerp normals if set
 		if fromTri.UseSetNormal && toTri.UseSetNormal {
 			normal := lerpPoint(*fromTri.Normal, *toTri.Normal, t)
 			tri.SetNormal(normal)
@@ -195,130 +180,6 @@ func lerpPoint(from, to Point, t float64) Point {
 		Y: from.Y + (to.Y-from.Y)*t,
 		Z: from.Z + (to.Z-from.Z)*t,
 	}
-}
-
-// RenderLODWithFade renders LOD with alpha blending
-func (r *Renderer) RenderLODWithFade(lodGroup *LODGroupWithTransitions, camera *Camera, sceneNode *SceneNode) {
-	fromMesh, toMesh, alpha := lodGroup.GetBlendedMesh()
-
-	if toMesh == nil || !lodGroup.TransitionState.IsTransitioning {
-		// No transition - render normally
-		if fromMesh != nil {
-			r.RenderMeshTransformed(fromMesh, sceneNode.Transform, camera)
-		}
-		return
-	}
-
-	// Render both meshes with alpha blending
-	switch lodGroup.TransitionState.Mode {
-	case LODTransitionFade, LODTransitionCrossFade:
-		r.renderMeshWithAlpha(fromMesh, sceneNode.Transform, camera, 1.0-alpha)
-		r.renderMeshWithAlpha(toMesh, sceneNode.Transform, camera, alpha)
-
-	case LODTransitionMorph:
-		// Create morphed geometry
-		morphed := CreateMorphedMesh(fromMesh, toMesh, alpha)
-		r.renderMorphedMesh(morphed, sceneNode.Transform, camera)
-
-	default:
-		// No transition
-		r.RenderMeshTransformed(fromMesh, sceneNode.Transform, camera)
-	}
-}
-
-// renderMeshWithAlpha renders a mesh with transparency
-func (r *Renderer) renderMeshWithAlpha(mesh *Mesh, transform *Transform, camera *Camera, alpha float64) {
-	if mesh == nil || alpha <= 0.01 {
-		return
-	}
-
-	// Transform mesh
-	transformedMesh := NewMesh()
-	transformedMesh.Position = transform.TransformPoint(mesh.Position)
-
-	for _, tri := range mesh.Triangles {
-		transformed := &Triangle{
-			P0:           transform.TransformPoint(tri.P0),
-			P1:           transform.TransformPoint(tri.P1),
-			P2:           transform.TransformPoint(tri.P2),
-			char:         tri.char,
-			Material:     tri.Material,
-			UseSetNormal: tri.UseSetNormal,
-		}
-
-		if tri.UseSetNormal && tri.Normal != nil {
-			transformedNormal := transform.TransformDirection(*tri.Normal)
-			transformed.Normal = &transformedNormal
-		}
-
-		// Apply alpha to material
-		transformed.Material.AmbientStrength *= alpha
-		transformed.Material.SpecularStrength *= alpha
-
-		transformedMesh.AddTriangle(transformed)
-	}
-
-	// Render with standard pipeline
-	r.RenderMesh(transformedMesh, camera)
-}
-
-// renderMorphedMesh renders a morphed mesh
-func (r *Renderer) renderMorphedMesh(morphed *MorphedMesh, transform *Transform, camera *Camera) {
-	if morphed == nil {
-		return
-	}
-
-	for _, tri := range morphed.Triangles {
-		// Transform triangle
-		transformed := &Triangle{
-			P0:           transform.TransformPoint(tri.P0),
-			P1:           transform.TransformPoint(tri.P1),
-			P2:           transform.TransformPoint(tri.P2),
-			char:         tri.char,
-			Material:     tri.Material,
-			UseSetNormal: tri.UseSetNormal,
-		}
-
-		if tri.UseSetNormal && tri.Normal != nil {
-			transformedNormal := transform.TransformDirection(*tri.Normal)
-			transformed.Normal = &transformedNormal
-		}
-
-		// Render triangle
-		if r.IsTriangleVisible(transformed, camera) {
-			r.RenderTriangle(transformed, camera)
-		}
-	}
-}
-
-// RenderMeshTransformed renders a mesh with a transform applied
-func (r *Renderer) RenderMeshTransformed(mesh *Mesh, transform *Transform, camera *Camera) {
-	if mesh == nil {
-		return
-	}
-
-	transformedMesh := NewMesh()
-	transformedMesh.Position = transform.TransformPoint(mesh.Position)
-
-	for _, tri := range mesh.Triangles {
-		transformed := &Triangle{
-			P0:           transform.TransformPoint(tri.P0),
-			P1:           transform.TransformPoint(tri.P1),
-			P2:           transform.TransformPoint(tri.P2),
-			char:         tri.char,
-			Material:     tri.Material,
-			UseSetNormal: tri.UseSetNormal,
-		}
-
-		if tri.UseSetNormal && tri.Normal != nil {
-			transformedNormal := transform.TransformDirection(*tri.Normal)
-			transformed.Normal = &transformedNormal
-		}
-
-		transformedMesh.AddTriangle(transformed)
-	}
-
-	r.RenderMesh(transformedMesh, camera)
 }
 
 // UpdateLODsWithTransitions updates all LOD groups with transitions
@@ -341,14 +202,13 @@ func (sn *SceneNode) SetLODGroupWithTransition(lodGroup *LODGroupWithTransitions
 
 // DitherPattern represents a dithering pattern for LOD transitions
 type DitherPattern struct {
-	Pattern [16][16]bool // 16x16 dither matrix
+	Pattern [16][16]bool
 }
 
 // NewDitherPattern creates a Bayer dithering pattern
 func NewDitherPattern() *DitherPattern {
 	dp := &DitherPattern{}
 
-	// Simple 4x4 Bayer matrix expanded to 16x16
 	bayer4x4 := [4][4]int{
 		{0, 8, 2, 10},
 		{12, 4, 14, 6},
@@ -372,10 +232,6 @@ func (dp *DitherPattern) ShouldRenderPixel(x, y int, alpha float64) bool {
 	return alpha > 0.5 == threshold
 }
 
-// ============================================================================
-// Utility Functions
-// ============================================================================
-
 // ComputeLODScreenCoverage computes approximate screen coverage
 func ComputeLODScreenCoverage(worldPos Point, radius float64, camera *Camera) float64 {
 	camPos := camera.GetPosition()
@@ -388,7 +244,6 @@ func ComputeLODScreenCoverage(worldPos Point, radius float64, camera *Camera) fl
 		return 1.0
 	}
 
-	// Approximate screen coverage
 	projectedSize := (radius * camera.FOV.X) / distance
 	coverage := projectedSize / camera.FOV.X
 

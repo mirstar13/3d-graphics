@@ -15,21 +15,10 @@ const (
 	DemoWaveGrid
 	DemoHelix
 	DemoWireframe
-	DemoAdvancedSystems
-	DemoBoundingVolume
-	DemoPerformanceTest
-	DemoLineOfSight
-	DemoOctree
-	DemoBVH
-	DemoOBB
-	DemoMeshSimplification
-	DemoSmoothLOD
-	DemoCombinedAdvanced
-	DemoStressTest
 )
 
 func main() {
-	fmt.Println("=== 3D Engine Demo ===")
+	fmt.Println("=== 3D Engine Demo (Refactored Architecture) ===")
 	fmt.Println()
 	fmt.Println("Select a demo:")
 	fmt.Println("  1 - Solar System (planets orbiting)")
@@ -39,24 +28,13 @@ func main() {
 	fmt.Println("  5 - Wave Grid (sine wave animation)")
 	fmt.Println("  6 - Helix (spiral structure)")
 	fmt.Println("  7 - Wireframe Demo (mixed rendering)")
-	fmt.Println("  8 - Advanced Systems Demo")
-	fmt.Println("  9 - Bounding Volume Demo")
-	fmt.Println(" 10 - Performance Test Demo")
-	fmt.Println(" 11 - Line of Sight Demo")
-	fmt.Println(" 12 - Octree Demo")
-	fmt.Println(" 13 - BVH Demo")
-	fmt.Println(" 14 - OBB Demo")
-	fmt.Println(" 15 - Mesh Simplification Demo")
-	fmt.Println(" 16 - Smooth LOD Demo")
-	fmt.Println(" 17 - Combined Advanced Demo")
-	fmt.Println(" 18 - Stress Test Demo")
 	fmt.Println()
-	fmt.Print("Enter choice (1-18): ")
+	fmt.Print("Enter choice (1-7): ")
 
 	var choice int
 	fmt.Scanln(&choice)
 
-	if choice < 1 || choice > 18 {
+	if choice < 1 || choice > 7 {
 		fmt.Println("Invalid choice, using Solar System demo")
 		choice = 1
 	}
@@ -75,16 +53,23 @@ func main() {
 	fmt.Println("Starting in 3 seconds...")
 	time.Sleep(3 * time.Second)
 
-	// Create renderer
+	// Create terminal renderer
 	writer := bufio.NewWriter(os.Stdout)
-	renderer := NewRenderer(writer, 51, 223)
+	renderer := NewTerminalRenderer(writer, 51, 223)
 	renderer.SetUseColor(true)
+
+	// Initialize renderer
+	if err := renderer.Initialize(); err != nil {
+		panic(err)
+	}
+	defer renderer.Shutdown()
 
 	// Create scene
 	scene := NewScene()
 
-	// IMPORTANT: Configure camera with GOOD defaults before building scene
+	// Configure camera
 	configureCamera(scene.Camera, demoType)
+	renderer.SetCamera(scene.Camera)
 
 	// Setup lighting
 	lightingSystem := setupLighting(scene.Camera, demoType)
@@ -97,17 +82,15 @@ func main() {
 	material.Shininess = 64.0
 	material.SpecularStrength = 0.8
 
-	// Build scene based on choice
+	// Build scene
 	buildScene(scene, demoType, material)
 
-	// Create camera controller
+	// Create input manager and camera controller
 	inputManager := NewSilentInputManager()
 	inputManager.Start()
 	defer inputManager.Stop()
 
 	cameraController := NewCameraController(scene.Camera)
-
-	// Configure camera controller based on demo
 	configureCameraController(cameraController, demoType)
 
 	// Clear screen
@@ -120,24 +103,22 @@ func main() {
 	updateFunc := func(scene *Scene, dt float64) {
 		input := inputManager.GetInputState()
 
-		// Check for quit
 		if input.Quit {
 			fmt.Print("\033[2J\033[H")
 			fmt.Println("Exiting...")
 			inputManager.Stop()
+			renderer.Shutdown()
 			os.Exit(0)
 		}
 
-		// Update camera
 		cameraController.Update(input)
 
-		// Animate based on demo type
 		elapsedTime := time.Since(startTime).Seconds()
 		animateSceneDemo(scene, demoType, elapsedTime)
 
 		// Animate lights
-		if renderer.LightingSystem != nil {
-			for _, light := range renderer.LightingSystem.Lights {
+		if lightingSystem != nil {
+			for _, light := range lightingSystem.Lights {
 				light.Rotate('y', 0.01)
 			}
 		}
@@ -145,17 +126,16 @@ func main() {
 		inputManager.ClearKeys()
 	}
 
-	// Start render loop
+	// Start render loop using the renderer
 	renderer.RenderLoop(scene, fps, updateFunc)
 }
 
-// configureCamera sets up camera based on demo - WITH PROPER POSITIONING
+// configureCamera sets up camera based on demo
 func configureCamera(camera *Camera, demoType int) {
 	camera.DZ = 0.0
 	camera.Near = 0.5
 	camera.FOV = Point{X: 60.0, Y: 30.0, Z: 0}
 
-	// Position camera based on demo scene size
 	switch demoType {
 	case DemoSolarSystem:
 		camera.Transform.SetPosition(0, 30, -100)
@@ -193,7 +173,6 @@ func configureCamera(camera *Camera, demoType int) {
 		camera.Far = 200.0
 
 	default:
-		// Default safe position - can see origin from distance
 		camera.Transform.SetPosition(0, 10, -60)
 		camera.Transform.SetRotation(0, 0, 0)
 		camera.Far = 300.0
@@ -210,26 +189,32 @@ func configureCameraController(controller *CameraController, demoType int) {
 
 	case DemoRobotArm:
 		controller.SetOrbitRadius(60.0)
+		controller.SetOrbitCenter(0, 0, 0)
 		controller.EnableAutoOrbit(true)
 
 	case DemoSpinningCubes:
 		controller.SetOrbitRadius(100.0)
+		controller.SetOrbitCenter(0, 0, 0)
 		controller.EnableAutoOrbit(true)
 
 	case DemoOrbitingObjects:
 		controller.SetOrbitRadius(90.0)
+		controller.SetOrbitCenter(0, 0, 0)
 		controller.EnableAutoOrbit(true)
 
 	case DemoWaveGrid:
 		controller.SetOrbitRadius(70.0)
+		controller.SetOrbitCenter(0, 0, 0)
 		controller.EnableAutoOrbit(true)
 
 	case DemoHelix:
 		controller.SetOrbitRadius(80.0)
+		controller.SetOrbitCenter(0, 0, 0)
 		controller.EnableAutoOrbit(true)
 
 	default:
 		controller.SetOrbitRadius(80.0)
+		controller.SetOrbitCenter(0, 0, 0)
 		controller.EnableAutoOrbit(true)
 	}
 }
@@ -238,11 +223,11 @@ func configureCameraController(controller *CameraController, demoType int) {
 func setupLighting(camera *Camera, demoType int) *LightingSystem {
 	switch demoType {
 	case DemoSolarSystem:
-		return setupScenario3(camera) // Warm sun-like lighting
+		return setupScenario3(camera)
 	case DemoRobotArm:
-		return setupScenario5(camera) // Studio lighting
+		return setupScenario5(camera)
 	default:
-		return setupScenario5(camera) // Default studio lighting
+		return setupScenario5(camera)
 	}
 }
 
@@ -263,32 +248,10 @@ func buildScene(scene *Scene, demoType int, material Material) {
 		HelixDemo(scene, material)
 	case DemoWireframe:
 		WireframeDemo(scene, material)
-	case DemoAdvancedSystems:
-		AdvancedSystemsDemo(scene)
-	case DemoBoundingVolume:
-		BoundingVolumeDemo(scene)
-	case DemoPerformanceTest:
-		PerformanceTestDemo(scene)
-	case DemoLineOfSight:
-		LineOfSightDemo(scene)
-	case DemoOctree:
-		OctreeDemo(scene)
-	case DemoBVH:
-		BVHDemo(scene)
-	case DemoOBB:
-		OBBDemo(scene)
-	case DemoMeshSimplification:
-		MeshSimplificationDemo(scene)
-	case DemoSmoothLOD:
-		SmoothLODDemo(scene)
-	case DemoCombinedAdvanced:
-		CombinedAdvancedDemo(scene)
-	case DemoStressTest:
-		StressTestDemo(scene)
 	}
 }
 
-// animateScene animates the scene based on demo type
+// animateSceneDemo animates the scene
 func animateSceneDemo(scene *Scene, demoType int, time float64) {
 	switch demoType {
 	case DemoSolarSystem:
@@ -305,27 +268,5 @@ func animateSceneDemo(scene *Scene, demoType int, time float64) {
 		AnimateHelix(scene, time)
 	case DemoWireframe:
 		AnimateWireframe(scene, time)
-	case DemoAdvancedSystems:
-		AnimateAdvancedSystems(scene, time)
-	case DemoBoundingVolume:
-		AnimateBoundingVolume(scene, time)
-	case DemoPerformanceTest:
-		AnimatePerformanceTest(scene, time)
-	case DemoLineOfSight:
-		AnimateLineOfSight(scene, time)
-	case DemoOctree:
-		AnimateOctree(scene, time)
-	case DemoBVH:
-		AnimateBVH(scene, time)
-	case DemoOBB:
-		AnimateOBB(scene, time)
-	case DemoMeshSimplification:
-		AnimateMeshSimplification(scene, time)
-	case DemoSmoothLOD:
-		AnimateSmoothLOD(scene, time)
-	case DemoCombinedAdvanced:
-		AnimateCombinedAdvanced(scene, time)
-	case DemoStressTest:
-		AnimateStressTest(scene, time)
 	}
 }

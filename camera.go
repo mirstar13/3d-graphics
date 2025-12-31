@@ -100,6 +100,21 @@ func (cam *Camera) GetUpVector() (float64, float64, float64) {
 	return up.X, up.Y, up.Z
 }
 
+// GetForwardVectorPoint returns the forward direction as a Point
+func (cam *Camera) GetForwardVectorPoint() Point {
+	return cam.Transform.GetForwardVector()
+}
+
+// GetRightVectorPoint returns the right direction as a Point
+func (cam *Camera) GetRightVectorPoint() Point {
+	return cam.Transform.GetRightVector()
+}
+
+// GetUpVectorPoint returns the up direction as a Point
+func (cam *Camera) GetUpVectorPoint() Point {
+	return cam.Transform.GetUpVector()
+}
+
 // IsPointVisible checks if a point is within the camera's view frustum
 func (cam *Camera) IsPointVisible(p Point) bool {
 	viewPoint := cam.TransformToViewSpace(p)
