@@ -33,6 +33,7 @@ type BackendType int
 
 const (
 	BackendTerminal BackendType = iota
+	BackendOpenGL
 	BackendVulkan
 )
 
@@ -80,17 +81,13 @@ func main() {
 	fmt.Println()
 	fmt.Println("Select rendering backend:")
 	fmt.Println("  1 - Terminal (ASCII/ANSI)")
-	fmt.Println("  2 - Vulkan (Hardware Accelerated - Headless/Console)")
+	fmt.Println("  2 - OpenGL (Hardware Accelerated - Full 3D)")
+	fmt.Println("  3 - Vulkan (Hardware Accelerated - Advanced)")
 	fmt.Println()
-	fmt.Print("Enter backend choice (1-2, default=1): ")
+	fmt.Print("Enter backend choice (1-3, default=1): ")
 
-	var backendChoice int
+	var backendChoice BackendType
 	fmt.Scanln(&backendChoice)
-
-	backendType := BackendTerminal
-	if backendChoice == 2 {
-		backendType = BackendVulkan
-	}
 
 	// Configure rendering mode
 	fmt.Println()
@@ -119,7 +116,7 @@ func main() {
 
 	// Anti-aliasing configuration (Terminal only)
 	var aaMode AAMode = AANone
-	if backendType == BackendTerminal {
+	if backendChoice == BackendTerminal {
 		fmt.Println()
 		fmt.Println("Select anti-aliasing mode (Terminal Only):")
 		fmt.Println("  1 - None (fastest)")
@@ -147,7 +144,6 @@ func main() {
 		}
 	}
 
-	// Create engine config
 	config := EngineConfig{
 		Width:           223,
 		Height:          51,
@@ -155,7 +151,7 @@ func main() {
 		UseColor:        true,
 		ShowDebugInfo:   true,
 		RenderMode:      renderMode,
-		Backend:         backendType,
+		Backend:         backendChoice,
 		NumWorkers:      4,
 		TileSize:        32,
 		EnableProfiling: true,
@@ -228,6 +224,29 @@ func getAAModeName(mode AAMode) string {
 func runEngine(demoType int, config EngineConfig) {
 	// 1. Select Base Renderer
 	var baseRenderer Renderer
+
+	switch config.Backend {
+	case BackendTerminal:
+		// Use Terminal Renderer
+		writer := bufio.NewWriter(os.Stdout)
+		termRenderer := NewTerminalRenderer(writer, config.Height, config.Width)
+		termRenderer.SetUseColor(config.UseColor)
+		termRenderer.SetShowDebugInfo(config.ShowDebugInfo)
+		baseRenderer = termRenderer
+	case BackendVulkan:
+		// Use the CGO-based Vulkan renderer
+		baseRenderer = NewVulkanRenderer(800, 600)
+		baseRenderer.SetUseColor(config.UseColor)
+		baseRenderer.SetShowDebugInfo(config.ShowDebugInfo)
+	case BackendOpenGL:
+		// Use the CGO-based OpenGL renderer
+		baseRenderer = NewOpenGLRenderer(800, 600)
+		baseRenderer.SetUseColor(config.UseColor)
+		baseRenderer.SetShowDebugInfo(config.ShowDebugInfo)
+	default:
+		fmt.Println("Unsupported backend, exiting.")
+		return
+	}
 
 	if config.Backend == BackendVulkan {
 		// Use the CGO-based Vulkan renderer
@@ -474,7 +493,6 @@ func configureCamera(camera *Camera, demoType int) {
 }
 
 func configureCameraController(controller *CameraController, demoType int) {
-	// ... (content same as previous main.go)
 	switch demoType {
 	case DemoSolarSystem:
 		controller.SetOrbitRadius(120.0)
@@ -513,7 +531,6 @@ func configureCameraController(controller *CameraController, demoType int) {
 }
 
 func setupLighting(camera *Camera, demoType int) *LightingSystem {
-	// ... (content same as previous main.go)
 	switch demoType {
 	case DemoSolarSystem:
 		return setupScenario3(camera)
@@ -525,7 +542,6 @@ func setupLighting(camera *Camera, demoType int) *LightingSystem {
 }
 
 func buildScene(scene *Scene, demoType int, material Material) {
-	// ... (content same as previous main.go)
 	switch demoType {
 	case DemoSolarSystem:
 		SolarSystemDemo(scene)
@@ -547,7 +563,6 @@ func buildScene(scene *Scene, demoType int, material Material) {
 }
 
 func animateSceneDemo(scene *Scene, demoType int, time float64) {
-	// ... (content same as previous main.go)
 	switch demoType {
 	case DemoSolarSystem:
 		AnimateSolarSystem(scene)
