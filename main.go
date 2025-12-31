@@ -15,7 +15,7 @@ const (
 	DemoWaveGrid
 	DemoHelix
 	DemoWireframe
-	DemoStressTest // New stress test demo
+	DemoStressTest
 )
 
 // RenderMode specifies the rendering approach
@@ -28,6 +28,14 @@ const (
 	RenderModeParallelBatched
 )
 
+// BackendType specifies the rendering backend
+type BackendType int
+
+const (
+	BackendTerminal BackendType = iota
+	BackendVulkan
+)
+
 // EngineConfig holds engine configuration
 type EngineConfig struct {
 	Width           int
@@ -36,13 +44,15 @@ type EngineConfig struct {
 	UseColor        bool
 	ShowDebugInfo   bool
 	RenderMode      RenderMode
+	Backend         BackendType
 	NumWorkers      int
 	TileSize        int
 	EnableProfiling bool
+	AAMode          AAMode
 }
 
 func main() {
-	fmt.Println("=== 3D Engine Demo (Parallel Rendering Integrated) ===")
+	fmt.Println("=== 3D Engine Demo (with Anti-Aliasing & Vulkan) ===")
 	fmt.Println()
 	fmt.Println("Select a demo:")
 	fmt.Println("  1 - Solar System (planets orbiting)")
@@ -66,9 +76,25 @@ func main() {
 
 	demoType := choice - 1
 
+	// Backend Selection
+	fmt.Println()
+	fmt.Println("Select rendering backend:")
+	fmt.Println("  1 - Terminal (ASCII/ANSI)")
+	fmt.Println("  2 - Vulkan (Hardware Accelerated - Headless/Console)")
+	fmt.Println()
+	fmt.Print("Enter backend choice (1-2, default=1): ")
+
+	var backendChoice int
+	fmt.Scanln(&backendChoice)
+
+	backendType := BackendTerminal
+	if backendChoice == 2 {
+		backendType = BackendVulkan
+	}
+
 	// Configure rendering mode
 	fmt.Println()
-	fmt.Println("Select rendering mode:")
+	fmt.Println("Select CPU processing mode:")
 	fmt.Println("  1 - Single-threaded (default)")
 	fmt.Println("  2 - Parallel Tiles (best for large scenes)")
 	fmt.Println("  3 - Parallel Jobs (best for many objects)")
@@ -91,6 +117,36 @@ func main() {
 		renderMode = RenderModeSingle
 	}
 
+	// Anti-aliasing configuration (Terminal only)
+	var aaMode AAMode = AANone
+	if backendType == BackendTerminal {
+		fmt.Println()
+		fmt.Println("Select anti-aliasing mode (Terminal Only):")
+		fmt.Println("  1 - None (fastest)")
+		fmt.Println("  2 - FXAA (Fast Approximate)")
+		fmt.Println("  3 - MSAA 2x (Multi-Sample 2x)")
+		fmt.Println("  4 - MSAA 4x (Multi-Sample 4x)")
+		fmt.Println("  5 - SSAA (Super-Sample, best quality)")
+		fmt.Println()
+		fmt.Print("Enter AA mode (1-5, default=1): ")
+
+		var aaChoice int
+		fmt.Scanln(&aaChoice)
+
+		switch aaChoice {
+		case 2:
+			aaMode = AAFXAA
+		case 3:
+			aaMode = AAMSAA2x
+		case 4:
+			aaMode = AAMSAA4x
+		case 5:
+			aaMode = AASSAA
+		default:
+			aaMode = AANone
+		}
+	}
+
 	// Create engine config
 	config := EngineConfig{
 		Width:           223,
@@ -99,9 +155,11 @@ func main() {
 		UseColor:        true,
 		ShowDebugInfo:   true,
 		RenderMode:      renderMode,
-		NumWorkers:      4, // Default to 4 workers
+		Backend:         backendType,
+		NumWorkers:      4,
 		TileSize:        32,
 		EnableProfiling: true,
+		AAMode:          aaMode,
 	}
 
 	fmt.Println()
@@ -113,12 +171,26 @@ func main() {
 	fmt.Println("  +/-      - Speed control")
 	fmt.Println("  X or ESC - Quit")
 	fmt.Println()
-	fmt.Printf("Mode: %s with %d workers\n", getRenderModeName(renderMode), config.NumWorkers)
+	fmt.Printf("Backend: %s | Mode: %s | Workers: %d\n",
+		getBackendName(config.Backend),
+		getRenderModeName(renderMode),
+		config.NumWorkers)
 	fmt.Println("Starting in 3 seconds...")
 	time.Sleep(3 * time.Second)
 
 	// Run the engine
 	runEngine(demoType, config)
+}
+
+func getBackendName(backend BackendType) string {
+	switch backend {
+	case BackendTerminal:
+		return "Terminal"
+	case BackendVulkan:
+		return "Vulkan"
+	default:
+		return "Unknown"
+	}
 }
 
 func getRenderModeName(mode RenderMode) string {
@@ -136,55 +208,87 @@ func getRenderModeName(mode RenderMode) string {
 	}
 }
 
-func runEngine(demoType int, config EngineConfig) {
-	// Create terminal renderer
-	writer := bufio.NewWriter(os.Stdout)
-	baseRenderer := NewTerminalRenderer(writer, config.Height, config.Width)
-	baseRenderer.SetUseColor(config.UseColor)
-	baseRenderer.SetShowDebugInfo(config.ShowDebugInfo)
+func getAAModeName(mode AAMode) string {
+	switch mode {
+	case AANone:
+		return "None"
+	case AAFXAA:
+		return "FXAA"
+	case AAMSAA2x:
+		return "MSAA 2x"
+	case AAMSAA4x:
+		return "MSAA 4x"
+	case AASSAA:
+		return "SSAA"
+	default:
+		return "Unknown"
+	}
+}
 
-	// Wrap with profiler if enabled
+func runEngine(demoType int, config EngineConfig) {
+	// 1. Select Base Renderer
+	var baseRenderer Renderer
+
+	if config.Backend == BackendVulkan {
+		// Use the CGO-based Vulkan renderer
+		baseRenderer = NewVulkanRenderer(800, 600)
+		baseRenderer.SetUseColor(config.UseColor)
+		baseRenderer.SetShowDebugInfo(config.ShowDebugInfo)
+	} else {
+		// Use Terminal Renderer
+		writer := bufio.NewWriter(os.Stdout)
+		termRenderer := NewTerminalRenderer(writer, config.Height, config.Width)
+		termRenderer.SetUseColor(config.UseColor)
+		termRenderer.SetShowDebugInfo(config.ShowDebugInfo)
+		baseRenderer = termRenderer
+	}
+
+	// 2. Wrap with Profiler if enabled
 	var profiler *Profiler
 	if config.EnableProfiling {
-		profiler = NewProfiler(60) // Keep 60 frames of history
+		profiler = NewProfiler(60)
 		fmt.Println("Profiling enabled")
 	}
 
-	// Wrap with parallel renderer if needed
-	var renderer Renderer
-	var parallelRenderer *ParallelRenderer
-	var jobRenderer *JobBasedRenderer
+	// 3. Wrap with AA Renderer (Terminal Only)
+	var effectiveBaseRenderer Renderer = baseRenderer
+	if config.Backend == BackendTerminal && config.AAMode != AANone {
+		aaRenderer := NewAARenderer(baseRenderer, config.AAMode)
+		effectiveBaseRenderer = aaRenderer
+		fmt.Printf("Anti-aliasing enabled: %s\n", getAAModeName(config.AAMode))
+	}
+
+	// 4. Wrap with Parallel Renderer (if selected)
+	var finalRenderer Renderer
 
 	switch config.RenderMode {
 	case RenderModeParallelTiles:
-		parallelRenderer = NewParallelRenderer(baseRenderer, config.NumWorkers, config.TileSize)
-		renderer = baseRenderer // Still use base for interface
+		finalRenderer = NewParallelRenderer(effectiveBaseRenderer, config.NumWorkers, config.TileSize)
 	case RenderModeParallelJobs:
-		jobRenderer = NewJobBasedRenderer(baseRenderer, config.NumWorkers)
-		renderer = baseRenderer
+		finalRenderer = NewJobBasedRenderer(effectiveBaseRenderer, config.NumWorkers)
 	case RenderModeParallelBatched:
-		parallelRenderer = NewParallelRenderer(baseRenderer, config.NumWorkers, config.TileSize)
-		renderer = baseRenderer
+		finalRenderer = NewParallelRenderer(effectiveBaseRenderer, config.NumWorkers, config.TileSize)
 	default:
-		renderer = baseRenderer
+		finalRenderer = effectiveBaseRenderer
 	}
 
 	// Initialize renderer
-	if err := renderer.Initialize(); err != nil {
-		panic(err)
+	if err := finalRenderer.Initialize(); err != nil {
+		fmt.Printf("Failed to initialize renderer: %v\n", err)
+		return
 	}
-	defer renderer.Shutdown()
+	defer finalRenderer.Shutdown()
 
 	// Create scene
 	scene := NewScene()
 
 	// Configure camera
 	configureCamera(scene.Camera, demoType)
-	renderer.SetCamera(scene.Camera)
+	finalRenderer.SetCamera(scene.Camera)
 
 	// Setup lighting
 	lightingSystem := setupLighting(scene.Camera, demoType)
-	renderer.SetLightingSystem(lightingSystem)
+	finalRenderer.SetLightingSystem(lightingSystem)
 
 	// Create material
 	material := NewMaterial()
@@ -204,12 +308,14 @@ func runEngine(demoType int, config EngineConfig) {
 	cameraController := NewCameraController(scene.Camera)
 	configureCameraController(cameraController, demoType)
 
-	// Clear screen
-	fmt.Print("\033[2J\033[H")
+	// Clear screen (Terminal only)
+	if config.Backend == BackendTerminal {
+		fmt.Print("\033[2J\033[H")
+	}
 
 	fps := config.FPS
 	startTime := time.Now()
-	frameCount := 0
+	// lastStatsTime initialized to now
 	lastStatsTime := time.Now()
 
 	// Main render loop
@@ -225,6 +331,8 @@ func runEngine(demoType int, config EngineConfig) {
 			profiler.BeginFrame()
 		}
 
+		finalRenderer.BeginFrame()
+
 		// Update phase
 		if profiler != nil {
 			profiler.BeginUpdate()
@@ -232,7 +340,9 @@ func runEngine(demoType int, config EngineConfig) {
 
 		input := inputManager.GetInputState()
 		if input.Quit {
-			fmt.Print("\033[2J\033[H")
+			if config.Backend == BackendTerminal {
+				fmt.Print("\033[2J\033[H")
+			}
 			fmt.Println("Exiting...")
 			return
 		}
@@ -262,16 +372,21 @@ func runEngine(demoType int, config EngineConfig) {
 			profiler.BeginRender()
 		}
 
-		// Choose rendering path based on mode
-		switch config.RenderMode {
-		case RenderModeParallelTiles:
-			parallelRenderer.RenderSceneParallel(scene)
-		case RenderModeParallelJobs:
-			jobRenderer.RenderSceneJobs(scene)
-		case RenderModeParallelBatched:
-			parallelRenderer.RenderBatched(scene)
-		default:
-			renderer.RenderScene(scene)
+		// Use the configured renderer
+		if config.RenderMode == RenderModeParallelBatched {
+			if pr, ok := finalRenderer.(*ParallelRenderer); ok {
+				pr.RenderBatched(scene)
+			} else {
+				finalRenderer.RenderScene(scene)
+			}
+		} else if config.RenderMode == RenderModeParallelJobs {
+			if jr, ok := finalRenderer.(*JobBasedRenderer); ok {
+				jr.RenderSceneJobs(scene)
+			} else {
+				finalRenderer.RenderScene(scene)
+			}
+		} else {
+			finalRenderer.RenderScene(scene)
 		}
 
 		if profiler != nil {
@@ -283,25 +398,36 @@ func runEngine(demoType int, config EngineConfig) {
 			profiler.BeginPresent()
 		}
 
-		renderer.Present()
+		finalRenderer.EndFrame()
+		finalRenderer.Present()
 
 		if profiler != nil {
 			profiler.EndPresent()
 			profiler.EndFrame()
 		}
 
-		frameCount++
-
 		// Print stats every 2 seconds
 		if profiler != nil && time.Since(lastStatsTime).Seconds() >= 2.0 {
 			stats := profiler.GetAverageStats()
-			fmt.Printf("\n%s\n", stats.String())
+
+			if config.Backend == BackendTerminal {
+				fmt.Printf("\n%s\n", stats.String())
+			} else {
+				if stats.TotalTime > 0.000001 {
+					currentFPS := 1.0 / stats.TotalTime
+					fmt.Printf("FPS: %.2f | Frame Time: %.4f ms\n", currentFPS, stats.TotalTime*1000)
+				} else {
+					fmt.Printf("FPS: >9999 | Frame Time: <0.001 ms\n")
+				}
+			}
 			lastStatsTime = time.Now()
+
+			fmt.Printf("\033[1A\033")
 		}
 	}
 }
 
-// configureCamera sets up camera based on demo
+// Helper functions (same as original)
 func configureCamera(camera *Camera, demoType int) {
 	camera.DZ = 0.0
 	camera.Near = 0.5
@@ -312,42 +438,34 @@ func configureCamera(camera *Camera, demoType int) {
 		camera.Transform.SetPosition(0, 30, -100)
 		camera.Transform.SetRotation(-0.2, 0, 0)
 		camera.Far = 300.0
-
 	case DemoRobotArm:
 		camera.Transform.SetPosition(0, 10, -60)
 		camera.Transform.SetRotation(0, 0, 0)
 		camera.Far = 200.0
-
 	case DemoSpinningCubes:
 		camera.Transform.SetPosition(0, 0, -80)
 		camera.Transform.SetRotation(0, 0, 0)
 		camera.Far = 300.0
-
 	case DemoOrbitingObjects:
 		camera.Transform.SetPosition(0, 20, -80)
 		camera.Transform.SetRotation(-0.2, 0, 0)
 		camera.Far = 200.0
-
 	case DemoWaveGrid:
 		camera.Transform.SetPosition(0, 30, -50)
 		camera.Transform.SetRotation(-0.4, 0, 0)
 		camera.Far = 200.0
-
 	case DemoHelix:
 		camera.Transform.SetPosition(0, 0, -60)
 		camera.Transform.SetRotation(0, 0, 0)
 		camera.Far = 200.0
-
 	case DemoWireframe:
 		camera.Transform.SetPosition(0, 0, -50)
 		camera.Transform.SetRotation(0, 0, 0)
 		camera.Far = 200.0
-
 	case DemoStressTest:
 		camera.Transform.SetPosition(0, 50, -150)
 		camera.Transform.SetRotation(-0.3, 0, 0)
 		camera.Far = 500.0
-
 	default:
 		camera.Transform.SetPosition(0, 10, -60)
 		camera.Transform.SetRotation(0, 0, 0)
@@ -355,45 +473,38 @@ func configureCamera(camera *Camera, demoType int) {
 	}
 }
 
-// configureCameraController sets controller parameters
 func configureCameraController(controller *CameraController, demoType int) {
+	// ... (content same as previous main.go)
 	switch demoType {
 	case DemoSolarSystem:
 		controller.SetOrbitRadius(120.0)
 		controller.SetOrbitCenter(0, 0, 0)
 		controller.EnableAutoOrbit(true)
-
 	case DemoRobotArm:
 		controller.SetOrbitRadius(60.0)
 		controller.SetOrbitCenter(0, 0, 0)
 		controller.EnableAutoOrbit(true)
-
 	case DemoSpinningCubes:
 		controller.SetOrbitRadius(100.0)
 		controller.SetOrbitCenter(0, 0, 0)
 		controller.EnableAutoOrbit(true)
-
 	case DemoOrbitingObjects:
 		controller.SetOrbitRadius(90.0)
 		controller.SetOrbitCenter(0, 0, 0)
 		controller.EnableAutoOrbit(true)
-
 	case DemoWaveGrid:
 		controller.SetOrbitRadius(70.0)
 		controller.SetOrbitCenter(0, 0, 0)
 		controller.EnableAutoOrbit(true)
-
 	case DemoHelix:
 		controller.SetOrbitRadius(80.0)
 		controller.SetOrbitCenter(0, 0, 0)
 		controller.EnableAutoOrbit(true)
-
 	case DemoStressTest:
 		controller.SetOrbitRadius(200.0)
 		controller.SetOrbitCenter(0, 0, 0)
 		controller.SetOrbitHeight(50.0)
 		controller.EnableAutoOrbit(true)
-
 	default:
 		controller.SetOrbitRadius(80.0)
 		controller.SetOrbitCenter(0, 0, 0)
@@ -401,8 +512,8 @@ func configureCameraController(controller *CameraController, demoType int) {
 	}
 }
 
-// setupLighting creates lighting based on demo
 func setupLighting(camera *Camera, demoType int) *LightingSystem {
+	// ... (content same as previous main.go)
 	switch demoType {
 	case DemoSolarSystem:
 		return setupScenario3(camera)
@@ -413,8 +524,8 @@ func setupLighting(camera *Camera, demoType int) *LightingSystem {
 	}
 }
 
-// buildScene creates the scene based on demo type
 func buildScene(scene *Scene, demoType int, material Material) {
+	// ... (content same as previous main.go)
 	switch demoType {
 	case DemoSolarSystem:
 		SolarSystemDemo(scene)
@@ -435,8 +546,8 @@ func buildScene(scene *Scene, demoType int, material Material) {
 	}
 }
 
-// animateSceneDemo animates the scene
 func animateSceneDemo(scene *Scene, demoType int, time float64) {
+	// ... (content same as previous main.go)
 	switch demoType {
 	case DemoSolarSystem:
 		AnimateSolarSystem(scene)

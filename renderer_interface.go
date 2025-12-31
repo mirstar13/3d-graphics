@@ -40,34 +40,5 @@ type Renderer interface {
 type RenderContext struct {
 	Camera         *Camera
 	LightingSystem *LightingSystem
-	ViewFrustum    *Frustum // For culling
-}
-
-// Frustum represents a view frustum for culling
-type Frustum struct {
-	Planes [6]Plane // Left, Right, Top, Bottom, Near, Far
-}
-
-// Plane represents a plane equation: ax + by + cz + d = 0
-type Plane struct {
-	Normal   Point
-	Distance float64
-}
-
-// NewFrustumFromCamera creates a frustum from camera parameters
-func NewFrustumFromCamera(camera *Camera) *Frustum {
-	// TODO: Implement proper frustum extraction
-	return &Frustum{}
-}
-
-// ContainsSphere checks if a sphere intersects the frustum
-func (f *Frustum) ContainsSphere(center Point, radius float64) bool {
-	// TODO: Implement sphere-frustum test
-	return true
-}
-
-// ContainsAABB checks if an AABB intersects the frustum
-func (f *Frustum) ContainsAABB(aabb *AABB) bool {
-	// TODO: Implement AABB-frustum test
-	return true
+	ViewFrustum    *ViewFrustum // For culling
 }

@@ -70,28 +70,6 @@ func Interpolate(i0, d0, i1, d1 float64) []float64 {
 	return values
 }
 
-func min3(a, b, c int) int {
-	min := a
-	if b < min {
-		min = b
-	}
-	if c < min {
-		min = c
-	}
-	return min
-}
-
-func max3(a, b, c int) int {
-	max := a
-	if b > max {
-		max = b
-	}
-	if c > max {
-		max = c
-	}
-	return max
-}
-
 // clamp constrains a value between min and max
 func clamp(value, min, max float64) float64 {
 	if value < min {

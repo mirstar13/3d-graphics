@@ -15,7 +15,7 @@ const (
 
 // AARenderer wraps a renderer with AA capabilities
 type AARenderer struct {
-	Renderer
+	Renderer       // Embed base renderer
 	Mode           AAMode
 	supersampleBuf [][]Color   // For SSAA
 	supersampleZ   [][]float64 // Z-buffer for supersampling
@@ -34,6 +34,7 @@ func NewAARenderer(renderer Renderer, mode AAMode) *AARenderer {
 	switch mode {
 	case AASSAA:
 		aar.samples = 4
+		aar.SSAAFactor = 2
 		aar.initSupersampleBuffers(2) // 2x supersampling
 	case AAMSAA4x:
 		aar.samples = 4
@@ -68,9 +69,11 @@ func (aar *AARenderer) initSupersampleBuffers(factor int) {
 func (aar *AARenderer) RenderWithAA(scene *Scene) {
 	switch aar.Mode {
 	case AANone:
-		aar.RenderScene(scene)
+		aar.Renderer.RenderScene(scene)
 	case AAFXAA:
-		aar.RenderScene(scene)
+		// Render normally first
+		aar.Renderer.RenderScene(scene)
+		// Then apply FXAA post-process
 		aar.applyFXAA()
 	case AAMSAA2x:
 		aar.renderMSAA(scene, 2)
@@ -81,28 +84,42 @@ func (aar *AARenderer) RenderWithAA(scene *Scene) {
 	}
 }
 
+// Override RenderScene to use AA
+func (aar *AARenderer) RenderScene(scene *Scene) {
+	aar.RenderWithAA(scene)
+}
+
 func (aar *AARenderer) ClearBuffers() {
+	width, height := aar.Renderer.GetDimensions()
+
 	// Clear supersample buffers if they exist
-	for y := range aar.supersampleBuf {
-		for x := range aar.supersampleBuf[y] {
-			aar.supersampleBuf[y][x] = ColorBlack
-		}
-	}
-	for y := range aar.supersampleZ {
-		for x := range aar.supersampleZ[y] {
-			aar.supersampleZ[y][x] = math.Inf(1)
+	if aar.supersampleBuf != nil {
+		ssHeight := height * aar.SSAAFactor
+		ssWidth := width * aar.SSAAFactor
+		for y := 0; y < ssHeight; y++ {
+			for x := 0; x < ssWidth; x++ {
+				aar.supersampleBuf[y][x] = ColorBlack
+				aar.supersampleZ[y][x] = math.Inf(1)
+			}
 		}
 	}
 }
 
-// applyFXAA applies Fast Approximate Anti-Aliasing
+// applyFXAA applies Fast Approximate Anti-Aliasing as a post-process
 func (aar *AARenderer) applyFXAA() {
-	width, height := aar.Renderer.GetDimensions()
+	// Access the underlying TerminalRenderer's buffers
+	tr, ok := aar.Renderer.(*TerminalRenderer)
+	if !ok {
+		return // FXAA only works with TerminalRenderer
+	}
+
+	width, height := tr.GetDimensions()
 
 	// Create temporary buffer for output
 	output := make([][]Color, height)
 	for i := 0; i < height; i++ {
 		output[i] = make([]Color, width)
+		copy(output[i], tr.ColorBuffer[i])
 	}
 
 	// FXAA parameters
@@ -115,17 +132,17 @@ func (aar *AARenderer) applyFXAA() {
 	for y := 1; y < height-1; y++ {
 		for x := 1; x < width-1; x++ {
 			// Sample 3x3 neighborhood
-			center := aar.supersampleBuf[y][x]
+			center := tr.ColorBuffer[y][x]
 
-			n := aar.supersampleBuf[y-1][x]
-			s := aar.supersampleBuf[y+1][x]
-			e := aar.supersampleBuf[y][x+1]
-			w := aar.supersampleBuf[y][x-1]
+			n := tr.ColorBuffer[y-1][x]
+			s := tr.ColorBuffer[y+1][x]
+			e := tr.ColorBuffer[y][x+1]
+			w := tr.ColorBuffer[y][x-1]
 
-			ne := aar.supersampleBuf[y-1][x+1]
-			nw := aar.supersampleBuf[y-1][x-1]
-			se := aar.supersampleBuf[y+1][x+1]
-			sw := aar.supersampleBuf[y+1][x-1]
+			ne := tr.ColorBuffer[y-1][x+1]
+			nw := tr.ColorBuffer[y-1][x-1]
+			se := tr.ColorBuffer[y+1][x+1]
+			sw := tr.ColorBuffer[y+1][x-1]
 
 			// Calculate luminance
 			lumCenter := luminance(center)
@@ -143,7 +160,7 @@ func (aar *AARenderer) applyFXAA() {
 			lumMax := math.Max(lumCenter, math.Max(math.Max(lumN, lumS), math.Max(lumE, lumW)))
 			lumRange := lumMax - lumMin
 
-			// Skip if range is too small
+			// Skip if range is too small (not an edge)
 			if lumRange < math.Max(edgeThresholdMin, lumMax*edgeThreshold) {
 				output[y][x] = center
 				continue
@@ -164,11 +181,14 @@ func (aar *AARenderer) applyFXAA() {
 			}
 			blend = blend / (2 * lumRange)
 
-			// Simple blend
+			// Simple blend along detected edge
 			if blend > 0.5 {
-				// Average with neighbors
-				avgColor := averageColors([]Color{center, n, s, e, w})
-				output[y][x] = avgColor
+				// Average with neighbors along edge direction
+				if isHorizontal {
+					output[y][x] = averageColors([]Color{center, e, w})
+				} else {
+					output[y][x] = averageColors([]Color{center, n, s})
+				}
 			} else {
 				output[y][x] = center
 			}
@@ -178,19 +198,25 @@ func (aar *AARenderer) applyFXAA() {
 	// Copy output back to color buffer
 	for y := 1; y < height-1; y++ {
 		for x := 1; x < width-1; x++ {
-			aar.supersampleBuf[y][x] = output[y][x]
+			tr.ColorBuffer[y][x] = output[y][x]
 		}
 	}
 }
 
 // renderMSAA renders with Multi-Sample Anti-Aliasing
 func (aar *AARenderer) renderMSAA(scene *Scene, samples int) {
-	width, height := aar.Renderer.GetDimensions()
+	// For MSAA, we render multiple times with slight sub-pixel offsets
+	// and average the results. This is a simplified implementation.
 
-	// Clear buffers
-	aar.ClearBuffers()
+	tr, ok := aar.Renderer.(*TerminalRenderer)
+	if !ok {
+		aar.Renderer.RenderScene(scene)
+		return
+	}
 
-	// MSAA sample patterns (offsets within pixel)
+	width, height := tr.GetDimensions()
+
+	// MSAA sample patterns (sub-pixel offsets)
 	var sampleOffsets [][2]float64
 
 	switch samples {
@@ -208,112 +234,92 @@ func (aar *AARenderer) renderMSAA(scene *Scene, samples int) {
 		}
 	}
 
-	// Render scene multiple times with jittered camera
-	sampleColors := make([][][]Color, samples)
+	_ = sampleOffsets
 
-	for s := 0; s < samples; s++ {
-		// Jitter camera slightly
-		jitterX := sampleOffsets[s][0] / float64(width)
-		jitterY := sampleOffsets[s][1] / float64(height)
-
-		// TODO: Apply jitter to projection matrix
-		_ = jitterX
-		_ = jitterY
-
-		// Render
-		aar.RenderScene(scene)
-
-		// Store sample
-		sampleColors[s] = make([][]Color, height)
-		for y := 0; y < height; y++ {
-			sampleColors[s][y] = make([]Color, width)
-			copy(sampleColors[s][y], aar.supersampleBuf[y])
-		}
-
-		// Clear for next sample
-		aar.ClearBuffers()
+	// Accumulation buffers
+	accumR := make([][]float64, height)
+	accumG := make([][]float64, height)
+	accumB := make([][]float64, height)
+	for i := range accumR {
+		accumR[i] = make([]float64, width)
+		accumG[i] = make([]float64, width)
+		accumB[i] = make([]float64, width)
 	}
 
-	// Resolve samples by averaging
+	// Render multiple samples
+	for s := 0; s < samples; s++ {
+		// Note: In a full implementation, we would jitter the camera slightly
+		// For now, we render the same scene and blend
+		aar.Renderer.RenderScene(scene)
+
+		// Accumulate this sample
+		for y := 0; y < height; y++ {
+			for x := 0; x < width; x++ {
+				c := tr.ColorBuffer[y][x]
+				accumR[y][x] += float64(c.R)
+				accumG[y][x] += float64(c.G)
+				accumB[y][x] += float64(c.B)
+			}
+		}
+	}
+
+	// Average the samples
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
-			colors := make([]Color, samples)
-			for s := 0; s < samples; s++ {
-				colors[s] = sampleColors[s][y][x]
+			tr.ColorBuffer[y][x] = Color{
+				R: uint8(accumR[y][x] / float64(samples)),
+				G: uint8(accumG[y][x] / float64(samples)),
+				B: uint8(accumB[y][x] / float64(samples)),
 			}
-			aar.supersampleBuf[y][x] = averageColors(colors)
 		}
 	}
 }
 
 // renderSSAA renders with Super-Sample Anti-Aliasing
 func (aar *AARenderer) renderSSAA(scene *Scene, factor int) {
-	width, height := aar.Renderer.GetDimensions()
+	// Note: True SSAA requires rendering at higher resolution
+	// This is a simplified version that renders once and applies filtering
 
-	// Ensure supersample buffers are initialized
-	if aar.supersampleBuf == nil {
-		aar.initSupersampleBuffers(factor)
+	aar.Renderer.RenderScene(scene)
+
+	// In a full implementation, you would:
+	// 1. Create a high-resolution renderer (width*factor, height*factor)
+	// 2. Render to that buffer
+	// 3. Downsample using box filter or better
+
+	// For now, we apply a simple blur effect
+	aar.applySimpleBlur()
+}
+
+// applySimpleBlur applies a simple blur to simulate SSAA
+func (aar *AARenderer) applySimpleBlur() {
+	tr, ok := aar.Renderer.(*TerminalRenderer)
+	if !ok {
+		return
 	}
 
-	ssWidth := width * factor
-	ssHeight := height * factor
+	width, height := tr.GetDimensions()
+	output := make([][]Color, height)
+	for i := 0; i < height; i++ {
+		output[i] = make([]Color, width)
+	}
 
-	// Clear supersample buffers
-	for y := 0; y < ssHeight; y++ {
-		for x := 0; x < ssWidth; x++ {
-			aar.supersampleBuf[y][x] = ColorBlack
-			aar.supersampleZ[y][x] = math.Inf(1)
+	// 3x3 box blur
+	for y := 1; y < height-1; y++ {
+		for x := 1; x < width-1; x++ {
+			colors := []Color{
+				tr.ColorBuffer[y-1][x-1], tr.ColorBuffer[y-1][x], tr.ColorBuffer[y-1][x+1],
+				tr.ColorBuffer[y][x-1], tr.ColorBuffer[y][x], tr.ColorBuffer[y][x+1],
+				tr.ColorBuffer[y+1][x-1], tr.ColorBuffer[y+1][x], tr.ColorBuffer[y+1][x+1],
+			}
+			output[y][x] = averageColors(colors)
 		}
 	}
 
-	// Note: True SSAA would require rendering at higher resolution
-	// which needs a separate high-res renderer. For now, we render
-	// at normal resolution and apply the downsampling filter.
-	aar.RenderScene(scene)
-
-	// For a proper implementation, you would need to:
-	// 1. Create a new renderer at ssWidth x ssHeight
-	// 2. Render the scene to that renderer
-	// 3. Copy colors to supersampleBuf
-	// 4. Downsample
-
-	// Current simplified approach: just render normally
-	// The AA effect comes from the downsample averaging
-	aar.downsample(factor)
-}
-
-// downsample downsamples the supersample buffer
-func (aar *AARenderer) downsample(factor int) {
-	width, height := aar.Renderer.GetDimensions()
-
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
-			// Average factor x factor block
-			var rSum, gSum, bSum int
-			count := 0
-
-			for dy := 0; dy < factor; dy++ {
-				for dx := 0; dx < factor; dx++ {
-					sx := x*factor + dx
-					sy := y*factor + dy
-
-					if sy < len(aar.supersampleBuf) && sx < len(aar.supersampleBuf[sy]) {
-						c := aar.supersampleBuf[sy][sx]
-						rSum += int(c.R)
-						gSum += int(c.G)
-						bSum += int(c.B)
-						count++
-					}
-				}
-			}
-
-			if count > 0 {
-				aar.supersampleBuf[y][x] = Color{
-					R: uint8(rSum / count),
-					G: uint8(gSum / count),
-					B: uint8(bSum / count),
-				}
-			}
+	// Copy back (except edges)
+	for y := 1; y < height-1; y++ {
+		for x := 1; x < width-1; x++ {
+			tr.ColorBuffer[y][x] = output[y][x]
 		}
 	}
 }
@@ -346,7 +352,12 @@ func averageColors(colors []Color) Color {
 
 // EdgeDetection detects edges for debugging AA
 func (aar *AARenderer) EdgeDetection() [][]bool {
-	width, height := aar.Renderer.GetDimensions()
+	tr, ok := aar.Renderer.(*TerminalRenderer)
+	if !ok {
+		return nil
+	}
+
+	width, height := tr.GetDimensions()
 
 	edges := make([][]bool, height)
 	for i := 0; i < height; i++ {
@@ -357,13 +368,13 @@ func (aar *AARenderer) EdgeDetection() [][]bool {
 
 	for y := 1; y < height-1; y++ {
 		for x := 1; x < width-1; x++ {
-			center := luminance(aar.supersampleBuf[y][x])
+			center := luminance(tr.ColorBuffer[y][x])
 
 			// Check neighbors
-			n := luminance(aar.supersampleBuf[y-1][x])
-			s := luminance(aar.supersampleBuf[y+1][x])
-			e := luminance(aar.supersampleBuf[y][x+1])
-			w := luminance(aar.supersampleBuf[y][x-1])
+			n := luminance(tr.ColorBuffer[y-1][x])
+			s := luminance(tr.ColorBuffer[y+1][x])
+			e := luminance(tr.ColorBuffer[y][x+1])
+			w := luminance(tr.ColorBuffer[y][x-1])
 
 			maxDiff := math.Max(
 				math.Max(math.Abs(center-n), math.Abs(center-s)),
@@ -379,10 +390,15 @@ func (aar *AARenderer) EdgeDetection() [][]bool {
 
 // AdaptiveAA applies AA only where edges are detected
 func (aar *AARenderer) AdaptiveAA(scene *Scene) {
-	width, height := aar.Renderer.GetDimensions()
-
 	// Render normally first
-	aar.RenderScene(scene)
+	aar.Renderer.RenderScene(scene)
+
+	tr, ok := aar.Renderer.(*TerminalRenderer)
+	if !ok {
+		return
+	}
+
+	width, height := tr.GetDimensions()
 
 	// Detect edges
 	edges := aar.EdgeDetection()
@@ -391,7 +407,7 @@ func (aar *AARenderer) AdaptiveAA(scene *Scene) {
 	output := make([][]Color, height)
 	for i := 0; i < height; i++ {
 		output[i] = make([]Color, width)
-		copy(output[i], aar.supersampleBuf[i])
+		copy(output[i], tr.ColorBuffer[i])
 	}
 
 	for y := 1; y < height-1; y++ {
@@ -399,11 +415,11 @@ func (aar *AARenderer) AdaptiveAA(scene *Scene) {
 			if edges[y][x] {
 				// Apply simple blur to edge pixels
 				neighbors := []Color{
-					aar.supersampleBuf[y-1][x],
-					aar.supersampleBuf[y+1][x],
-					aar.supersampleBuf[y][x-1],
-					aar.supersampleBuf[y][x+1],
-					aar.supersampleBuf[y][x],
+					tr.ColorBuffer[y-1][x],
+					tr.ColorBuffer[y+1][x],
+					tr.ColorBuffer[y][x-1],
+					tr.ColorBuffer[y][x+1],
+					tr.ColorBuffer[y][x],
 				}
 				output[y][x] = averageColors(neighbors)
 			}
@@ -411,7 +427,9 @@ func (aar *AARenderer) AdaptiveAA(scene *Scene) {
 	}
 
 	// Copy back
-	aar.supersampleBuf = output
+	for y := 1; y < height-1; y++ {
+		copy(tr.ColorBuffer[y], output[y])
+	}
 }
 
 // TemporalAA applies temporal anti-aliasing (requires frame history)
@@ -432,17 +450,23 @@ func NewTemporalAARenderer(renderer Renderer) *TemporalAARenderer {
 
 // RenderWithTAA renders with temporal anti-aliasing
 func (taa *TemporalAARenderer) RenderWithTAA(scene *Scene) {
-	width, height := taa.Renderer.GetDimensions()
+	tr, ok := taa.Renderer.(*TerminalRenderer)
+	if !ok {
+		taa.Renderer.RenderScene(scene)
+		return
+	}
+
+	width, height := tr.GetDimensions()
 
 	// Render current frame
-	taa.RenderScene(scene)
+	taa.Renderer.RenderScene(scene)
 
 	// Initialize history on first frame
 	if taa.historyBuffer == nil {
 		taa.historyBuffer = make([][]Color, height)
 		for i := 0; i < height; i++ {
 			taa.historyBuffer[i] = make([]Color, width)
-			copy(taa.historyBuffer[i], taa.supersampleBuf[i])
+			copy(taa.historyBuffer[i], tr.ColorBuffer[i])
 		}
 		return
 	}
@@ -450,7 +474,7 @@ func (taa *TemporalAARenderer) RenderWithTAA(scene *Scene) {
 	// Blend with history
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
-			current := taa.supersampleBuf[y][x]
+			current := tr.ColorBuffer[y][x]
 			history := taa.historyBuffer[y][x]
 
 			// Weighted blend
@@ -460,7 +484,7 @@ func (taa *TemporalAARenderer) RenderWithTAA(scene *Scene) {
 				B: uint8(float64(history.B)*taa.historyWeight + float64(current.B)*(1.0-taa.historyWeight)),
 			}
 
-			taa.supersampleBuf[y][x] = blended
+			tr.ColorBuffer[y][x] = blended
 			taa.historyBuffer[y][x] = blended
 		}
 	}
@@ -470,7 +494,12 @@ func (taa *TemporalAARenderer) RenderWithTAA(scene *Scene) {
 
 // MorphologicalAA applies morphological anti-aliasing (good for terminal rendering)
 func (aar *AARenderer) MorphologicalAA() {
-	width, height := aar.Renderer.GetDimensions()
+	tr, ok := aar.Renderer.(*TerminalRenderer)
+	if !ok {
+		return
+	}
+
+	width, height := tr.GetDimensions()
 
 	// Create edge buffer
 	edges := aar.EdgeDetection()
@@ -494,23 +523,25 @@ func (aar *AARenderer) MorphologicalAA() {
 	output := make([][]Color, height)
 	for i := 0; i < height; i++ {
 		output[i] = make([]Color, width)
-		copy(output[i], aar.supersampleBuf[i])
+		copy(output[i], tr.ColorBuffer[i])
 	}
 
 	for y := 1; y < height-1; y++ {
 		for x := 1; x < width-1; x++ {
 			if dilated[y][x] {
 				neighbors := []Color{
-					aar.supersampleBuf[y-1][x],
-					aar.supersampleBuf[y+1][x],
-					aar.supersampleBuf[y][x-1],
-					aar.supersampleBuf[y][x+1],
-					aar.supersampleBuf[y][x],
+					tr.ColorBuffer[y-1][x],
+					tr.ColorBuffer[y+1][x],
+					tr.ColorBuffer[y][x-1],
+					tr.ColorBuffer[y][x+1],
+					tr.ColorBuffer[y][x],
 				}
 				output[y][x] = averageColors(neighbors)
 			}
 		}
 	}
 
-	aar.supersampleBuf = output
+	for y := 1; y < height-1; y++ {
+		copy(tr.ColorBuffer[y], output[y])
+	}
 }
