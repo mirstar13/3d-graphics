@@ -456,7 +456,7 @@ func (r *OpenGLRenderer) uploadMatrix(uniform int32, matrix Matrix4x4) {
 	for i := 0; i < 16; i++ {
 		m[i] = float32(matrix.M[i])
 	}
-	gl.UniformMatrix4fv(uniform, 1, false, &m[0])
+	gl.UniformMatrix4fv(uniform, 1, true, &m[0])
 }
 
 func (r *OpenGLRenderer) RenderScene(scene *Scene) {
