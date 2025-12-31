@@ -293,36 +293,46 @@ func (sm *SimplificationMesh) collapseEdge(edge *SimplificationEdge) bool {
 	v0.Position = edge.TargetPos
 	v0.Quadric = v0.Quadric.Add(v1.Quadric)
 
-	// Remove triangles that use this edge
-	newTriangles := make([][3]int, 0, len(sm.Triangles))
-	for _, tri := range sm.Triangles {
-		// Check if triangle uses both vertices
+	// Track which triangles to remove
+	toRemove := make(map[int]bool)
+
+	// Remove triangles using both v0 and v1 (degenerate after collapse)
+	for i, tri := range sm.Triangles {
 		hasV0 := tri[0] == v0.ID || tri[1] == v0.ID || tri[2] == v0.ID
 		hasV1 := tri[0] == v1.ID || tri[1] == v1.ID || tri[2] == v1.ID
 
 		if hasV0 && hasV1 {
-			// Degenerate triangle - remove it
-			continue
+			toRemove[i] = true
 		}
+	}
 
-		// Replace v1 with v0
-		for i := 0; i < 3; i++ {
-			if tri[i] == v1.ID {
-				tri[i] = v0.ID
+	// Create new triangle list without removed ones
+	newTriangles := make([][3]int, 0, len(sm.Triangles)-len(toRemove))
+	for i, tri := range sm.Triangles {
+		if !toRemove[i] {
+			// Replace v1 with v0
+			for j := 0; j < 3; j++ {
+				if tri[j] == v1.ID {
+					tri[j] = v0.ID
+				}
+			}
+
+			// Check for degenerate triangle (all same vertex)
+			if tri[0] != tri[1] && tri[1] != tri[2] && tri[0] != tri[2] {
+				newTriangles = append(newTriangles, tri)
 			}
 		}
-
-		newTriangles = append(newTriangles, tri)
 	}
 	sm.Triangles = newTriangles
 
-	// Update edges
-	for _, e := range v1.Edges {
-		if e == edge {
+	// Update edge list
+	newEdges := EdgeHeap{}
+	for _, e := range sm.Edges {
+		if e == edge || e.Collapsed {
 			continue
 		}
 
-		// Redirect edge from v1 to v0
+		// Update edges connected to v1 to point to v0
 		if e.V0 == v1 {
 			e.V0 = v0
 		}
@@ -330,10 +340,16 @@ func (sm *SimplificationMesh) collapseEdge(edge *SimplificationEdge) bool {
 			e.V1 = v0
 		}
 
-		// Recompute cost
-		sm.computeEdgeCost(e)
-		heap.Fix(&sm.Edges, e.Index)
+		// Skip edges that became degenerate (both vertices same)
+		if e.V0 != e.V1 {
+			sm.computeEdgeCost(e)
+			newEdges = append(newEdges, e)
+		}
 	}
+
+	// Rebuild heap
+	sm.Edges = newEdges
+	heap.Init(&sm.Edges)
 
 	edge.Collapsed = true
 	return true

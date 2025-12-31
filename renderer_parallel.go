@@ -64,6 +64,26 @@ func (pr *ParallelRenderer) RenderSceneParallel(scene *Scene) {
 	close(pr.tileQueue)
 }
 
+func (pr *ParallelRenderer) Initialize() error {
+	return pr.Renderer.Initialize()
+}
+
+func (pr *ParallelRenderer) BeginFrame() {
+	pr.Renderer.BeginFrame()
+}
+
+func (pr *ParallelRenderer) EndFrame() {
+	pr.Renderer.EndFrame()
+}
+
+func (pr *ParallelRenderer) GetDimensions() (int, int) {
+	return pr.Renderer.GetDimensions()
+}
+
+func (pr *ParallelRenderer) GetRenderContext() *RenderContext {
+	return pr.Renderer.GetRenderContext()
+}
+
 // startWorkers starts the worker goroutines
 func (pr *ParallelRenderer) startWorkers() {
 	for i := 0; i < pr.NumWorkers; i++ {

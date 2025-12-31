@@ -1,14 +1,10 @@
 package main
 
-// ============================================================================
-// SCENE SYSTEM (REFACTORED - NO DRAWABLE INTERFACE)
-// ============================================================================
-
 // SceneNode represents a node in the scene graph
 // Object can be any geometry type: *Triangle, *Quad, *Line, *Mesh, *Circle, *Point
 type SceneNode struct {
 	Transform *Transform
-	Object    interface{} // Can be any geometry type
+	Object    any // Can be any geometry type
 	Children  []*SceneNode
 	Parent    *SceneNode
 	Name      string
@@ -57,7 +53,7 @@ func NewSceneNode(name string) *SceneNode {
 }
 
 // NewSceneNodeWithObject creates a node with an object
-func NewSceneNodeWithObject(name string, obj interface{}) *SceneNode {
+func NewSceneNodeWithObject(name string, obj any) *SceneNode {
 	return &SceneNode{
 		Transform: NewTransform(),
 		Object:    obj,
@@ -171,10 +167,6 @@ func (s *Scene) GetEnabledNodes() []*SceneNode {
 	return nodes
 }
 
-// ============================================================================
-// SCENE NODE METHODS
-// ============================================================================
-
 // AddChild adds a child node
 func (sn *SceneNode) AddChild(child *SceneNode) {
 	if child.Parent != nil {
@@ -282,7 +274,7 @@ func (sn *SceneNode) MarkTransformDirty() {
 
 // TransformSceneObject applies the node's transform to its object
 // Returns a transformed copy of the object for rendering/physics
-func (sn *SceneNode) TransformSceneObject() interface{} {
+func (sn *SceneNode) TransformSceneObject() any {
 	if sn.Object == nil {
 		return nil
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"math"
 )
@@ -1153,4 +1154,30 @@ func AnimateStressTest(scene *Scene, time float64) {
 		fmt.Printf("LOD Distribution: L0:%d L1:%d L2:%d\n",
 			stats.ActiveLOD0, stats.ActiveLOD1, stats.ActiveLOD2)
 	}
+}
+
+// Example usage showing the difference:
+func LightingComparisonDemo(scene *Scene, writer *bufio.Writer) {
+	renderer := NewTerminalRenderer(writer, 51, 223)
+
+	// Set up lighting system with multiple lights
+	ls := NewLightingSystem(scene.Camera)
+
+	// Add key light
+	keyLight := NewLight(30, 30, -20, ColorWhite, 1.0)
+	ls.AddLight(keyLight)
+
+	// Add fill light
+	fillLight := NewLight(-20, 10, -10, Color{150, 150, 200}, 0.4)
+	ls.AddLight(fillLight)
+
+	// Add rim light
+	rimLight := NewLight(0, 20, 30, Color{255, 200, 150}, 0.6)
+	ls.AddLight(rimLight)
+
+	scene.AddNode(scene.CreateSphere("CenterSphere", 10.0, 16, 16, NewMaterial()))
+
+	renderer.SetLightingSystem(ls)
+
+	renderer.RenderScene(scene)
 }

@@ -15,10 +15,34 @@ const (
 	DemoWaveGrid
 	DemoHelix
 	DemoWireframe
+	DemoStressTest // New stress test demo
 )
 
+// RenderMode specifies the rendering approach
+type RenderMode int
+
+const (
+	RenderModeSingle RenderMode = iota
+	RenderModeParallelTiles
+	RenderModeParallelJobs
+	RenderModeParallelBatched
+)
+
+// EngineConfig holds engine configuration
+type EngineConfig struct {
+	Width           int
+	Height          int
+	FPS             float64
+	UseColor        bool
+	ShowDebugInfo   bool
+	RenderMode      RenderMode
+	NumWorkers      int
+	TileSize        int
+	EnableProfiling bool
+}
+
 func main() {
-	fmt.Println("=== 3D Engine Demo (Refactored Architecture) ===")
+	fmt.Println("=== 3D Engine Demo (Parallel Rendering Integrated) ===")
 	fmt.Println()
 	fmt.Println("Select a demo:")
 	fmt.Println("  1 - Solar System (planets orbiting)")
@@ -28,18 +52,57 @@ func main() {
 	fmt.Println("  5 - Wave Grid (sine wave animation)")
 	fmt.Println("  6 - Helix (spiral structure)")
 	fmt.Println("  7 - Wireframe Demo (mixed rendering)")
+	fmt.Println("  8 - Stress Test (200+ objects with LOD)")
 	fmt.Println()
-	fmt.Print("Enter choice (1-7): ")
+	fmt.Print("Enter choice (1-8): ")
 
 	var choice int
 	fmt.Scanln(&choice)
 
-	if choice < 1 || choice > 7 {
+	if choice < 1 || choice > 8 {
 		fmt.Println("Invalid choice, using Solar System demo")
 		choice = 1
 	}
 
 	demoType := choice - 1
+
+	// Configure rendering mode
+	fmt.Println()
+	fmt.Println("Select rendering mode:")
+	fmt.Println("  1 - Single-threaded (default)")
+	fmt.Println("  2 - Parallel Tiles (best for large scenes)")
+	fmt.Println("  3 - Parallel Jobs (best for many objects)")
+	fmt.Println("  4 - Parallel Batched (best for similar materials)")
+	fmt.Println()
+	fmt.Print("Enter rendering mode (1-4, default=1): ")
+
+	var renderChoice int
+	fmt.Scanln(&renderChoice)
+
+	renderMode := RenderModeSingle
+	switch renderChoice {
+	case 2:
+		renderMode = RenderModeParallelTiles
+	case 3:
+		renderMode = RenderModeParallelJobs
+	case 4:
+		renderMode = RenderModeParallelBatched
+	default:
+		renderMode = RenderModeSingle
+	}
+
+	// Create engine config
+	config := EngineConfig{
+		Width:           223,
+		Height:          51,
+		FPS:             60.0,
+		UseColor:        true,
+		ShowDebugInfo:   true,
+		RenderMode:      renderMode,
+		NumWorkers:      4, // Default to 4 workers
+		TileSize:        32,
+		EnableProfiling: true,
+	}
 
 	fmt.Println()
 	fmt.Println("Controls:")
@@ -50,13 +113,61 @@ func main() {
 	fmt.Println("  +/-      - Speed control")
 	fmt.Println("  X or ESC - Quit")
 	fmt.Println()
+	fmt.Printf("Mode: %s with %d workers\n", getRenderModeName(renderMode), config.NumWorkers)
 	fmt.Println("Starting in 3 seconds...")
 	time.Sleep(3 * time.Second)
 
+	// Run the engine
+	runEngine(demoType, config)
+}
+
+func getRenderModeName(mode RenderMode) string {
+	switch mode {
+	case RenderModeSingle:
+		return "Single-threaded"
+	case RenderModeParallelTiles:
+		return "Parallel Tiles"
+	case RenderModeParallelJobs:
+		return "Parallel Jobs"
+	case RenderModeParallelBatched:
+		return "Parallel Batched"
+	default:
+		return "Unknown"
+	}
+}
+
+func runEngine(demoType int, config EngineConfig) {
 	// Create terminal renderer
 	writer := bufio.NewWriter(os.Stdout)
-	renderer := NewTerminalRenderer(writer, 51, 223)
-	renderer.SetUseColor(true)
+	baseRenderer := NewTerminalRenderer(writer, config.Height, config.Width)
+	baseRenderer.SetUseColor(config.UseColor)
+	baseRenderer.SetShowDebugInfo(config.ShowDebugInfo)
+
+	// Wrap with profiler if enabled
+	var profiler *Profiler
+	if config.EnableProfiling {
+		profiler = NewProfiler(60) // Keep 60 frames of history
+		fmt.Println("Profiling enabled")
+	}
+
+	// Wrap with parallel renderer if needed
+	var renderer Renderer
+	var parallelRenderer *ParallelRenderer
+	var jobRenderer *JobBasedRenderer
+
+	switch config.RenderMode {
+	case RenderModeParallelTiles:
+		parallelRenderer = NewParallelRenderer(baseRenderer, config.NumWorkers, config.TileSize)
+		renderer = baseRenderer // Still use base for interface
+	case RenderModeParallelJobs:
+		jobRenderer = NewJobBasedRenderer(baseRenderer, config.NumWorkers)
+		renderer = baseRenderer
+	case RenderModeParallelBatched:
+		parallelRenderer = NewParallelRenderer(baseRenderer, config.NumWorkers, config.TileSize)
+		renderer = baseRenderer
+	default:
+		renderer = baseRenderer
+	}
 
 	// Initialize renderer
 	if err := renderer.Initialize(); err != nil {
@@ -96,23 +207,37 @@ func main() {
 	// Clear screen
 	fmt.Print("\033[2J\033[H")
 
-	fps := 60.0
+	fps := config.FPS
 	startTime := time.Now()
+	frameCount := 0
+	lastStatsTime := time.Now()
 
-	// Update function
-	updateFunc := func(scene *Scene, dt float64) {
+	// Main render loop
+	dt := 1.0 / fps
+	ticker := time.NewTicker(time.Duration(dt*1000) * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		<-ticker.C
+
+		// Profiling: Begin frame
+		if profiler != nil {
+			profiler.BeginFrame()
+		}
+
+		// Update phase
+		if profiler != nil {
+			profiler.BeginUpdate()
+		}
+
 		input := inputManager.GetInputState()
-
 		if input.Quit {
 			fmt.Print("\033[2J\033[H")
 			fmt.Println("Exiting...")
-			inputManager.Stop()
-			renderer.Shutdown()
-			os.Exit(0)
+			return
 		}
 
 		cameraController.Update(input)
-
 		elapsedTime := time.Since(startTime).Seconds()
 		animateSceneDemo(scene, demoType, elapsedTime)
 
@@ -123,11 +248,57 @@ func main() {
 			}
 		}
 
-		inputManager.ClearKeys()
-	}
+		// Update scene
+		scene.Update(dt)
 
-	// Start render loop using the renderer
-	renderer.RenderLoop(scene, fps, updateFunc)
+		if profiler != nil {
+			profiler.EndUpdate()
+		}
+
+		inputManager.ClearKeys()
+
+		// Render phase
+		if profiler != nil {
+			profiler.BeginRender()
+		}
+
+		// Choose rendering path based on mode
+		switch config.RenderMode {
+		case RenderModeParallelTiles:
+			parallelRenderer.RenderSceneParallel(scene)
+		case RenderModeParallelJobs:
+			jobRenderer.RenderSceneJobs(scene)
+		case RenderModeParallelBatched:
+			parallelRenderer.RenderBatched(scene)
+		default:
+			renderer.RenderScene(scene)
+		}
+
+		if profiler != nil {
+			profiler.EndRender()
+		}
+
+		// Present phase
+		if profiler != nil {
+			profiler.BeginPresent()
+		}
+
+		renderer.Present()
+
+		if profiler != nil {
+			profiler.EndPresent()
+			profiler.EndFrame()
+		}
+
+		frameCount++
+
+		// Print stats every 2 seconds
+		if profiler != nil && time.Since(lastStatsTime).Seconds() >= 2.0 {
+			stats := profiler.GetAverageStats()
+			fmt.Printf("\n%s\n", stats.String())
+			lastStatsTime = time.Now()
+		}
+	}
 }
 
 // configureCamera sets up camera based on demo
@@ -172,6 +343,11 @@ func configureCamera(camera *Camera, demoType int) {
 		camera.Transform.SetRotation(0, 0, 0)
 		camera.Far = 200.0
 
+	case DemoStressTest:
+		camera.Transform.SetPosition(0, 50, -150)
+		camera.Transform.SetRotation(-0.3, 0, 0)
+		camera.Far = 500.0
+
 	default:
 		camera.Transform.SetPosition(0, 10, -60)
 		camera.Transform.SetRotation(0, 0, 0)
@@ -212,6 +388,12 @@ func configureCameraController(controller *CameraController, demoType int) {
 		controller.SetOrbitCenter(0, 0, 0)
 		controller.EnableAutoOrbit(true)
 
+	case DemoStressTest:
+		controller.SetOrbitRadius(200.0)
+		controller.SetOrbitCenter(0, 0, 0)
+		controller.SetOrbitHeight(50.0)
+		controller.EnableAutoOrbit(true)
+
 	default:
 		controller.SetOrbitRadius(80.0)
 		controller.SetOrbitCenter(0, 0, 0)
@@ -248,6 +430,8 @@ func buildScene(scene *Scene, demoType int, material Material) {
 		HelixDemo(scene, material)
 	case DemoWireframe:
 		WireframeDemo(scene, material)
+	case DemoStressTest:
+		StressTestDemo(scene)
 	}
 }
 
@@ -268,5 +452,7 @@ func animateSceneDemo(scene *Scene, demoType int, time float64) {
 		AnimateHelix(scene, time)
 	case DemoWireframe:
 		AnimateWireframe(scene, time)
+	case DemoStressTest:
+		AnimateStressTest(scene, time)
 	}
 }

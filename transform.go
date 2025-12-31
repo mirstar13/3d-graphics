@@ -48,9 +48,6 @@ func (t *Transform) MarkDirty() {
 		t.worldMatrixDirty = true
 		t.localMatrixDirty = true
 		t.inverseMatrixDirty = true
-
-		// Propagate to all children recursively
-		t.markChildrenDirty()
 	}
 }
 

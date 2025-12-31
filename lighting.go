@@ -30,6 +30,15 @@ type LightingSystem struct {
 	UseBlinnPhong    bool    // Use Blinn-Phong instead of Phong
 }
 
+type LightingCache struct {
+	cache map[cacheKey]Color
+}
+
+type cacheKey struct {
+	x, y, z    int // Quantized world position
+	normalHash uint64
+}
+
 // NewLight creates a new light source
 func NewLight(x, y, z float64, color Color, intensity float64) *Light {
 	return &Light{
@@ -269,4 +278,36 @@ func CalculateSimpleAO(normal Point) float64 {
 // RotateLight rotates a light around an axis (for animated lights)
 func (l *Light) Rotate(axis byte, angle float64) {
 	l.Position.Rotate(axis, angle)
+}
+
+func (lc *LightingCache) GetOrCalculate(
+	pos Point,
+	normal Point,
+	material Material,
+	ao float64,
+	ls *LightingSystem,
+) Color {
+	// Quantize position to grid (e.g., 1-unit grid)
+	key := cacheKey{
+		x:          int(pos.X),
+		y:          int(pos.Y),
+		z:          int(pos.Z),
+		normalHash: hashNormal(normal),
+	}
+
+	if cached, ok := lc.cache[key]; ok {
+		return cached
+	}
+
+	color := ls.CalculateLighting(pos, normal, material, ao)
+	lc.cache[key] = color
+	return color
+}
+
+func hashNormal(n Point) uint64 {
+	// Simple hash for normal direction (quantized to 8 bits per component)
+	nx := uint64(int((n.X + 1.0) * 127.5))
+	ny := uint64(int((n.Y + 1.0) * 127.5))
+	nz := uint64(int((n.Z + 1.0) * 127.5))
+	return (nx << 16) | (ny << 8) | nz
 }
