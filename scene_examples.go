@@ -753,10 +753,6 @@ func AnimateOctree(scene *Scene, time float64) {
 	}
 }
 
-// ============================================================================
-// DEMO: BVH Dynamic Scenes
-// ============================================================================
-
 func BVHDemo(scene *Scene) {
 	material := NewMaterial()
 	material.DiffuseColor = Color{200, 100, 150}
@@ -883,10 +879,6 @@ func AnimateOBB(scene *Scene, time float64) {
 	}
 }
 
-// ============================================================================
-// DEMO: Mesh Simplification (QEM)
-// ============================================================================
-
 func MeshSimplificationDemo(scene *Scene) {
 	material := NewMaterial()
 	material.DiffuseColor = Color{150, 200, 150}
@@ -937,10 +929,6 @@ func AnimateMeshSimplification(scene *Scene, time float64) {
 		obj.RotateLocal(0, 0.02, 0)
 	}
 }
-
-// ============================================================================
-// DEMO: Smooth LOD Transitions
-// ============================================================================
 
 func SmoothLODDemo(scene *Scene) {
 	material := NewMaterial()
@@ -1004,10 +992,6 @@ func AnimateSmoothLOD(scene *Scene, time float64) {
 		}
 	}
 }
-
-// ============================================================================
-// DEMO: Combined Advanced Features
-// ============================================================================
 
 func CombinedAdvancedDemo(scene *Scene) {
 	material := NewMaterial()
@@ -1103,10 +1087,6 @@ func AnimateCombinedAdvanced(scene *Scene, time float64) {
 		fmt.Printf("Transitioning: %d\n", transitioning)
 	}
 }
-
-// ============================================================================
-// DEMO: Stress Test - Maximum Objects
-// ============================================================================
 
 func StressTestDemo(scene *Scene) {
 	material := NewMaterial()
