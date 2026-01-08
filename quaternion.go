@@ -58,22 +58,26 @@ func (q Quaternion) Normalize() Quaternion {
 	if length < 1e-10 {
 		return IdentityQuaternion()
 	}
+
+	invLen := 1.0 / length
 	return Quaternion{
-		W: q.W / length,
-		X: q.X / length,
-		Y: q.Y / length,
-		Z: q.Z / length,
+		W: q.W * invLen,
+		X: q.X * invLen,
+		Y: q.Y * invLen,
+		Z: q.Z * invLen,
 	}
 }
 
 // Multiply multiplies two quaternions (combines rotations)
 func (q Quaternion) Multiply(other Quaternion) Quaternion {
-	return Quaternion{
+	result := Quaternion{
 		W: q.W*other.W - q.X*other.X - q.Y*other.Y - q.Z*other.Z,
 		X: q.W*other.X + q.X*other.W + q.Y*other.Z - q.Z*other.Y,
 		Y: q.W*other.Y - q.X*other.Z + q.Y*other.W + q.Z*other.X,
 		Z: q.W*other.Z + q.X*other.Y - q.Y*other.X + q.Z*other.W,
 	}
+
+	return result.Normalize()
 }
 
 // Slerp performs spherical linear interpolation between two quaternions

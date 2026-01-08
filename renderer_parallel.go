@@ -176,6 +176,15 @@ func (pr *ParallelRenderer) renderNodeWithRenderer(node *SceneNode, worldMatrix 
 
 // RenderBatched renders scene by binning nodes into screen tiles to reduce overdraw
 func (pr *ParallelRenderer) RenderBatched(scene *Scene) {
+	/*
+		// Check if using OpenGL and skip parallel rendering
+		if _, ok := pr.Renderer.(*OpenGLRenderer); ok {
+			// OpenGL renderer doesn't support parallel rendering safely
+			pr.Renderer.RenderScene(scene)
+			return
+		}
+	*/
+
 	pr.Renderer.BeginFrame()
 	pr.Pools.ResetAll()
 

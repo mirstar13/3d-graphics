@@ -281,21 +281,35 @@ func (r *TerminalRenderer) RenderPoint(point *Point, worldMatrix Matrix4x4, came
 
 // RenderMesh renders a complete mesh
 func (r *TerminalRenderer) RenderMesh(mesh *Mesh, worldMatrix Matrix4x4, camera *Camera) {
-	meshPos := worldMatrix.TransformPoint(mesh.Position)
-
 	// Render triangles from indexed geometry
 	for i := 0; i < len(mesh.Indices); i += 3 {
 		if i+2 < len(mesh.Indices) {
 			idx0, idx1, idx2 := mesh.Indices[i], mesh.Indices[i+1], mesh.Indices[i+2]
 			if idx0 < len(mesh.Vertices) && idx1 < len(mesh.Vertices) && idx2 < len(mesh.Vertices) {
-				offsetTri := &Triangle{
-					P0:       Point{X: mesh.Vertices[idx0].X + meshPos.X, Y: mesh.Vertices[idx0].Y + meshPos.Y, Z: mesh.Vertices[idx0].Z + meshPos.Z},
-					P1:       Point{X: mesh.Vertices[idx1].X + meshPos.X, Y: mesh.Vertices[idx1].Y + meshPos.Y, Z: mesh.Vertices[idx1].Z + meshPos.Z},
-					P2:       Point{X: mesh.Vertices[idx2].X + meshPos.X, Y: mesh.Vertices[idx2].Y + meshPos.Y, Z: mesh.Vertices[idx2].Z + meshPos.Z},
+				// FIXED: Transform vertices by world matrix
+				p0 := worldMatrix.TransformPoint(mesh.Vertices[idx0])
+				p1 := worldMatrix.TransformPoint(mesh.Vertices[idx1])
+				p2 := worldMatrix.TransformPoint(mesh.Vertices[idx2])
+
+				// Apply mesh position offset in world space
+				p0.X += mesh.Position.X
+				p0.Y += mesh.Position.Y
+				p0.Z += mesh.Position.Z
+				p1.X += mesh.Position.X
+				p1.Y += mesh.Position.Y
+				p1.Z += mesh.Position.Z
+				p2.X += mesh.Position.X
+				p2.Y += mesh.Position.Y
+				p2.Z += mesh.Position.Z
+
+				tri := &Triangle{
+					P0:       p0,
+					P1:       p1,
+					P2:       p2,
 					char:     'o',
 					Material: mesh.Material,
 				}
-				r.RenderTriangle(offsetTri, IdentityMatrix(), camera)
+				r.RenderTriangle(tri, IdentityMatrix(), camera)
 			}
 		}
 	}

@@ -107,9 +107,12 @@ func NewBoundingSphereFromPoints(points []Point) *BoundingSphere {
 // === AABB Methods ===
 
 func (aabb *AABB) Contains(p Point) bool {
-	return p.X >= aabb.Min.X && p.X <= aabb.Max.X &&
-		p.Y >= aabb.Min.Y && p.Y <= aabb.Max.Y &&
-		p.Z >= aabb.Min.Z && p.Z <= aabb.Max.Z
+	const EPSILON = 0.0001
+
+	// Add epsilon for boundary cases
+	return p.X >= aabb.Min.X-EPSILON && p.X <= aabb.Max.X+EPSILON &&
+		p.Y >= aabb.Min.Y-EPSILON && p.Y <= aabb.Max.Y+EPSILON &&
+		p.Z >= aabb.Min.Z-EPSILON && p.Z <= aabb.Max.Z+EPSILON
 }
 
 func (aabb *AABB) Intersects(other BoundingVolume) bool {
@@ -123,9 +126,12 @@ func (aabb *AABB) Intersects(other BoundingVolume) bool {
 }
 
 func (aabb *AABB) IntersectsAABB(other *AABB) bool {
-	return aabb.Min.X <= other.Max.X && aabb.Max.X >= other.Min.X &&
-		aabb.Min.Y <= other.Max.Y && aabb.Max.Y >= other.Min.Y &&
-		aabb.Min.Z <= other.Max.Z && aabb.Max.Z >= other.Min.Z
+	const EPSILON = 0.0001
+
+	// Add epsilon for floating point tolerance
+	return aabb.Min.X-EPSILON <= other.Max.X && aabb.Max.X+EPSILON >= other.Min.X &&
+		aabb.Min.Y-EPSILON <= other.Max.Y && aabb.Max.Y+EPSILON >= other.Min.Y &&
+		aabb.Min.Z-EPSILON <= other.Max.Z && aabb.Max.Z+EPSILON >= other.Min.Z
 }
 
 func (aabb *AABB) IntersectsSphere(sphere *BoundingSphere) bool {

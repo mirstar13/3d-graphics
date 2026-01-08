@@ -57,8 +57,8 @@ func (r *Ray) IntersectsTriangle(t *Triangle) (bool, float64, float64, float64) 
 	// Determinant
 	det := edge1X*hX + edge1Y*hY + edge1Z*hZ
 
-	// If determinant is near zero, ray lies in plane of triangle
-	if det > -EPSILON && det < EPSILON {
+	// Use absolute value comparison
+	if math.Abs(det) < EPSILON {
 		return false, 0, 0, 0
 	}
 
@@ -72,7 +72,8 @@ func (r *Ray) IntersectsTriangle(t *Triangle) (bool, float64, float64, float64) 
 	// Calculate u parameter
 	u := invDet * (sX*hX + sY*hY + sZ*hZ)
 
-	if u < 0.0 || u > 1.0 {
+	// Check bounds with epsilon
+	if u < -EPSILON || u > 1.0+EPSILON {
 		return false, 0, 0, 0
 	}
 
@@ -82,13 +83,15 @@ func (r *Ray) IntersectsTriangle(t *Triangle) (bool, float64, float64, float64) 
 	// Calculate v parameter
 	v := invDet * (r.Direction.X*qX + r.Direction.Y*qY + r.Direction.Z*qZ)
 
-	if v < 0.0 || u+v > 1.0 {
+	// Check bounds with epsilon
+	if v < -EPSILON || u+v > 1.0+EPSILON {
 		return false, 0, 0, 0
 	}
 
 	// Calculate t (distance along ray)
 	distance := invDet * (edge2X*qX + edge2Y*qY + edge2Z*qZ)
 
+	// Check if hit is in front of ray
 	if distance > EPSILON {
 		return true, distance, u, v
 	}

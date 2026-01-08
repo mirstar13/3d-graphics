@@ -159,13 +159,27 @@ func (lg *LODGroup) calculateScreenCoverage(worldPos Point, camera *Camera) floa
 // Update updates the LOD selection
 func (lg *LODGroup) Update(worldPos Point, camera *Camera) {
 	lg.LastUpdatePos = worldPos
-	lg.CurrentLOD = lg.SelectLOD(worldPos, camera)
+	newLOD := lg.SelectLOD(worldPos, camera)
+
+	// Clamp LOD index to valid range
+	if newLOD < 0 {
+		newLOD = 0
+	}
+	if newLOD >= len(lg.Levels) {
+		newLOD = len(lg.Levels) - 1
+	}
+
+	lg.CurrentLOD = newLOD
 	lg.LastUpdateLOD = lg.CurrentLOD
 }
 
 // GetCurrentMesh returns the currently active LOD mesh
 func (lg *LODGroup) GetCurrentMesh() *Mesh {
 	if lg.CurrentLOD < 0 || lg.CurrentLOD >= len(lg.Levels) {
+		// Return first level if index invalid
+		if len(lg.Levels) > 0 {
+			return lg.Levels[0].Mesh
+		}
 		return nil
 	}
 	return lg.Levels[lg.CurrentLOD].Mesh

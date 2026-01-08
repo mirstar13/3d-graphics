@@ -47,6 +47,8 @@ type OpenGLRenderer struct {
 	// Clipping (not used in OpenGL but required by interface)
 	clipMinX, clipMinY, clipMaxX, clipMaxY int
 
+	vboCache *MeshBufferCache
+
 	initialized bool
 	frameCount  int
 }
@@ -119,6 +121,7 @@ func NewOpenGLRenderer(width, height int) *OpenGLRenderer {
 		maxVertices:     100000,
 		currentVertices: make([]VulkanVertex, 0, 600000), // 100k vertices * 6 floats
 		lineVertices:    make([]float32, 0, 60000),       // 10k line vertices
+		vboCache:        NewMeshBufferCache(),
 	}
 }
 
@@ -389,10 +392,16 @@ func (r *OpenGLRenderer) Present() {
 		return
 	}
 
+	// FIXED: Limit buffer size
+	const MAX_VERTICES = 1000000
+	if len(r.currentVertices) > MAX_VERTICES {
+		r.currentVertices = r.currentVertices[:MAX_VERTICES]
+	}
+
 	// Upload vertex data
 	if len(r.currentVertices) > 0 {
 		gl.BindBuffer(gl.ARRAY_BUFFER, r.vbo)
-		dataSize := len(r.currentVertices) * 24 // 6 floats * 4 bytes per float
+		dataSize := len(r.currentVertices) * 24
 		gl.BufferSubData(gl.ARRAY_BUFFER, 0, dataSize, gl.Ptr(r.currentVertices))
 	}
 
@@ -410,9 +419,11 @@ func (r *OpenGLRenderer) Present() {
 	r.window.SwapBuffers()
 	r.frameCount++
 
-	// Show FPS in title
+	// Clear vertices after rendering
+	r.currentVertices = r.currentVertices[:0]
+
 	if r.frameCount%60 == 0 && r.ShowDebugInfo {
-		r.window.SetTitle(fmt.Sprintf("Go 3D Engine (OpenGL) - Frame %d - Vertices: %d", r.frameCount, len(r.currentVertices)))
+		r.window.SetTitle(fmt.Sprintf("Go 3D Engine (OpenGL) - Frame %d", r.frameCount))
 	}
 }
 
@@ -498,15 +509,13 @@ func (r *OpenGLRenderer) renderNode(node *SceneNode, worldMatrix Matrix4x4, came
 	case *Point:
 		r.RenderPoint(obj, worldMatrix, camera)
 	case *LODGroup:
-		// Render current LOD mesh
 		currentMesh := obj.GetCurrentMesh()
-		if currentMesh != nil {
+		if currentMesh != nil && len(currentMesh.Vertices) > 0 && len(currentMesh.Indices) > 0 {
 			r.RenderMesh(currentMesh, worldMatrix, camera)
 		}
 	case *LODGroupWithTransitions:
-		// Render current LOD mesh
 		currentMesh := obj.GetCurrentMesh()
-		if currentMesh != nil {
+		if currentMesh != nil && len(currentMesh.Vertices) > 0 && len(currentMesh.Indices) > 0 {
 			r.RenderMesh(currentMesh, worldMatrix, camera)
 		}
 	}
@@ -590,95 +599,80 @@ func (r *OpenGLRenderer) RenderTriangle(tri *Triangle, worldMatrix Matrix4x4, ca
 }
 
 func (r *OpenGLRenderer) RenderMesh(mesh *Mesh, worldMatrix Matrix4x4, camera *Camera) {
-	// Check if wireframe mode
-	isWireframe := mesh.Material.Wireframe
+	meshPos := worldMatrix.TransformPoint(mesh.Position)
 
-	// Iterate over indices in groups of 3 (Triangles)
 	for i := 0; i < len(mesh.Indices); i += 3 {
-		if i+2 >= len(mesh.Indices) {
-			break
-		}
+		if i+2 < len(mesh.Indices) {
+			idx0, idx1, idx2 := mesh.Indices[i], mesh.Indices[i+1], mesh.Indices[i+2]
+			if idx0 < len(mesh.Vertices) && idx1 < len(mesh.Vertices) && idx2 < len(mesh.Vertices) {
+				p0 := Point{X: mesh.Vertices[idx0].X + meshPos.X, Y: mesh.Vertices[idx0].Y + meshPos.Y, Z: mesh.Vertices[idx0].Z + meshPos.Z}
+				p1 := Point{X: mesh.Vertices[idx1].X + meshPos.X, Y: mesh.Vertices[idx1].Y + meshPos.Y, Z: mesh.Vertices[idx1].Z + meshPos.Z}
+				p2 := Point{X: mesh.Vertices[idx2].X + meshPos.X, Y: mesh.Vertices[idx2].Y + meshPos.Y, Z: mesh.Vertices[idx2].Z + meshPos.Z}
 
-		idx0 := mesh.Indices[i]
-		idx1 := mesh.Indices[i+1]
-		idx2 := mesh.Indices[i+2]
+				finalP0 := worldMatrix.TransformPoint(p0)
+				finalP1 := worldMatrix.TransformPoint(p1)
+				finalP2 := worldMatrix.TransformPoint(p2)
 
-		// Lookup vertices
-		v0 := mesh.Vertices[idx0]
-		v1 := mesh.Vertices[idx1]
-		v2 := mesh.Vertices[idx2]
+				// FIXED: Use mesh material instead of hardcoded values
+				color := mesh.Material.DiffuseColor
 
-		// Apply Mesh Position Offset (Model Space -> World Space part 1)
-		p0 := Point{X: v0.X + mesh.Position.X, Y: v0.Y + mesh.Position.Y, Z: v0.Z + mesh.Position.Z}
-		p1 := Point{X: v1.X + mesh.Position.X, Y: v1.Y + mesh.Position.Y, Z: v1.Z + mesh.Position.Z}
-		p2 := Point{X: v2.X + mesh.Position.X, Y: v2.Y + mesh.Position.Y, Z: v2.Z + mesh.Position.Z}
+				if isWireframe := mesh.Material.Wireframe; isWireframe {
+					rf := float32(mesh.Material.WireframeColor.R) / 255.0
+					gf := float32(mesh.Material.WireframeColor.G) / 255.0
+					bf := float32(mesh.Material.WireframeColor.B) / 255.0
 
-		// Transform to final World Space (part 2)
-		finalP0 := worldMatrix.TransformPoint(p0)
-		finalP1 := worldMatrix.TransformPoint(p1)
-		finalP2 := worldMatrix.TransformPoint(p2)
-
-		// Get color
-		color := mesh.Material.DiffuseColor
-
-		// If wireframe, render as lines
-		if isWireframe {
-			rf := float32(color.R) / 255.0
-			gf := float32(color.G) / 255.0
-			bf := float32(color.B) / 255.0
-
-			// Add three edges
-			r.addLineVertex(finalP0, rf, gf, bf)
-			r.addLineVertex(finalP1, rf, gf, bf)
-
-			r.addLineVertex(finalP1, rf, gf, bf)
-			r.addLineVertex(finalP2, rf, gf, bf)
-
-			r.addLineVertex(finalP2, rf, gf, bf)
-			r.addLineVertex(finalP0, rf, gf, bf)
-			continue
-		}
-
-		// Basic lighting for filled triangles
-		if r.LightingSystem != nil {
-			// Calculate Normal
-			normal := CalculateSurfaceNormal(&p0, &p1, &p2, nil, false)
-			worldNormal := worldMatrix.TransformDirection(normal)
-
-			// ... (Copy lighting logic from RenderTriangle) ...
-			intensity := 0.3
-			for _, light := range r.LightingSystem.Lights {
-				if !light.IsEnabled {
+					r.addLineVertex(finalP0, rf, gf, bf)
+					r.addLineVertex(finalP1, rf, gf, bf)
+					r.addLineVertex(finalP1, rf, gf, bf)
+					r.addLineVertex(finalP2, rf, gf, bf)
+					r.addLineVertex(finalP2, rf, gf, bf)
+					r.addLineVertex(finalP0, rf, gf, bf)
 					continue
 				}
 
-				// Simple centroid approximation
-				centerX := (finalP0.X + finalP1.X + finalP2.X) / 3.0
-				centerY := (finalP0.Y + finalP1.Y + finalP2.Y) / 3.0
-				centerZ := (finalP0.Z + finalP1.Z + finalP2.Z) / 3.0
+				// Apply lighting (FIXED)
+				if r.LightingSystem != nil {
+					normal := CalculateSurfaceNormal(&p0, &p1, &p2, nil, false)
+					worldNormal := worldMatrix.TransformDirection(normal)
 
-				lx, ly, lz := normalizeVector(light.Position.X-centerX, light.Position.Y-centerY, light.Position.Z-centerZ)
-				diff := dotProduct(worldNormal.X, worldNormal.Y, worldNormal.Z, lx, ly, lz)
-				if diff > 0 {
-					intensity += diff * light.Intensity * 0.7
+					intensity := 0.2 // Ambient base
+					for _, light := range r.LightingSystem.Lights {
+						if !light.IsEnabled {
+							continue
+						}
+
+						centerX := (finalP0.X + finalP1.X + finalP2.X) / 3.0
+						centerY := (finalP0.Y + finalP1.Y + finalP2.Y) / 3.0
+						centerZ := (finalP0.Z + finalP1.Z + finalP2.Z) / 3.0
+
+						lx := light.Position.X - centerX
+						ly := light.Position.Y - centerY
+						lz := light.Position.Z - centerZ
+						lx, ly, lz = normalizeVector(lx, ly, lz)
+
+						diff := dotProduct(worldNormal.X, worldNormal.Y, worldNormal.Z, lx, ly, lz)
+						if diff > 0 {
+							intensity += diff * light.Intensity * 0.8
+						}
+					}
+
+					if intensity > 1.0 {
+						intensity = 1.0
+					}
+
+					color = Color{
+						R: uint8(float64(color.R) * intensity),
+						G: uint8(float64(color.G) * intensity),
+						B: uint8(float64(color.B) * intensity),
+					}
 				}
-			}
-			if intensity > 1.0 {
-				intensity = 1.0
-			}
 
-			color = Color{
-				R: uint8(float64(color.R) * intensity),
-				G: uint8(float64(color.G) * intensity),
-				B: uint8(float64(color.B) * intensity),
+				rf, gf, bf := float32(color.R)/255.0, float32(color.G)/255.0, float32(color.B)/255.0
+				r.addVertex(finalP0, rf, gf, bf)
+				r.addVertex(finalP1, rf, gf, bf)
+				r.addVertex(finalP2, rf, gf, bf)
 			}
 		}
-
-		rf, gf, bf := float32(color.R)/255.0, float32(color.G)/255.0, float32(color.B)/255.0
-
-		r.addVertex(finalP0, rf, gf, bf)
-		r.addVertex(finalP1, rf, gf, bf)
-		r.addVertex(finalP2, rf, gf, bf)
 	}
 }
 
