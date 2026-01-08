@@ -310,18 +310,44 @@ func ComputeTriangleBounds(t *Triangle) *AABB {
 }
 
 // ComputeMeshBounds computes AABB for a mesh
-func ComputeMeshBounds(mesh *Mesh) *AABB {
-	points := make([]Point, 0)
-
-	for _, tri := range mesh.Triangles {
-		points = append(points, tri.P0, tri.P1, tri.P2)
+func ComputeMeshBounds(mesh *Mesh) BoundingVolume {
+	if len(mesh.Vertices) == 0 {
+		return &AABB{}
 	}
 
-	for _, quad := range mesh.Quads {
-		points = append(points, quad.P0, quad.P1, quad.P2, quad.P3)
+	minX, minY, minZ := math.MaxFloat64, math.MaxFloat64, math.MaxFloat64
+	maxX, maxY, maxZ := -math.MaxFloat64, -math.MaxFloat64, -math.MaxFloat64
+
+	for _, v := range mesh.Vertices {
+		// Apply mesh local position
+		px := v.X + mesh.Position.X
+		py := v.Y + mesh.Position.Y
+		pz := v.Z + mesh.Position.Z
+
+		if px < minX {
+			minX = px
+		}
+		if px > maxX {
+			maxX = px
+		}
+		if py < minY {
+			minY = py
+		}
+		if py > maxY {
+			maxY = py
+		}
+		if pz < minZ {
+			minZ = pz
+		}
+		if pz > maxZ {
+			maxZ = pz
+		}
 	}
 
-	return NewAABBFromPoints(points)
+	return &AABB{
+		Min: Point{X: minX, Y: minY, Z: minZ},
+		Max: Point{X: maxX, Y: maxY, Z: maxZ},
+	}
 }
 
 // TransformAABB transforms an AABB by a transform (creates new oriented bounding box as AABB)

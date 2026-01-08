@@ -283,35 +283,19 @@ func (r *TerminalRenderer) RenderPoint(point *Point, worldMatrix Matrix4x4, came
 func (r *TerminalRenderer) RenderMesh(mesh *Mesh, worldMatrix Matrix4x4, camera *Camera) {
 	meshPos := worldMatrix.TransformPoint(mesh.Position)
 
-	for _, quad := range mesh.Quads {
-		offsetQuad := &Quad{
-			P0:           Point{X: quad.P0.X + meshPos.X, Y: quad.P0.Y + meshPos.Y, Z: quad.P0.Z + meshPos.Z},
-			P1:           Point{X: quad.P1.X + meshPos.X, Y: quad.P1.Y + meshPos.Y, Z: quad.P1.Z + meshPos.Z},
-			P2:           Point{X: quad.P2.X + meshPos.X, Y: quad.P2.Y + meshPos.Y, Z: quad.P2.Z + meshPos.Z},
-			P3:           Point{X: quad.P3.X + meshPos.X, Y: quad.P3.Y + meshPos.Y, Z: quad.P3.Z + meshPos.Z},
-			Material:     quad.Material,
-			UseSetNormal: quad.UseSetNormal,
-			Normal:       quad.Normal,
-		}
-		r.renderQuad(offsetQuad, IdentityMatrix(), camera)
-	}
-
-	for _, tri := range mesh.Triangles {
-		offsetTri := &Triangle{
-			P0:           Point{X: tri.P0.X + meshPos.X, Y: tri.P0.Y + meshPos.Y, Z: tri.P0.Z + meshPos.Z},
-			P1:           Point{X: tri.P1.X + meshPos.X, Y: tri.P1.Y + meshPos.Y, Z: tri.P1.Z + meshPos.Z},
-			P2:           Point{X: tri.P2.X + meshPos.X, Y: tri.P2.Y + meshPos.Y, Z: tri.P2.Z + meshPos.Z},
-			char:         tri.char,
-			Material:     tri.Material,
-			UseSetNormal: tri.UseSetNormal,
-			Normal:       tri.Normal,
-		}
-
-		if r.isTriangleVisible(offsetTri, camera) {
-			if tri.Material.Wireframe {
-				r.renderTriangleWireframe(offsetTri, camera)
-			} else {
-				r.rasterizeTriangleWithLighting(offsetTri, camera)
+	// Render triangles from indexed geometry
+	for i := 0; i < len(mesh.Indices); i += 3 {
+		if i+2 < len(mesh.Indices) {
+			idx0, idx1, idx2 := mesh.Indices[i], mesh.Indices[i+1], mesh.Indices[i+2]
+			if idx0 < len(mesh.Vertices) && idx1 < len(mesh.Vertices) && idx2 < len(mesh.Vertices) {
+				offsetTri := &Triangle{
+					P0:       Point{X: mesh.Vertices[idx0].X + meshPos.X, Y: mesh.Vertices[idx0].Y + meshPos.Y, Z: mesh.Vertices[idx0].Z + meshPos.Z},
+					P1:       Point{X: mesh.Vertices[idx1].X + meshPos.X, Y: mesh.Vertices[idx1].Y + meshPos.Y, Z: mesh.Vertices[idx1].Z + meshPos.Z},
+					P2:       Point{X: mesh.Vertices[idx2].X + meshPos.X, Y: mesh.Vertices[idx2].Y + meshPos.Y, Z: mesh.Vertices[idx2].Z + meshPos.Z},
+					char:     'o',
+					Material: mesh.Material,
+				}
+				r.RenderTriangle(offsetTri, IdentityMatrix(), camera)
 			}
 		}
 	}

@@ -176,7 +176,7 @@ func NewCameraController(camera *Camera) *CameraController {
 }
 
 // Update processes input and updates camera
-func (cc *CameraController) Update(input InputState) {
+func (cc *CameraController) Update(input InputState, orientation OrientationType) {
 	// Check if user pressed any control key - disable auto-orbit
 	if input.Forward || input.Backward || input.Left || input.Right ||
 		input.Up || input.Down || input.RotLeft || input.RotRight ||
@@ -206,10 +206,10 @@ func (cc *CameraController) Update(input InputState) {
 
 	// WASD Movement (relative to camera orientation)
 	if input.Forward {
-		cc.Camera.MoveForward(cc.MoveSpeed)
+		cc.Camera.MoveForward(cc.MoveSpeed * float64(orientation))
 	}
 	if input.Backward {
-		cc.Camera.MoveForward(-cc.MoveSpeed)
+		cc.Camera.MoveForward(-cc.MoveSpeed * float64(orientation))
 	}
 	if input.Right {
 		cc.Camera.MoveRight(cc.MoveSpeed)
@@ -233,16 +233,16 @@ func (cc *CameraController) Update(input InputState) {
 	// K = rotate down (pitch down)
 
 	if input.RotLeft {
-		cc.Camera.RotateYaw(-cc.RotationSpeed)
+		cc.Camera.RotateYaw(-cc.RotationSpeed * float64(orientation))
 	}
 	if input.RotRight {
-		cc.Camera.RotateYaw(cc.RotationSpeed)
+		cc.Camera.RotateYaw(cc.RotationSpeed * float64(orientation))
 	}
 	if input.RotUp {
-		cc.Camera.RotatePitch(-cc.RotationSpeed)
+		cc.Camera.RotatePitch(-cc.RotationSpeed * float64(orientation))
 	}
 	if input.RotDown {
-		cc.Camera.RotatePitch(cc.RotationSpeed)
+		cc.Camera.RotatePitch(cc.RotationSpeed * float64(orientation))
 	}
 
 	// Speed adjustment

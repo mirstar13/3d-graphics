@@ -5,7 +5,7 @@ const (
 	FOV_X = 60.0
 	FOV_Y = 30.0
 
-	DEFAULT_CAMERA_Z = -40.0
+	DEFAULT_CAMERA_Z = -200.0
 	DEFAULT_DZ       = 0.0
 
 	FILLED_CHAR           = '\u2588'

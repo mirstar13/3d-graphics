@@ -378,8 +378,11 @@ func (obb *OBB) getHalfExtent(i int) float64 {
 func ComputeMeshOBB(mesh *Mesh) *OBB {
 	// For now, compute AABB and convert to OBB
 	// A better approach would use Principal Component Analysis (PCA)
-	aabb := ComputeMeshBounds(mesh)
-	return NewOBBFromAABB(aabb)
+	aabbVol := ComputeMeshBounds(mesh)
+	if aabb, ok := aabbVol.(*AABB); ok {
+		return NewOBBFromAABB(aabb)
+	}
+	return NewOBBFromAABB(NewAABB(Point{}, Point{}))
 }
 
 // ComputeOptimalOBB computes a tighter OBB using covariance analysis

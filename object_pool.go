@@ -2,6 +2,75 @@ package main
 
 import "sync"
 
+// Global sync.Pool instances for high-frequency allocations
+var (
+	trianglePoolGlobal = sync.Pool{
+		New: func() interface{} {
+			return &Triangle{}
+		},
+	}
+
+	pointPoolGlobal = sync.Pool{
+		New: func() interface{} {
+			return &Point{}
+		},
+	}
+
+	matrixPoolGlobal = sync.Pool{
+		New: func() interface{} {
+			return &Matrix4x4{}
+		},
+	}
+
+	colorPoolGlobal = sync.Pool{
+		New: func() interface{} {
+			return &Color{}
+		},
+	}
+)
+
+// AcquireTriangle gets a triangle from the global pool
+func AcquireTriangle() *Triangle {
+	return trianglePoolGlobal.Get().(*Triangle)
+}
+
+// ReleaseTriangle returns a triangle to the global pool
+func ReleaseTriangle(t *Triangle) {
+	// Reset to avoid keeping references
+	t.Normal = nil
+	trianglePoolGlobal.Put(t)
+}
+
+// AcquirePoint gets a point from the global pool
+func AcquirePoint() *Point {
+	return pointPoolGlobal.Get().(*Point)
+}
+
+// ReleasePoint returns a point to the global pool
+func ReleasePoint(p *Point) {
+	pointPoolGlobal.Put(p)
+}
+
+// AcquireMatrix gets a matrix from the global pool
+func AcquireMatrix() *Matrix4x4 {
+	return matrixPoolGlobal.Get().(*Matrix4x4)
+}
+
+// ReleaseMatrix returns a matrix to the global pool
+func ReleaseMatrix(m *Matrix4x4) {
+	matrixPoolGlobal.Put(m)
+}
+
+// AcquireColor gets a color from the global pool
+func AcquireColor() *Color {
+	return colorPoolGlobal.Get().(*Color)
+}
+
+// ReleaseColor returns a color to the global pool
+func ReleaseColor(c *Color) {
+	colorPoolGlobal.Put(c)
+}
+
 // TrianglePool manages a pool of Triangle objects to reduce allocations
 type TrianglePool struct {
 	pool  []*Triangle

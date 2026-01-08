@@ -336,41 +336,18 @@ func (sn *SceneNode) TransformSceneObject() any {
 	case *Mesh:
 		transformedMesh := NewMesh()
 		transformedMesh.Position = worldTransform.TransformPoint(obj.Position)
+		transformedMesh.Material = obj.Material // Copy mesh material for Indexed mode
 
-		for _, tri := range obj.Triangles {
-			transformed := &Triangle{
-				P0:           worldTransform.TransformPoint(tri.P0),
-				P1:           worldTransform.TransformPoint(tri.P1),
-				P2:           worldTransform.TransformPoint(tri.P2),
-				char:         tri.char,
-				Material:     tri.Material,
-				UseSetNormal: tri.UseSetNormal,
+		// Handle Optimized Indexed Geometry
+		if len(obj.Vertices) > 0 {
+			// Transform vertices
+			transformedMesh.Vertices = make([]Point, len(obj.Vertices))
+			for i, v := range obj.Vertices {
+				transformedMesh.Vertices[i] = worldTransform.TransformPoint(v)
 			}
-
-			if tri.UseSetNormal && tri.Normal != nil {
-				transformedNormal := worldTransform.TransformDirection(*tri.Normal)
-				transformed.Normal = &transformedNormal
-			}
-
-			transformedMesh.AddTriangle(transformed)
-		}
-
-		for _, quad := range obj.Quads {
-			transformed := &Quad{
-				P0:           worldTransform.TransformPoint(quad.P0),
-				P1:           worldTransform.TransformPoint(quad.P1),
-				P2:           worldTransform.TransformPoint(quad.P2),
-				P3:           worldTransform.TransformPoint(quad.P3),
-				Material:     quad.Material,
-				UseSetNormal: quad.UseSetNormal,
-			}
-
-			if quad.UseSetNormal && quad.Normal != nil {
-				transformedNormal := worldTransform.TransformDirection(*quad.Normal)
-				transformed.Normal = &transformedNormal
-			}
-
-			transformedMesh.AddQuad(transformed)
+			// Copy indices directly (structure doesn't change with transform)
+			transformedMesh.Indices = make([]int, len(obj.Indices))
+			copy(transformedMesh.Indices, obj.Indices)
 		}
 
 		return transformedMesh
@@ -379,51 +356,61 @@ func (sn *SceneNode) TransformSceneObject() any {
 	return sn.Object
 }
 
-// ============================================================================
-// SCENE FACTORY METHODS
-// ============================================================================
+func (sn *SceneNode) SetObject(obj any) {
+	sn.Object = obj
+}
 
-// CreateCube creates a cube scene node
+// CreateCube creates a cube scene node using indexed geometry
 func (s *Scene) CreateCube(name string, size float64, material Material) *SceneNode {
 	node := NewSceneNode(name)
 	mesh := NewMesh()
+	mesh.Material = material
 	d := size
 
-	v0 := Point{X: -d, Y: -d, Z: -d}
-	v1 := Point{X: d, Y: -d, Z: -d}
-	v2 := Point{X: d, Y: d, Z: -d}
-	v3 := Point{X: -d, Y: d, Z: -d}
-	v4 := Point{X: -d, Y: -d, Z: d}
-	v5 := Point{X: d, Y: -d, Z: d}
-	v6 := Point{X: d, Y: d, Z: d}
-	v7 := Point{X: -d, Y: d, Z: d}
+	// 1. Add Vertices
+	// Front Face
+	v0 := mesh.AddVertex(-d, -d, -d) // 0
+	v1 := mesh.AddVertex(d, -d, -d)  // 1
+	v2 := mesh.AddVertex(d, d, -d)   // 2
+	v3 := mesh.AddVertex(-d, d, -d)  // 3
+	// Back Face
+	v4 := mesh.AddVertex(-d, -d, d) // 4
+	v5 := mesh.AddVertex(d, -d, d)  // 5
+	v6 := mesh.AddVertex(d, d, d)   // 6
+	v7 := mesh.AddVertex(-d, d, d)  // 7
 
-	createQuad := func(p0, p1, p2, p3 Point, normal Point) {
-		t1 := NewTriangle(p0, p1, p2, 'x').SetMaterial(material)
-		t1.SetNormal(normal)
-		mesh.AddTriangle(t1)
+	// 2. Add Indices (Quads converted to 2 triangles)
+	// Front (v1, v0, v3, v2) -> Normal -Z
+	mesh.AddQuadIndices(v1, v0, v3, v2)
 
-		t2 := NewTriangle(p0, p2, p3, 'x').SetMaterial(material)
-		t2.SetNormal(normal)
-		mesh.AddTriangle(t2)
-	}
+	// Back (v4, v5, v6, v7) -> Normal +Z
+	mesh.AddQuadIndices(v4, v5, v6, v7)
 
-	createQuad(v4, v5, v6, v7, Point{X: 0, Y: 0, Z: 1})
-	createQuad(v1, v0, v3, v2, Point{X: 0, Y: 0, Z: -1})
-	createQuad(v5, v1, v2, v6, Point{X: 1, Y: 0, Z: 0})
-	createQuad(v0, v4, v7, v3, Point{X: -1, Y: 0, Z: 0})
-	createQuad(v7, v6, v2, v3, Point{X: 0, Y: 1, Z: 0})
-	createQuad(v0, v1, v5, v4, Point{X: 0, Y: -1, Z: 0})
+	// Right (v5, v1, v2, v6) -> Normal +X
+	mesh.AddQuadIndices(v5, v1, v2, v6)
+
+	// Left (v0, v4, v7, v3) -> Normal -X
+	mesh.AddQuadIndices(v0, v4, v7, v3)
+
+	// Top (v7, v6, v2, v3) -> Normal +Y
+	mesh.AddQuadIndices(v7, v6, v2, v3)
+
+	// Bottom (v0, v1, v5, v4) -> Normal -Y
+	mesh.AddQuadIndices(v0, v1, v5, v4)
 
 	node.Object = mesh
 	s.AddNode(node)
 	return node
 }
 
-// CreateSphere creates a sphere scene node
+// CreateSphere creates a sphere scene node using optimized geometry
 func (s *Scene) CreateSphere(name string, radius float64, rings, sectors int, material Material) *SceneNode {
 	node := NewSceneNode(name)
-	mesh := GenerateSphere(radius, rings, sectors, material)
+	// Use the optimized generator
+	mesh := GenerateSphere(radius, rings, sectors)
+	// Assign the material to the whole mesh
+	mesh.Material = material
+
 	node.Object = mesh
 	s.AddNode(node)
 	return node

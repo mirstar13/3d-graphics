@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"math"
 	"os"
 	"time"
 )
@@ -16,6 +17,17 @@ const (
 	DemoHelix
 	DemoWireframe
 	DemoStressTest
+	DemoAdvancedSystems
+	DemoBoundingVolume
+	DemoPerformanceTest
+	DemoLineOfSight
+	DemoOctree
+	DemoBVH
+	DemoOBB
+	DemoMeshSimplification
+	DemoSmoothLOD
+	DemoCombinedAdvanced
+	DemoTorus
 )
 
 // RenderMode specifies the rendering approach
@@ -37,6 +49,16 @@ const (
 	BackendVulkan
 )
 
+// OrientationType. For some reason in opengl yaw axis and y axis are inversed compared to terminal renderer.
+// This enum helps to manage that difference.
+type OrientationType int
+
+const (
+	OrientationTerminal OrientationType = 1
+	OrientationOpenGL   OrientationType = -1
+	OrientationVulkan   OrientationType = 1
+)
+
 // EngineConfig holds engine configuration
 type EngineConfig struct {
 	Width           int
@@ -56,21 +78,35 @@ func main() {
 	fmt.Println("=== 3D Engine Demo (with Anti-Aliasing & Vulkan) ===")
 	fmt.Println()
 	fmt.Println("Select a demo:")
-	fmt.Println("  1 - Solar System (planets orbiting)")
-	fmt.Println("  2 - Robot Arm (articulated joints)")
-	fmt.Println("  3 - Spinning Cubes (3D grid)")
-	fmt.Println("  4 - Orbiting Objects (circular motion)")
-	fmt.Println("  5 - Wave Grid (sine wave animation)")
-	fmt.Println("  6 - Helix (spiral structure)")
-	fmt.Println("  7 - Wireframe Demo (mixed rendering)")
-	fmt.Println("  8 - Stress Test (200+ objects with LOD)")
+	fmt.Println("  --- Basic Demos ---")
+	fmt.Println("  1  - Solar System (planets orbiting)")
+	fmt.Println("  2  - Robot Arm (articulated joints)")
+	fmt.Println("  3  - Spinning Cubes (3D grid)")
+	fmt.Println("  4  - Orbiting Objects (circular motion)")
+	fmt.Println("  5  - Wave Grid (sine wave animation)")
+	fmt.Println("  6  - Helix (spiral structure)")
+	fmt.Println("  7  - Wireframe Demo (mixed rendering)")
+	fmt.Println("  8  - Stress Test (200+ objects with LOD)")
 	fmt.Println()
-	fmt.Print("Enter choice (1-8): ")
+	fmt.Println("  --- Advanced Feature Demos ---")
+	fmt.Println("  9  - Advanced Systems (LOD, Raycasting)")
+	fmt.Println("  10 - Bounding Volume (AABB collision)")
+	fmt.Println("  11 - Performance Test (Static LOD)")
+	fmt.Println("  12 - Line of Sight (Visibility)")
+	fmt.Println("  13 - Octree (Spatial Partitioning)")
+	fmt.Println("  14 - BVH (Bounding Volume Hierarchy)")
+	fmt.Println("  15 - OBB (Oriented Bounding Boxes)")
+	fmt.Println("  16 - Mesh Simplification (QEM)")
+	fmt.Println("  17 - Smooth LOD Transitions")
+	fmt.Println("  18 - Combined Advanced (All Features)")
+	fmt.Println("  19 - Torus Showcase (Mesh Generator)")
+	fmt.Println()
+	fmt.Print("Enter choice (1-19): ")
 
 	var choice int
 	fmt.Scanln(&choice)
 
-	if choice < 1 || choice > 8 {
+	if choice < 1 || choice > 19 {
 		fmt.Println("Invalid choice, using Solar System demo")
 		choice = 1
 	}
@@ -232,6 +268,7 @@ func getAAModeName(mode AAMode) string {
 func runEngine(demoType int, config EngineConfig) {
 	// 1. Select Base Renderer
 	var baseRenderer Renderer
+	var orientation OrientationType
 
 	switch config.Backend {
 	case BackendTerminal:
@@ -241,16 +278,22 @@ func runEngine(demoType int, config EngineConfig) {
 		termRenderer.SetUseColor(config.UseColor)
 		termRenderer.SetShowDebugInfo(config.ShowDebugInfo)
 		baseRenderer = termRenderer
+
+		orientation = OrientationTerminal
 	case BackendOpenGL:
 		// Use the CGO-based OpenGL renderer
 		baseRenderer = NewOpenGLRenderer(800, 600)
 		baseRenderer.SetUseColor(config.UseColor)
 		baseRenderer.SetShowDebugInfo(config.ShowDebugInfo)
+
+		orientation = OrientationOpenGL
 	case BackendVulkan:
 		// Use the CGO-based Vulkan renderer
 		baseRenderer = NewVulkanRenderer(800, 600)
 		baseRenderer.SetUseColor(config.UseColor)
 		baseRenderer.SetShowDebugInfo(config.ShowDebugInfo)
+
+		orientation = OrientationVulkan
 	default:
 		fmt.Println("Unsupported backend, exiting.")
 		return
@@ -296,7 +339,7 @@ func runEngine(demoType int, config EngineConfig) {
 	scene := NewScene()
 
 	// Configure camera
-	configureCamera(scene.Camera, demoType)
+	configureCamera(scene.Camera, demoType, orientation)
 	finalRenderer.SetCamera(scene.Camera)
 
 	// Setup lighting
@@ -360,7 +403,7 @@ func runEngine(demoType int, config EngineConfig) {
 			return
 		}
 
-		cameraController.Update(input)
+		cameraController.Update(input, orientation)
 		elapsedTime := time.Since(startTime).Seconds()
 		animateSceneDemo(scene, demoType, elapsedTime)
 
@@ -441,44 +484,88 @@ func runEngine(demoType int, config EngineConfig) {
 }
 
 // Helper functions (same as original)
-func configureCamera(camera *Camera, demoType int) {
+func configureCamera(camera *Camera, demoType int, orientation OrientationType) {
 	camera.DZ = 0.0
 	camera.Near = 0.5
 	camera.FOV = Point{X: 60.0, Y: 30.0, Z: 0}
 
 	switch demoType {
 	case DemoSolarSystem:
-		camera.Transform.SetPosition(0, 30, -100)
-		camera.Transform.SetRotation(-0.2, 0, 0)
+		camera.Transform.SetPosition(0, 30, -100*float64(orientation))
+		camera.Transform.SetRotation(0, 0, 0)
 		camera.Far = 300.0
 	case DemoRobotArm:
-		camera.Transform.SetPosition(0, 10, -60)
+		camera.Transform.SetPosition(0, 10, -60*float64(orientation))
 		camera.Transform.SetRotation(0, 0, 0)
 		camera.Far = 200.0
 	case DemoSpinningCubes:
-		camera.Transform.SetPosition(0, 0, -80)
+		camera.Transform.SetPosition(0, 0, -80*float64(orientation))
 		camera.Transform.SetRotation(0, 0, 0)
 		camera.Far = 300.0
 	case DemoOrbitingObjects:
-		camera.Transform.SetPosition(0, 20, -80)
-		camera.Transform.SetRotation(-0.2, 0, 0)
+		camera.Transform.SetPosition(0, 20, -80*float64(orientation))
+		camera.Transform.SetRotation(0, 0, 0)
 		camera.Far = 200.0
 	case DemoWaveGrid:
-		camera.Transform.SetPosition(0, 30, -50)
-		camera.Transform.SetRotation(-0.4, 0, 0)
+		camera.Transform.SetPosition(0, 30, -50*float64(orientation))
+		camera.Transform.SetRotation(0, 0, (float64(orientation)*math.Pi)/6)
 		camera.Far = 200.0
 	case DemoHelix:
-		camera.Transform.SetPosition(0, 0, -60)
+		camera.Transform.SetPosition(0, 0, -60*float64(orientation))
 		camera.Transform.SetRotation(0, 0, 0)
 		camera.Far = 200.0
 	case DemoWireframe:
-		camera.Transform.SetPosition(0, 0, -50)
+		camera.Transform.SetPosition(0, 0, -50*float64(orientation))
 		camera.Transform.SetRotation(0, 0, 0)
 		camera.Far = 200.0
 	case DemoStressTest:
 		camera.Transform.SetPosition(0, 50, -150)
-		camera.Transform.SetRotation(-0.3, 0, 0)
+		camera.Transform.SetRotation(0, 0, 0)
 		camera.Far = 500.0
+	case DemoAdvancedSystems:
+		camera.Transform.SetPosition(0, 30, -80*float64(orientation))
+		camera.Transform.SetRotation(0, 0, 0)
+		camera.Far = 300.0
+	case DemoBoundingVolume:
+		camera.Transform.SetPosition(0, 20, -60*float64(orientation))
+		camera.Transform.SetRotation(0, 0, 0)
+		camera.Far = 200.0
+	case DemoPerformanceTest:
+		camera.Transform.SetPosition(0, 40, -120*float64(orientation))
+		camera.Transform.SetRotation(0, 0, 0)
+		camera.Far = 400.0
+	case DemoLineOfSight:
+		camera.Transform.SetPosition(0, 30, -80*float64(orientation))
+		camera.Transform.SetRotation(0, 0, 0)
+		camera.Far = 300.0
+	case DemoOctree:
+		camera.Transform.SetPosition(0, 50, -100*float64(orientation))
+		camera.Transform.SetRotation(0, 0, 0)
+		camera.Far = 400.0
+	case DemoBVH:
+		camera.Transform.SetPosition(0, 50, -100*float64(orientation))
+		camera.Transform.SetRotation(0, 0, 0)
+		camera.Far = 400.0
+	case DemoOBB:
+		camera.Transform.SetPosition(0, 25, -70*float64(orientation))
+		camera.Transform.SetRotation(0, 0, 0)
+		camera.Far = 300.0
+	case DemoMeshSimplification:
+		camera.Transform.SetPosition(0, 20, -80*float64(orientation))
+		camera.Transform.SetRotation(0, 0, 0)
+		camera.Far = 300.0
+	case DemoSmoothLOD:
+		camera.Transform.SetPosition(0, 50, -150*float64(orientation))
+		camera.Transform.SetRotation(0, 0, 0)
+		camera.Far = 500.0
+	case DemoCombinedAdvanced:
+		camera.Transform.SetPosition(0, 60, -180*float64(orientation))
+		camera.Transform.SetRotation(0, 0, 0)
+		camera.Far = 600.0
+	case DemoTorus:
+		camera.Transform.SetPosition(0, 15, -40*float64(orientation))
+		camera.Transform.SetRotation(0, 0, 0)
+		camera.Far = 200.0
 	default:
 		camera.Transform.SetPosition(0, 10, -60)
 		camera.Transform.SetRotation(0, 0, 0)
@@ -510,6 +597,44 @@ func configureCameraController(controller *CameraController, demoType int) {
 		controller.SetOrbitRadius(200.0)
 		controller.SetOrbitCenter(0, 0, 0)
 		controller.SetOrbitHeight(50.0)
+	case DemoAdvancedSystems:
+		controller.SetOrbitRadius(100.0)
+		controller.SetOrbitCenter(0, 0, 0)
+	case DemoBoundingVolume:
+		controller.SetOrbitRadius(80.0)
+		controller.SetOrbitCenter(0, 0, 0)
+	case DemoPerformanceTest:
+		controller.SetOrbitRadius(150.0)
+		controller.SetOrbitCenter(0, 0, 0)
+		controller.SetOrbitHeight(40.0)
+	case DemoLineOfSight:
+		controller.SetOrbitRadius(100.0)
+		controller.SetOrbitCenter(0, 0, 0)
+	case DemoOctree:
+		controller.SetOrbitRadius(120.0)
+		controller.SetOrbitCenter(0, 0, 0)
+		controller.SetOrbitHeight(50.0)
+	case DemoBVH:
+		controller.SetOrbitRadius(120.0)
+		controller.SetOrbitCenter(0, 0, 0)
+		controller.SetOrbitHeight(50.0)
+	case DemoOBB:
+		controller.SetOrbitRadius(90.0)
+		controller.SetOrbitCenter(0, 0, 0)
+	case DemoMeshSimplification:
+		controller.SetOrbitRadius(100.0)
+		controller.SetOrbitCenter(0, 0, 0)
+	case DemoSmoothLOD:
+		controller.SetOrbitRadius(180.0)
+		controller.SetOrbitCenter(0, 0, 0)
+		controller.SetOrbitHeight(50.0)
+	case DemoCombinedAdvanced:
+		controller.SetOrbitRadius(220.0)
+		controller.SetOrbitCenter(0, 0, 0)
+		controller.SetOrbitHeight(60.0)
+	case DemoTorus:
+		controller.SetOrbitRadius(60.0)
+		controller.SetOrbitCenter(0, 0, 0)
 	default:
 		controller.SetOrbitRadius(80.0)
 		controller.SetOrbitCenter(0, 0, 0)
@@ -547,10 +672,34 @@ func buildScene(scene *Scene, demoType int, material Material) {
 		WireframeDemo(scene, material)
 	case DemoStressTest:
 		StressTestDemo(scene)
+	case DemoAdvancedSystems:
+		AdvancedSystemsDemo(scene)
+	case DemoBoundingVolume:
+		BoundingVolumeDemo(scene)
+	case DemoPerformanceTest:
+		PerformanceTestDemo(scene)
+	case DemoLineOfSight:
+		LineOfSightDemo(scene)
+	case DemoOctree:
+		OctreeDemo(scene)
+	case DemoBVH:
+		BVHDemo(scene)
+	case DemoOBB:
+		OBBDemo(scene)
+	case DemoMeshSimplification:
+		MeshSimplificationDemo(scene)
+	case DemoSmoothLOD:
+		SmoothLODDemo(scene)
+	case DemoCombinedAdvanced:
+		CombinedAdvancedDemo(scene)
+	case DemoTorus:
+		TorusDemo(scene)
 	}
 }
 
 func animateSceneDemo(scene *Scene, demoType int, time float64) {
+	dt := 1.0 / 60.0 // Approximate delta time
+
 	switch demoType {
 	case DemoSolarSystem:
 		AnimateSolarSystem(scene)
@@ -568,5 +717,27 @@ func animateSceneDemo(scene *Scene, demoType int, time float64) {
 		AnimateWireframe(scene, time)
 	case DemoStressTest:
 		AnimateStressTest(scene, time)
+	case DemoAdvancedSystems:
+		AnimateAdvancedSystems(scene, time)
+	case DemoBoundingVolume:
+		AnimateBoundingVolume(scene, time)
+	case DemoPerformanceTest:
+		AnimatePerformanceTest(scene, time)
+	case DemoLineOfSight:
+		AnimateLineOfSight(scene, time)
+	case DemoOctree:
+		AnimateOctree(scene, time)
+	case DemoBVH:
+		AnimateBVH(scene, time)
+	case DemoOBB:
+		AnimateOBB(scene, time)
+	case DemoMeshSimplification:
+		AnimateMeshSimplification(scene, time)
+	case DemoSmoothLOD:
+		AnimateSmoothLOD(scene, time)
+	case DemoCombinedAdvanced:
+		AnimateCombinedAdvanced(scene, time)
+	case DemoTorus:
+		UpdateTorusDemo(scene, dt)
 	}
 }

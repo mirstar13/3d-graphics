@@ -41,4 +41,7 @@ type RenderContext struct {
 	Camera         *Camera
 	LightingSystem *LightingSystem
 	ViewFrustum    *ViewFrustum // For culling
+	Time           float64      // For time-based effects
+	FrameNumber    uint64       // For frame-based effects
+	DeltaTime      float64      // Time since last frame
 }

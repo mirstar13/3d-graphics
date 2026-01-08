@@ -51,11 +51,6 @@ func (t *Transform) MarkDirty() {
 	}
 }
 
-func (t *Transform) markChildrenDirty() {
-	// This will be called by SceneNode to mark children
-	// We can't do it here because Transform doesn't know about SceneNode
-}
-
 // SetPosition sets the local position
 func (t *Transform) SetPosition(x, y, z float64) {
 	t.Position.X = x

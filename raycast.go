@@ -174,15 +174,14 @@ func (s *Scene) raycastObject(node *SceneNode, ray Ray, closestHit *RayHit) {
 
 	case *Mesh:
 		// Test all triangles in mesh
-		for _, tri := range obj.Triangles {
-			s.testTriangle(tri, ray, node, closestHit)
-		}
-
-		// Test quads
-		for _, quad := range obj.Quads {
-			triangles := ConvertQuadToTriangles(quad)
-			for _, tri := range triangles {
-				s.testTriangle(tri, ray, node, closestHit)
+		for i := 0; i < len(obj.Indices); i += 3 {
+			if i+2 < len(obj.Indices) {
+				idx0, idx1, idx2 := obj.Indices[i], obj.Indices[i+1], obj.Indices[i+2]
+				if idx0 < len(obj.Vertices) && idx1 < len(obj.Vertices) && idx2 < len(obj.Vertices) {
+					tri := NewTriangle(obj.Vertices[idx0], obj.Vertices[idx1], obj.Vertices[idx2], 'o')
+					tri.Material = obj.Material
+					s.testTriangle(tri, ray, node, closestHit)
+				}
 			}
 		}
 	}
@@ -269,20 +268,28 @@ func (s *Scene) raycastObjectAll(node *SceneNode, ray Ray, maxDistance float64, 
 		}
 
 	case *Mesh:
-		for _, tri := range obj.Triangles {
-			hit, distance, _, _ := ray.IntersectsTriangle(tri)
-			if hit && distance > 0 && distance < maxDistance {
-				hitPoint := ray.GetPoint(distance)
-				normal := CalculateSurfaceNormal(&tri.P0, &tri.P1, &tri.P2, tri.Normal, tri.UseSetNormal)
+		for i := 0; i < len(obj.Indices); i += 3 {
+			if i+2 < len(obj.Indices) {
+				idx0, idx1, idx2 := obj.Indices[i], obj.Indices[i+1], obj.Indices[i+2]
+				if idx0 < len(obj.Vertices) && idx1 < len(obj.Vertices) && idx2 < len(obj.Vertices) {
+					tri := NewTriangle(obj.Vertices[idx0], obj.Vertices[idx1], obj.Vertices[idx2], 'o')
+					tri.Material = obj.Material
 
-				*hits = append(*hits, RayHit{
-					Hit:      true,
-					Distance: distance,
-					Point:    hitPoint,
-					Normal:   normal,
-					Node:     node,
-					Triangle: tri,
-				})
+					hit, distance, _, _ := ray.IntersectsTriangle(tri)
+					if hit && distance > 0 && distance < maxDistance {
+						hitPoint := ray.GetPoint(distance)
+						normal := CalculateSurfaceNormal(&tri.P0, &tri.P1, &tri.P2, tri.Normal, tri.UseSetNormal)
+
+						*hits = append(*hits, RayHit{
+							Hit:      true,
+							Distance: distance,
+							Point:    hitPoint,
+							Normal:   normal,
+							Node:     node,
+							Triangle: tri,
+						})
+					}
+				}
 			}
 		}
 	}

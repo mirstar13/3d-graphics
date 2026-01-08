@@ -133,7 +133,7 @@ func SimplifyMeshQEM(mesh *Mesh, targetTriangleCount int) *Mesh {
 	}
 
 	// Convert back to regular mesh
-	return simpMesh.toMesh(mesh.Triangles[0].Material)
+	return simpMesh.toMesh(mesh.Material)
 }
 
 // buildSimplificationMesh creates a simplification mesh from a regular mesh
@@ -173,11 +173,16 @@ func buildSimplificationMesh(mesh *Mesh) *SimplificationMesh {
 	}
 
 	// Add all triangles
-	for _, tri := range mesh.Triangles {
-		v0 := getVertex(tri.P0)
-		v1 := getVertex(tri.P1)
-		v2 := getVertex(tri.P2)
-		simpMesh.Triangles = append(simpMesh.Triangles, [3]int{v0, v1, v2})
+	for i := 0; i < len(mesh.Indices); i += 3 {
+		if i+2 < len(mesh.Indices) {
+			idx0, idx1, idx2 := mesh.Indices[i], mesh.Indices[i+1], mesh.Indices[i+2]
+			if idx0 < len(mesh.Vertices) && idx1 < len(mesh.Vertices) && idx2 < len(mesh.Vertices) {
+				v0 := getVertex(mesh.Vertices[idx0])
+				v1 := getVertex(mesh.Vertices[idx1])
+				v2 := getVertex(mesh.Vertices[idx2])
+				simpMesh.Triangles = append(simpMesh.Triangles, [3]int{v0, v1, v2})
+			}
+		}
 	}
 
 	// Build edge list
@@ -358,15 +363,22 @@ func (sm *SimplificationMesh) collapseEdge(edge *SimplificationEdge) bool {
 // toMesh converts back to regular mesh
 func (sm *SimplificationMesh) toMesh(material Material) *Mesh {
 	mesh := NewMesh()
+	mesh.Material = material
 
+	// Build vertex map
+	vertexMap := make(map[int]int)
 	for _, tri := range sm.Triangles {
-		v0 := sm.Vertices[tri[0]].Position
-		v1 := sm.Vertices[tri[1]].Position
-		v2 := sm.Vertices[tri[2]].Position
+		for _, vIdx := range tri {
+			if _, exists := vertexMap[vIdx]; !exists {
+				vertexMap[vIdx] = len(mesh.Vertices)
+				mesh.Vertices = append(mesh.Vertices, sm.Vertices[vIdx].Position)
+			}
+		}
+	}
 
-		t := NewTriangle(v0, v1, v2, 'x')
-		t.Material = material
-		mesh.AddTriangle(t)
+	// Add indices
+	for _, tri := range sm.Triangles {
+		mesh.Indices = append(mesh.Indices, vertexMap[tri[0]], vertexMap[tri[1]], vertexMap[tri[2]])
 	}
 
 	return mesh
@@ -375,7 +387,11 @@ func (sm *SimplificationMesh) toMesh(material Material) *Mesh {
 // SimplifyMeshClustering simplifies using vertex clustering
 func SimplifyMeshClustering(mesh *Mesh, gridSize float64) *Mesh {
 	// Compute bounds
-	bounds := ComputeMeshBounds(mesh)
+	boundsVol := ComputeMeshBounds(mesh)
+	bounds, ok := boundsVol.(*AABB)
+	if !ok {
+		return mesh
+	}
 
 	// Create grid
 	clusters := make(map[[3]int][]Point)
@@ -391,8 +407,13 @@ func SimplifyMeshClustering(mesh *Mesh, gridSize float64) *Mesh {
 
 	// Assign vertices to clusters
 	allPoints := make([]Point, 0)
-	for _, tri := range mesh.Triangles {
-		allPoints = append(allPoints, tri.P0, tri.P1, tri.P2)
+	for i := 0; i < len(mesh.Indices); i += 3 {
+		if i+2 < len(mesh.Indices) {
+			idx0, idx1, idx2 := mesh.Indices[i], mesh.Indices[i+1], mesh.Indices[i+2]
+			if idx0 < len(mesh.Vertices) && idx1 < len(mesh.Vertices) && idx2 < len(mesh.Vertices) {
+				allPoints = append(allPoints, mesh.Vertices[idx0], mesh.Vertices[idx1], mesh.Vertices[idx2])
+			}
+		}
 	}
 
 	for _, p := range allPoints {
@@ -417,20 +438,40 @@ func SimplifyMeshClustering(mesh *Mesh, gridSize float64) *Mesh {
 
 	// Build simplified mesh
 	simplified := NewMesh()
+	simplified.Material = mesh.Material
 
-	for _, tri := range mesh.Triangles {
-		v0 := representatives[hashPoint(tri.P0)]
-		v1 := representatives[hashPoint(tri.P1)]
-		v2 := representatives[hashPoint(tri.P2)]
+	vertexMap := make(map[Point]int)
 
-		// Skip degenerate triangles
-		if pointsEqual(v0, v1) || pointsEqual(v1, v2) || pointsEqual(v2, v0) {
-			continue
+	for i := 0; i < len(mesh.Indices); i += 3 {
+		if i+2 < len(mesh.Indices) {
+			idx0, idx1, idx2 := mesh.Indices[i], mesh.Indices[i+1], mesh.Indices[i+2]
+			if idx0 < len(mesh.Vertices) && idx1 < len(mesh.Vertices) && idx2 < len(mesh.Vertices) {
+				v0 := representatives[hashPoint(mesh.Vertices[idx0])]
+				v1 := representatives[hashPoint(mesh.Vertices[idx1])]
+				v2 := representatives[hashPoint(mesh.Vertices[idx2])]
+
+				// Skip degenerate triangles
+				if pointsEqual(v0, v1) || pointsEqual(v1, v2) || pointsEqual(v2, v0) {
+					continue
+				}
+
+				// Get or add vertices to the simplified mesh
+				getOrAddVertex := func(v Point) int {
+					if idx, exists := vertexMap[v]; exists {
+						return idx
+					}
+					idx := len(simplified.Vertices)
+					simplified.Vertices = append(simplified.Vertices, v)
+					vertexMap[v] = idx
+					return idx
+				}
+
+				i0 := getOrAddVertex(v0)
+				i1 := getOrAddVertex(v1)
+				i2 := getOrAddVertex(v2)
+				simplified.Indices = append(simplified.Indices, i0, i1, i2)
+			}
 		}
-
-		t := NewTriangle(v0, v1, v2, tri.char)
-		t.Material = tri.Material
-		simplified.AddTriangle(t)
 	}
 
 	return simplified
@@ -457,18 +498,22 @@ func GenerateAdvancedLODChain(baseMesh *Mesh, numLevels int, useQEM bool) *LODGr
 		var simplifiedMesh *Mesh
 		if useQEM {
 			// Use quadric error metrics (slower but better quality)
-			targetTris := int(float64(len(baseMesh.Triangles)) * targetRatio)
+			targetTris := int(float64(len(baseMesh.Indices)/3) * targetRatio)
 			if targetTris < 4 {
 				targetTris = 4
 			}
 			simplifiedMesh = SimplifyMeshQEM(baseMesh, targetTris)
 		} else {
 			// Use vertex clustering (faster but lower quality)
-			bounds := ComputeMeshBounds(baseMesh)
-			size := bounds.GetSize()
-			avgSize := (size.X + size.Y + size.Z) / 3.0
-			gridSize := avgSize * (1.0 - targetRatio) * 0.5
-			simplifiedMesh = SimplifyMeshClustering(baseMesh, gridSize)
+			boundsVol := ComputeMeshBounds(baseMesh)
+			if aabb, ok := boundsVol.(*AABB); ok {
+				size := aabb.GetSize()
+				avgSize := (size.X + size.Y + size.Z) / 3.0
+				gridSize := avgSize * (1.0 - targetRatio) * 0.5
+				simplifiedMesh = SimplifyMeshClustering(baseMesh, gridSize)
+			} else {
+				simplifiedMesh = SimplifyMesh(baseMesh, targetRatio)
+			}
 		}
 
 		distance := 50.0 * float64(i+1)
@@ -485,16 +530,20 @@ func SimplifyMeshToRatio(mesh *Mesh, ratio float64, useQEM bool) *Mesh {
 	}
 
 	if useQEM {
-		targetTris := int(float64(len(mesh.Triangles)) * ratio)
+		targetTris := int(float64(len(mesh.Indices)/3) * ratio)
 		if targetTris < 4 {
 			targetTris = 4
 		}
 		return SimplifyMeshQEM(mesh, targetTris)
 	}
 
-	bounds := ComputeMeshBounds(mesh)
-	size := bounds.GetSize()
-	avgSize := (size.X + size.Y + size.Z) / 3.0
-	gridSize := avgSize * (1.0 - ratio) * 0.5
-	return SimplifyMeshClustering(mesh, gridSize)
+	boundsVol := ComputeMeshBounds(mesh)
+	if aabb, ok := boundsVol.(*AABB); ok {
+		size := aabb.GetSize()
+		avgSize := (size.X + size.Y + size.Z) / 3.0
+		gridSize := avgSize * (1.0 - ratio) * 0.5
+		return SimplifyMeshClustering(mesh, gridSize)
+	}
+
+	return SimplifyMesh(mesh, ratio)
 }

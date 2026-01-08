@@ -221,8 +221,11 @@ func (ot *Octree) getObjectBounds(node *SceneNode) *AABB {
 
 	switch obj := node.Object.(type) {
 	case *Mesh:
-		localBounds := ComputeMeshBounds(obj)
-		return TransformAABB(localBounds, worldTransform)
+		localBoundsVol := ComputeMeshBounds(obj)
+		if aabb, ok := localBoundsVol.(*AABB); ok {
+			return TransformAABB(aabb, worldTransform)
+		}
+		return NewAABB(Point{}, Point{})
 	case *LODGroup:
 		if obj.BoundingVolume != nil {
 			if aabb, ok := obj.BoundingVolume.(*AABB); ok {
@@ -482,8 +485,11 @@ func (bvh *BVH) computeObjectBounds(node *SceneNode) *AABB {
 
 	switch obj := node.Object.(type) {
 	case *Mesh:
-		localBounds := ComputeMeshBounds(obj)
-		return TransformAABB(localBounds, worldTransform)
+		localBoundsVol := ComputeMeshBounds(obj)
+		if aabb, ok := localBoundsVol.(*AABB); ok {
+			return TransformAABB(aabb, worldTransform)
+		}
+		return NewAABB(Point{}, Point{})
 	case *LODGroup:
 		if obj.BoundingVolume != nil {
 			if aabb, ok := obj.BoundingVolume.(*AABB); ok {
@@ -579,8 +585,11 @@ func (s *Scene) computeNodeBounds(node *SceneNode) *AABB {
 
 	switch obj := node.Object.(type) {
 	case *Mesh:
-		localBounds := ComputeMeshBounds(obj)
-		return TransformAABB(localBounds, worldTransform)
+		localBoundsVol := ComputeMeshBounds(obj)
+		if aabb, ok := localBoundsVol.(*AABB); ok {
+			return TransformAABB(aabb, worldTransform)
+		}
+		return NewAABB(Point{}, Point{})
 	case *LODGroup:
 		if obj.BoundingVolume != nil {
 			if aabb, ok := obj.BoundingVolume.(*AABB); ok {

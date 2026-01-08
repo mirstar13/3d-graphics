@@ -521,6 +521,25 @@ func (r *OpenGLRenderer) RenderTriangle(tri *Triangle, worldMatrix Matrix4x4, ca
 	// Get color
 	color := tri.Material.DiffuseColor
 
+	// Check if wireframe mode
+	if tri.Material.Wireframe {
+		// Render as lines (edges only)
+		rf := float32(color.R) / 255.0
+		gf := float32(color.G) / 255.0
+		bf := float32(color.B) / 255.0
+
+		// Add three edges
+		r.addLineVertex(p0, rf, gf, bf)
+		r.addLineVertex(p1, rf, gf, bf)
+
+		r.addLineVertex(p1, rf, gf, bf)
+		r.addLineVertex(p2, rf, gf, bf)
+
+		r.addLineVertex(p2, rf, gf, bf)
+		r.addLineVertex(p0, rf, gf, bf)
+		return
+	}
+
 	// Apply simple lighting if available
 	if r.LightingSystem != nil {
 		// Calculate normal
@@ -571,32 +590,95 @@ func (r *OpenGLRenderer) RenderTriangle(tri *Triangle, worldMatrix Matrix4x4, ca
 }
 
 func (r *OpenGLRenderer) RenderMesh(mesh *Mesh, worldMatrix Matrix4x4, camera *Camera) {
-	// Render all triangles
-	for _, tri := range mesh.Triangles {
-		// Offset by mesh position
-		offsetTri := &Triangle{
-			P0:           Point{X: tri.P0.X + mesh.Position.X, Y: tri.P0.Y + mesh.Position.Y, Z: tri.P0.Z + mesh.Position.Z},
-			P1:           Point{X: tri.P1.X + mesh.Position.X, Y: tri.P1.Y + mesh.Position.Y, Z: tri.P1.Z + mesh.Position.Z},
-			P2:           Point{X: tri.P2.X + mesh.Position.X, Y: tri.P2.Y + mesh.Position.Y, Z: tri.P2.Z + mesh.Position.Z},
-			Material:     tri.Material,
-			Normal:       tri.Normal,
-			UseSetNormal: tri.UseSetNormal,
-		}
-		r.RenderTriangle(offsetTri, worldMatrix, camera)
-	}
+	// Check if wireframe mode
+	isWireframe := mesh.Material.Wireframe
 
-	// Render all quads
-	for _, quad := range mesh.Quads {
-		offsetQuad := &Quad{
-			P0:           Point{X: quad.P0.X + mesh.Position.X, Y: quad.P0.Y + mesh.Position.Y, Z: quad.P0.Z + mesh.Position.Z},
-			P1:           Point{X: quad.P1.X + mesh.Position.X, Y: quad.P1.Y + mesh.Position.Y, Z: quad.P1.Z + mesh.Position.Z},
-			P2:           Point{X: quad.P2.X + mesh.Position.X, Y: quad.P2.Y + mesh.Position.Y, Z: quad.P2.Z + mesh.Position.Z},
-			P3:           Point{X: quad.P3.X + mesh.Position.X, Y: quad.P3.Y + mesh.Position.Y, Z: quad.P3.Z + mesh.Position.Z},
-			Material:     quad.Material,
-			Normal:       quad.Normal,
-			UseSetNormal: quad.UseSetNormal,
+	// Iterate over indices in groups of 3 (Triangles)
+	for i := 0; i < len(mesh.Indices); i += 3 {
+		if i+2 >= len(mesh.Indices) {
+			break
 		}
-		r.renderQuad(offsetQuad, worldMatrix, camera)
+
+		idx0 := mesh.Indices[i]
+		idx1 := mesh.Indices[i+1]
+		idx2 := mesh.Indices[i+2]
+
+		// Lookup vertices
+		v0 := mesh.Vertices[idx0]
+		v1 := mesh.Vertices[idx1]
+		v2 := mesh.Vertices[idx2]
+
+		// Apply Mesh Position Offset (Model Space -> World Space part 1)
+		p0 := Point{X: v0.X + mesh.Position.X, Y: v0.Y + mesh.Position.Y, Z: v0.Z + mesh.Position.Z}
+		p1 := Point{X: v1.X + mesh.Position.X, Y: v1.Y + mesh.Position.Y, Z: v1.Z + mesh.Position.Z}
+		p2 := Point{X: v2.X + mesh.Position.X, Y: v2.Y + mesh.Position.Y, Z: v2.Z + mesh.Position.Z}
+
+		// Transform to final World Space (part 2)
+		finalP0 := worldMatrix.TransformPoint(p0)
+		finalP1 := worldMatrix.TransformPoint(p1)
+		finalP2 := worldMatrix.TransformPoint(p2)
+
+		// Get color
+		color := mesh.Material.DiffuseColor
+
+		// If wireframe, render as lines
+		if isWireframe {
+			rf := float32(color.R) / 255.0
+			gf := float32(color.G) / 255.0
+			bf := float32(color.B) / 255.0
+
+			// Add three edges
+			r.addLineVertex(finalP0, rf, gf, bf)
+			r.addLineVertex(finalP1, rf, gf, bf)
+
+			r.addLineVertex(finalP1, rf, gf, bf)
+			r.addLineVertex(finalP2, rf, gf, bf)
+
+			r.addLineVertex(finalP2, rf, gf, bf)
+			r.addLineVertex(finalP0, rf, gf, bf)
+			continue
+		}
+
+		// Basic lighting for filled triangles
+		if r.LightingSystem != nil {
+			// Calculate Normal
+			normal := CalculateSurfaceNormal(&p0, &p1, &p2, nil, false)
+			worldNormal := worldMatrix.TransformDirection(normal)
+
+			// ... (Copy lighting logic from RenderTriangle) ...
+			intensity := 0.3
+			for _, light := range r.LightingSystem.Lights {
+				if !light.IsEnabled {
+					continue
+				}
+
+				// Simple centroid approximation
+				centerX := (finalP0.X + finalP1.X + finalP2.X) / 3.0
+				centerY := (finalP0.Y + finalP1.Y + finalP2.Y) / 3.0
+				centerZ := (finalP0.Z + finalP1.Z + finalP2.Z) / 3.0
+
+				lx, ly, lz := normalizeVector(light.Position.X-centerX, light.Position.Y-centerY, light.Position.Z-centerZ)
+				diff := dotProduct(worldNormal.X, worldNormal.Y, worldNormal.Z, lx, ly, lz)
+				if diff > 0 {
+					intensity += diff * light.Intensity * 0.7
+				}
+			}
+			if intensity > 1.0 {
+				intensity = 1.0
+			}
+
+			color = Color{
+				R: uint8(float64(color.R) * intensity),
+				G: uint8(float64(color.G) * intensity),
+				B: uint8(float64(color.B) * intensity),
+			}
+		}
+
+		rf, gf, bf := float32(color.R)/255.0, float32(color.G)/255.0, float32(color.B)/255.0
+
+		r.addVertex(finalP0, rf, gf, bf)
+		r.addVertex(finalP1, rf, gf, bf)
+		r.addVertex(finalP2, rf, gf, bf)
 	}
 }
 

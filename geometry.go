@@ -325,19 +325,21 @@ func (c *Circle) RotateLocal(axis byte, angle float64) {
 // MESH
 // ============================================================================
 
-// Mesh represents a collection of triangles and quads (pure data)
+// Mesh represents a collection of indexed vertices
 type Mesh struct {
-	Triangles []*Triangle
-	Quads     []*Quad
-	Position  Point
+	Vertices []Point
+	Indices  []int
+	Position Point
+	Material Material // Added to store material for the whole mesh
 }
 
 // NewMesh creates a new mesh
 func NewMesh() *Mesh {
 	return &Mesh{
-		Triangles: make([]*Triangle, 0),
-		Quads:     make([]*Quad, 0),
-		Position:  *NewPoint(0, 0, 0),
+		Vertices: make([]Point, 0),
+		Indices:  make([]int, 0),
+		Position: *NewPoint(0, 0, 0),
+		Material: NewMaterial(),
 	}
 }
 
@@ -346,33 +348,42 @@ func (m *Mesh) SetPosition(x, y, z float64) {
 	m.Position = *NewPoint(x, y, z)
 }
 
-// AddTriangle adds a triangle to the mesh
-func (m *Mesh) AddTriangle(t *Triangle) {
-	m.Triangles = append(m.Triangles, t)
+// AddVertex adds a raw vertex to the mesh and returns its index
+func (m *Mesh) AddVertex(x, y, z float64) int {
+	m.Vertices = append(m.Vertices, Point{X: x, Y: y, Z: z})
+	return len(m.Vertices) - 1
 }
 
-// AddQuad adds a quad to the mesh
-func (m *Mesh) AddQuad(q *Quad) {
-	m.Quads = append(m.Quads, q)
+// AddIndex adds a single index to the mesh
+func (m *Mesh) AddIndex(i int) {
+	m.Indices = append(m.Indices, i)
+}
+
+// AddTriangleIndices adds 3 indices to form a triangle
+func (m *Mesh) AddTriangleIndices(i1, i2, i3 int) {
+	m.Indices = append(m.Indices, i1, i2, i3)
+}
+
+// AddQuadIndices adds two triangles (6 indices) to form a quad
+func (m *Mesh) AddQuadIndices(i1, i2, i3, i4 int) {
+	// Triangle 1
+	m.Indices = append(m.Indices, i1, i2, i3)
+	// Triangle 2
+	m.Indices = append(m.Indices, i1, i3, i4)
 }
 
 // RotateGlobal rotates all geometry around world origin
 func (m *Mesh) RotateGlobal(axis byte, angle float64) {
-	for _, q := range m.Quads {
-		q.RotateGlobal(axis, angle)
-	}
-	for _, t := range m.Triangles {
-		t.RotateGlobal(axis, angle)
+	for i := range m.Vertices {
+		m.Vertices[i].Rotate(axis, angle)
 	}
 }
 
 // RotateLocal rotates all geometry around local origin
 func (m *Mesh) RotateLocal(axis byte, angle float64) {
-	for _, q := range m.Quads {
-		q.RotateGlobal(axis, angle) // Quads are defined locally
-	}
-	for _, t := range m.Triangles {
-		t.RotateGlobal(axis, angle)
+	// For indexed meshes, local rotation is just rotating the vertex offsets
+	for i := range m.Vertices {
+		m.Vertices[i].Rotate(axis, angle)
 	}
 }
 

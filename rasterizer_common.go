@@ -2,11 +2,12 @@ package main
 
 // SurfaceRenderContext holds all the data needed for rendering a surface
 type SurfaceRenderContext struct {
-	Camera       *Camera
-	Normal       Point
-	SurfacePoint Point
-	Material     Material
-	DZ           float64
+	Camera         *Camera
+	LightingSystem *LightingSystem
+	Normal         Point
+	SurfacePoint   Point
+	Material       Material
+	DZ             float64
 }
 
 // CalculateSurfaceNormal calculates the normal vector for a surface
@@ -50,56 +51,40 @@ func CalculateSurfaceLighting(ctx SurfaceRenderContext) (Color, rune) {
 
 	var pixelColor Color
 
-	if ctx.Camera != nil {
-		// Use camera's lighting system if available
-		ls := ctx.Camera.Transform.Parent // This is a hack - we need to pass lighting system properly
-		_ = ls                            // Unused for now
-	}
+	// Use proper lighting system if available
+	if ctx.LightingSystem != nil {
+		pixelColor = ctx.LightingSystem.CalculateLighting(ctx.SurfacePoint, ctx.Normal, ctx.Material, ao)
+	} else {
+		// Fallback to simple lighting if no lighting system
+		lx, ly, lz := -1.0, 1.0, -1.0
+		lx, ly, lz = normalizeVector(lx, ly, lz)
+		intensity := dotProduct(ctx.Normal.X, ctx.Normal.Y, ctx.Normal.Z, lx, ly, lz)
+		if intensity < 0 {
+			intensity = 0
+		}
 
-	// For now, use simple lighting (we'll fix this in a future refactor)
-	lx, ly, lz := -1.0, 1.0, -1.0
-	lx, ly, lz = normalizeVector(lx, ly, lz)
-	intensity := dotProduct(ctx.Normal.X, ctx.Normal.Y, ctx.Normal.Z, lx, ly, lz)
-	if intensity < 0 {
-		intensity = 0
-	}
+		// Apply AO
+		intensity *= ao
 
-	// Apply AO
-	intensity *= ao
+		// Simple color based on material
+		baseR := float64(ctx.Material.DiffuseColor.R)
+		baseG := float64(ctx.Material.DiffuseColor.G)
+		baseB := float64(ctx.Material.DiffuseColor.B)
 
-	// Simple color based on material
-	baseR := float64(ctx.Material.DiffuseColor.R)
-	baseG := float64(ctx.Material.DiffuseColor.G)
-	baseB := float64(ctx.Material.DiffuseColor.B)
+		finalR := baseR * intensity
+		finalG := baseG * intensity
+		finalB := baseB * intensity
 
-	finalR := baseR * intensity
-	finalG := baseG * intensity
-	finalB := baseB * intensity
+		// Clamp before converting to uint8
+		finalR = clampFloat(finalR, 0, 255)
+		finalG = clampFloat(finalG, 0, 255)
+		finalB = clampFloat(finalB, 0, 255)
 
-	// Clamp before converting to uint8
-	if finalR < 0 {
-		finalR = 0
-	}
-	if finalR > 255 {
-		finalR = 255
-	}
-	if finalG < 0 {
-		finalG = 0
-	}
-	if finalG > 255 {
-		finalG = 255
-	}
-	if finalB < 0 {
-		finalB = 0
-	}
-	if finalB > 255 {
-		finalB = 255
-	}
-
-	pixelColor = Color{
-		R: uint8(finalR),
-		G: uint8(finalG),
-		B: uint8(finalB),
+		pixelColor = Color{
+			R: uint8(finalR),
+			G: uint8(finalG),
+			B: uint8(finalB),
+		}
 	}
 
 	// Calculate fill character based on brightness

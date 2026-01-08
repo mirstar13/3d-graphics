@@ -914,8 +914,15 @@ func (r *VulkanRenderer) addTriangleVertices(tri *Triangle, worldMatrix Matrix4x
 }
 
 func (r *VulkanRenderer) addMeshVertices(mesh *Mesh, worldMatrix Matrix4x4, camera *Camera) {
-	for _, tri := range mesh.Triangles {
-		r.addTriangleVertices(tri, worldMatrix, camera)
+	for i := 0; i < len(mesh.Indices); i += 3 {
+		if i+2 < len(mesh.Indices) {
+			idx0, idx1, idx2 := mesh.Indices[i], mesh.Indices[i+1], mesh.Indices[i+2]
+			if idx0 < len(mesh.Vertices) && idx1 < len(mesh.Vertices) && idx2 < len(mesh.Vertices) {
+				tri := NewTriangle(mesh.Vertices[idx0], mesh.Vertices[idx1], mesh.Vertices[idx2], 'o')
+				tri.Material = mesh.Material
+				r.addTriangleVertices(tri, worldMatrix, camera)
+			}
+		}
 	}
 }
 

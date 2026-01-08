@@ -45,6 +45,11 @@ func (m Matrix4x4) TransformPoint(p Point) Point {
 	return Point{X: x, Y: y, Z: z}
 }
 
+// MultiplyPoint is an alias for TransformPoint for compatibility
+func (m Matrix4x4) MultiplyPoint(p Point) Point {
+	return m.TransformPoint(p)
+}
+
 // TransformDirection transforms a direction vector (ignores translation)
 func (m Matrix4x4) TransformDirection(d Point) Point {
 	x := m.M[0]*d.X + m.M[1]*d.Y + m.M[2]*d.Z
@@ -147,4 +152,23 @@ func (m Matrix4x4) Invert() Matrix4x4 {
 	}
 
 	return inv
+}
+
+// CreateOrthographicMatrix creates an orthographic projection matrix
+func CreateOrthographicMatrix(left, right, bottom, top, near, far float64) Matrix4x4 {
+	mat := Matrix4x4{}
+	
+	// Scale
+	mat.M[0] = 2.0 / (right - left)
+	mat.M[5] = 2.0 / (top - bottom)
+	mat.M[10] = -2.0 / (far - near)
+	
+	// Translation
+	mat.M[3] = -(right + left) / (right - left)
+	mat.M[7] = -(top + bottom) / (top - bottom)
+	mat.M[11] = -(far + near) / (far - near)
+	
+	mat.M[15] = 1.0
+	
+	return mat
 }

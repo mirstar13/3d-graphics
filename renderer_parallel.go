@@ -204,7 +204,13 @@ func (pr *ParallelRenderer) RenderBatched(scene *Scene) {
 		var aabb *AABB
 		switch obj := node.Object.(type) {
 		case *Mesh:
-			aabb = ComputeMeshBounds(obj)
+			boundsVol := ComputeMeshBounds(obj)
+			if a, ok := boundsVol.(*AABB); ok {
+				aabb = a
+			} else {
+				pos := node.Transform.GetWorldPosition()
+				aabb = NewAABB(pos, pos)
+			}
 		case *Triangle:
 			aabb = ComputeTriangleBounds(obj)
 		default:

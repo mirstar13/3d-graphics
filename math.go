@@ -2,11 +2,66 @@ package main
 
 import "math"
 
+func clampFloat(x, min, max float64) float64 {
+	if x < min {
+		return min
+	}
+	if x > max {
+		return max
+	}
+	return x
+}
+
+func clampInt(x, min, max int) int {
+	if x < min {
+		return min
+	}
+	if x > max {
+		return max
+	}
+	return x
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func absInt(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+func absFloat(x float64) float64 {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
 func normalize(height, width, x, y int) (int, int) {
 	screenX := (width / 2) + (x * ASPECT_RATIO)
 	screenY := (height / 2) - y
 
 	return screenX, screenY
+}
+
+func absIntOld(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
 }
 
 func abs(x int) int {
@@ -72,24 +127,7 @@ func Interpolate(i0, d0, i1, d1 float64) []float64 {
 
 // clamp constrains a value between min and max
 func clamp(value, min, max float64) float64 {
-	if value < min {
-		return min
-	}
-	if value > max {
-		return max
-	}
-	return value
-}
-
-// clampInt constrains an integer value between min and max
-func clampInt(value, min, max int) int {
-	if value < min {
-		return min
-	}
-	if value > max {
-		return max
-	}
-	return value
+	return clampFloat(value, min, max)
 }
 
 // InterpolateInt interpolates integer values between two integer endpoints
@@ -98,7 +136,7 @@ func InterpolateInt(i0, d0, i1, d1 int) []int {
 		return []int{d0}
 	}
 
-	values := make([]int, 0, abs(i1-i0)+1)
+	values := make([]int, 0, absInt(i1-i0)+1)
 	a := float64(d1-d0) / float64(i1-i0)
 	d := float64(d0)
 
@@ -116,7 +154,7 @@ func InterpolateFloat(i0 int, d0 float64, i1 int, d1 float64) []float64 {
 		return []float64{d0}
 	}
 
-	values := make([]float64, 0, abs(i1-i0)+1)
+	values := make([]float64, 0, absInt(i1-i0)+1)
 	a := (d1 - d0) / float64(i1-i0)
 	d := d0
 
@@ -134,7 +172,7 @@ func InterpolateFloatAcross(x0 int, d0 float64, x1 int, d1 float64) []float64 {
 		return []float64{d0}
 	}
 
-	values := make([]float64, 0, abs(x1-x0)+1)
+	values := make([]float64, 0, absInt(x1-x0)+1)
 	a := (d1 - d0) / float64(x1-x0)
 	d := d0
 

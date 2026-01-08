@@ -218,21 +218,24 @@ func SimplifyMesh(mesh *Mesh, targetRatio float64) *Mesh {
 
 	simplified := NewMesh()
 	simplified.Position = mesh.Position
+	simplified.Material = mesh.Material
 
 	skipRate := int(1.0 / targetRatio)
 	if skipRate < 1 {
 		skipRate = 1
 	}
 
-	for i, tri := range mesh.Triangles {
-		if i%skipRate == 0 {
-			simplified.AddTriangle(tri)
-		}
+	// Sample vertices based on skip rate
+	for i := 0; i < len(mesh.Vertices); i += skipRate {
+		simplified.Vertices = append(simplified.Vertices, mesh.Vertices[i])
 	}
 
-	for i, quad := range mesh.Quads {
-		if i%skipRate == 0 {
-			simplified.AddQuad(quad)
+	// Sample indices based on skip rate (triangles are every 3 indices)
+	for i := 0; i < len(mesh.Indices); i += skipRate * 3 {
+		if i+2 < len(mesh.Indices) {
+			// Remap indices to simplified vertex list
+			baseIdx := len(simplified.Indices)
+			simplified.Indices = append(simplified.Indices, baseIdx, baseIdx+1, baseIdx+2)
 		}
 	}
 
@@ -285,8 +288,7 @@ func (s *Scene) GetLODStats() LODStats {
 
 			currentMesh := lodGroup.GetCurrentMesh()
 			if currentMesh != nil {
-				stats.TotalTriangles += len(currentMesh.Triangles)
-				stats.TotalTriangles += len(currentMesh.Quads) * 2
+				stats.TotalTriangles += len(currentMesh.Indices) / 3
 			}
 		}
 	}

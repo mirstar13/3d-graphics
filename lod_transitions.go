@@ -146,28 +146,37 @@ func CreateMorphedMesh(fromMesh, toMesh *Mesh, t float64) *MorphedMesh {
 		Triangles: make([]*Triangle, 0),
 	}
 
-	if len(fromMesh.Triangles) != len(toMesh.Triangles) {
-		morphed.Triangles = fromMesh.Triangles
+	if len(fromMesh.Vertices) != len(toMesh.Vertices) {
+		// If vertex counts don't match, just use from mesh triangles
+		for i := 0; i < len(fromMesh.Indices); i += 3 {
+			if i+2 < len(fromMesh.Indices) {
+				idx0, idx1, idx2 := fromMesh.Indices[i], fromMesh.Indices[i+1], fromMesh.Indices[i+2]
+				if idx0 < len(fromMesh.Vertices) && idx1 < len(fromMesh.Vertices) && idx2 < len(fromMesh.Vertices) {
+					tri := NewTriangle(fromMesh.Vertices[idx0], fromMesh.Vertices[idx1], fromMesh.Vertices[idx2], 'o')
+					tri.Material = fromMesh.Material
+					morphed.Triangles = append(morphed.Triangles, tri)
+				}
+			}
+		}
 		return morphed
 	}
 
-	for i := 0; i < len(fromMesh.Triangles); i++ {
-		fromTri := fromMesh.Triangles[i]
-		toTri := toMesh.Triangles[i]
+	// Interpolate vertices
+	morphed.Vertices = make([]Point, len(fromMesh.Vertices))
+	for i := 0; i < len(fromMesh.Vertices); i++ {
+		morphed.Vertices[i] = lerpPoint(fromMesh.Vertices[i], toMesh.Vertices[i], t)
+	}
 
-		p0 := lerpPoint(fromTri.P0, toTri.P0, t)
-		p1 := lerpPoint(fromTri.P1, toTri.P1, t)
-		p2 := lerpPoint(fromTri.P2, toTri.P2, t)
-
-		tri := NewTriangle(p0, p1, p2, fromTri.char)
-		tri.Material = fromTri.Material
-
-		if fromTri.UseSetNormal && toTri.UseSetNormal {
-			normal := lerpPoint(*fromTri.Normal, *toTri.Normal, t)
-			tri.SetNormal(normal)
+	// Create triangles from morphed vertices using from mesh indices
+	for i := 0; i < len(fromMesh.Indices); i += 3 {
+		if i+2 < len(fromMesh.Indices) {
+			idx0, idx1, idx2 := fromMesh.Indices[i], fromMesh.Indices[i+1], fromMesh.Indices[i+2]
+			if idx0 < len(morphed.Vertices) && idx1 < len(morphed.Vertices) && idx2 < len(morphed.Vertices) {
+				tri := NewTriangle(morphed.Vertices[idx0], morphed.Vertices[idx1], morphed.Vertices[idx2], 'o')
+				tri.Material = fromMesh.Material
+				morphed.Triangles = append(morphed.Triangles, tri)
+			}
 		}
-
-		morphed.Triangles = append(morphed.Triangles, tri)
 	}
 
 	return morphed

@@ -219,7 +219,10 @@ func ComputeNodeBounds(node *SceneNode) *AABB {
 	switch obj := node.Object.(type) {
 	case *Mesh:
 		localBounds := ComputeMeshBounds(obj)
-		return TransformAABB(localBounds, worldTransform)
+		if aabb, ok := localBounds.(*AABB); ok {
+			return TransformAABB(aabb, worldTransform)
+		}
+		return &AABB{}
 
 	case *LODGroup:
 		if obj.BoundingVolume != nil {
@@ -231,7 +234,9 @@ func ComputeNodeBounds(node *SceneNode) *AABB {
 		mesh := obj.GetCurrentMesh()
 		if mesh != nil {
 			localBounds := ComputeMeshBounds(mesh)
-			return TransformAABB(localBounds, worldTransform)
+			if aabb, ok := localBounds.(*AABB); ok {
+				return TransformAABB(aabb, worldTransform)
+			}
 		}
 
 	case *Triangle:
