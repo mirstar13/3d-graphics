@@ -71,7 +71,7 @@ func (ls *LightingSystem) SetCamera(camera *Camera) {
 func (ls *LightingSystem) CalculateLighting(
 	surfacePoint Point,
 	normal Point,
-	material Material,
+	material IMaterial,
 	ambientOcclusion float64,
 ) Color {
 	// Clamp AO to valid range
@@ -83,9 +83,9 @@ func (ls *LightingSystem) CalculateLighting(
 	}
 
 	// Start with ambient light
-	ambientR := float64(ls.AmbientLight.R) * ls.AmbientIntensity * material.AmbientStrength * ambientOcclusion
-	ambientG := float64(ls.AmbientLight.G) * ls.AmbientIntensity * material.AmbientStrength * ambientOcclusion
-	ambientB := float64(ls.AmbientLight.B) * ls.AmbientIntensity * material.AmbientStrength * ambientOcclusion
+	ambientR := float64(ls.AmbientLight.R) * ls.AmbientIntensity * material.GetAmbientStrength() * ambientOcclusion
+	ambientG := float64(ls.AmbientLight.G) * ls.AmbientIntensity * material.GetAmbientStrength() * ambientOcclusion
+	ambientB := float64(ls.AmbientLight.B) * ls.AmbientIntensity * material.GetAmbientStrength() * ambientOcclusion
 
 	totalR := ambientR
 	totalG := ambientG
@@ -149,9 +149,10 @@ func (ls *LightingSystem) CalculateLighting(
 		diffuseIntensity *= light.Intensity * attenuation
 
 		// Add diffuse contribution
-		diffuseR := diffuseIntensity * float64(material.DiffuseColor.R) * float64(light.Color.R) / 255.0
-		diffuseG := diffuseIntensity * float64(material.DiffuseColor.G) * float64(light.Color.G) / 255.0
-		diffuseB := diffuseIntensity * float64(material.DiffuseColor.B) * float64(light.Color.B) / 255.0
+		diffuseColor := material.GetDiffuseColor(0, 0)
+		diffuseR := diffuseIntensity * float64(diffuseColor.R) * float64(light.Color.R) / 255.0
+		diffuseG := diffuseIntensity * float64(diffuseColor.G) * float64(light.Color.G) / 255.0
+		diffuseB := diffuseIntensity * float64(diffuseColor.B) * float64(light.Color.B) / 255.0
 
 		totalR += diffuseR
 		totalG += diffuseG
@@ -185,8 +186,8 @@ func (ls *LightingSystem) CalculateLighting(
 		}
 
 		// Apply shininess (specular exponent)
-		specularIntensity = math.Pow(specularIntensity, material.Shininess)
-		specularIntensity *= material.SpecularStrength * light.Intensity * attenuation
+		specularIntensity = math.Pow(specularIntensity, material.GetShininess())
+		specularIntensity *= material.GetSpecularStrength() * light.Intensity * attenuation
 
 		// Additional clamp to prevent over-bright specular
 		if specularIntensity > 1.0 {
@@ -194,9 +195,10 @@ func (ls *LightingSystem) CalculateLighting(
 		}
 
 		// Add specular contribution
-		specularR := specularIntensity * float64(material.SpecularColor.R) * float64(light.Color.R) / 255.0
-		specularG := specularIntensity * float64(material.SpecularColor.G) * float64(light.Color.G) / 255.0
-		specularB := specularIntensity * float64(material.SpecularColor.B) * float64(light.Color.B) / 255.0
+		specularColor := material.GetSpecularColor()
+		specularR := specularIntensity * float64(specularColor.R) * float64(light.Color.R) / 255.0
+		specularG := specularIntensity * float64(specularColor.G) * float64(light.Color.G) / 255.0
+		specularB := specularIntensity * float64(specularColor.B) * float64(light.Color.B) / 255.0
 
 		totalR += specularR
 		totalG += specularG
@@ -259,7 +261,7 @@ func (l *Light) Rotate(axis byte, angle float64) {
 func (lc *LightingCache) GetOrCalculate(
 	pos Point,
 	normal Point,
-	material Material,
+	material IMaterial,
 	ao float64,
 	ls *LightingSystem,
 ) Color {

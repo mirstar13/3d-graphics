@@ -2,8 +2,10 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"os"
+	"runtime/pprof"
 	"time"
 )
 
@@ -65,6 +67,40 @@ type EngineConfig struct {
 }
 
 func main() {
+	cpuprofile := flag.String("cpuprofile", "", "write cpu profile to file")
+	memprofile := flag.String("memprofile", "", "write memory profile to file")
+	flag.Parse()
+
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			fmt.Printf("could not create CPU profile: %v\n", err)
+			return
+		}
+		defer f.Close()
+		if err := pprof.StartCPUProfile(f); err != nil {
+			fmt.Printf("could not start CPU profile: %v\n", err)
+			return
+		}
+		defer pprof.StopCPUProfile()
+		fmt.Printf("CPU profiling enabled, writing to %s\n", *cpuprofile)
+	}
+
+	if *memprofile != "" {
+		defer func() {
+			f, err := os.Create(*memprofile)
+			if err != nil {
+				fmt.Printf("could not create memory profile: %v\n", err)
+				return
+			}
+			defer f.Close()
+			if err := pprof.WriteHeapProfile(f); err != nil {
+				fmt.Printf("could not write memory profile: %v\n", err)
+			}
+			fmt.Printf("Memory profile written to %s\n", *memprofile)
+		}()
+	}
+
 	fmt.Println("=== 3D Engine - Complete Feature Showcase ===")
 	fmt.Println()
 	fmt.Println("Select a demo:")

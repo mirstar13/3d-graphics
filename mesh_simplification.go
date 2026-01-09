@@ -361,7 +361,7 @@ func (sm *SimplificationMesh) collapseEdge(edge *SimplificationEdge) bool {
 }
 
 // toMesh converts back to regular mesh
-func (sm *SimplificationMesh) toMesh(material Material) *Mesh {
+func (sm *SimplificationMesh) toMesh(material IMaterial) *Mesh {
 	mesh := NewMesh()
 	mesh.Material = material
 

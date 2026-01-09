@@ -240,7 +240,7 @@ func (r *TerminalRenderer) RenderTriangle(tri *Triangle, worldMatrix Matrix4x4, 
 		transformed.Normal = &transformedNormal
 	}
 
-	if tri.Material.Wireframe {
+	if tri.Material.IsWireframe() {
 		r.renderTriangleWireframe(transformed, camera)
 	} else {
 		r.rasterizeTriangleWithLighting(transformed, camera)
@@ -376,7 +376,7 @@ func (r *TerminalRenderer) fillTriangleWithPerPixelLighting(
 	t *Triangle,
 	camera *Camera,
 	normal Point,
-	material Material,
+	material IMaterial,
 ) {
 	// 1. Project vertices to screen space
 	x0, y0, zDepth0 := camera.ProjectPoint(t.P0, r.Height, r.Width)
@@ -559,17 +559,17 @@ func (r *TerminalRenderer) renderTriangleWireframe(t *Triangle, camera *Camera) 
 
 	clipped1, visible1 := ClipLineToNearPlane(line1, camera)
 	if visible1 {
-		r.renderLineProjected(clipped1, camera, t.Material.WireframeColor)
+		r.renderLineProjected(clipped1, camera, t.Material.GetWireframeColor())
 	}
 
 	clipped2, visible2 := ClipLineToNearPlane(line2, camera)
 	if visible2 {
-		r.renderLineProjected(clipped2, camera, t.Material.WireframeColor)
+		r.renderLineProjected(clipped2, camera, t.Material.GetWireframeColor())
 	}
 
 	clipped3, visible3 := ClipLineToNearPlane(line3, camera)
 	if visible3 {
-		r.renderLineProjected(clipped3, camera, t.Material.WireframeColor)
+		r.renderLineProjected(clipped3, camera, t.Material.GetWireframeColor())
 	}
 }
 
@@ -654,7 +654,7 @@ func (r *TerminalRenderer) renderQuad(quad *Quad, worldMatrix Matrix4x4, camera 
 	triangles := ConvertQuadToTriangles(transformed)
 	for _, tri := range triangles {
 		if r.isTriangleVisible(tri, camera) {
-			if tri.Material.Wireframe {
+			if tri.Material.IsWireframe() {
 				r.renderTriangleWireframe(tri, camera)
 			} else {
 				r.rasterizeTriangleWithLighting(tri, camera)
@@ -690,7 +690,7 @@ func (r *TerminalRenderer) isTriangleVisible(t *Triangle, camera *Camera) bool {
 	return !(v0.Z <= camera.Near && v1.Z <= camera.Near && v2.Z <= camera.Near)
 }
 
-func (r *TerminalRenderer) simpleLighting(normal Point, material Material) Color {
+func (r *TerminalRenderer) simpleLighting(normal Point, material IMaterial) Color {
 	ao := CalculateSimpleAO(normal)
 	lx, ly, lz := -1.0, 1.0, -1.0
 	lx, ly, lz = normalizeVector(lx, ly, lz)
@@ -700,10 +700,11 @@ func (r *TerminalRenderer) simpleLighting(normal Point, material Material) Color
 	}
 	intensity *= ao
 
+	diffuseColor := material.GetDiffuseColor(0, 0)
 	return Color{
-		R: uint8(clamp(float64(material.DiffuseColor.R)*intensity, 0, 255)),
-		G: uint8(clamp(float64(material.DiffuseColor.G)*intensity, 0, 255)),
-		B: uint8(clamp(float64(material.DiffuseColor.B)*intensity, 0, 255)),
+		R: uint8(clamp(float64(diffuseColor.R)*intensity, 0, 255)),
+		G: uint8(clamp(float64(diffuseColor.G)*intensity, 0, 255)),
+		B: uint8(clamp(float64(diffuseColor.B)*intensity, 0, 255)),
 	}
 }
 

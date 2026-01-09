@@ -9,7 +9,7 @@ import "math"
 // Point represents a 3D point
 type Point struct {
 	X, Y, Z float64
-	char    byte // Legacy field, unused in new architecture
+	char    byte // Legacy field, unused in new architecturec
 }
 
 // NewPoint creates a new point
@@ -68,34 +68,37 @@ type Triangle struct {
 	P0           Point
 	P1           Point
 	P2           Point
-	char         byte
-	Material     Material
 	Normal       *Point
+	Material     IMaterial
+	char         byte
 	UseSetNormal bool
 }
 
 // NewTriangle creates a new triangle
 func NewTriangle(p0, p1, p2 Point, char byte) *Triangle {
+	mat := NewMaterial()
 	return &Triangle{
 		P0:           p0,
 		P1:           p1,
 		P2:           p2,
 		char:         char,
-		Material:     NewMaterial(),
+		Material:     &mat,
 		Normal:       nil,
 		UseSetNormal: false,
 	}
 }
 
 // SetMaterial sets the material
-func (t *Triangle) SetMaterial(material Material) *Triangle {
+func (t *Triangle) SetMaterial(material IMaterial) *Triangle {
 	t.Material = material
 	return t
 }
 
 // SetColor sets the diffuse color
 func (t *Triangle) SetColor(color Color) *Triangle {
-	t.Material.DiffuseColor = color
+	if mat, ok := t.Material.(*Material); ok {
+		mat.DiffuseColor = color
+	}
 	return t
 }
 
@@ -166,33 +169,36 @@ type Quad struct {
 	P1           Point
 	P2           Point
 	P3           Point
-	Material     Material
+	Material     IMaterial
 	Normal       *Point
 	UseSetNormal bool
 }
 
 // NewQuad creates a new quad
 func NewQuad(p0, p1, p2, p3 Point) *Quad {
+	mat := NewMaterial()
 	return &Quad{
 		P0:           p0,
 		P1:           p1,
 		P2:           p2,
 		P3:           p3,
-		Material:     NewMaterial(),
+		Material:     &mat,
 		Normal:       nil,
 		UseSetNormal: false,
 	}
 }
 
 // SetMaterial sets the material
-func (q *Quad) SetMaterial(material Material) *Quad {
+func (q *Quad) SetMaterial(material IMaterial) *Quad {
 	q.Material = material
 	return q
 }
 
 // SetColor sets the diffuse color
 func (q *Quad) SetColor(color Color) *Quad {
-	q.Material.DiffuseColor = color
+	if mat, ok := q.Material.(*Material); ok {
+		mat.DiffuseColor = color
+	}
 	return q
 }
 
@@ -330,16 +336,17 @@ type Mesh struct {
 	Vertices []Point
 	Indices  []int
 	Position Point
-	Material Material // Added to store material for the whole mesh
+	Material IMaterial // Added to store material for the whole mesh
 }
 
 // NewMesh creates a new mesh
 func NewMesh() *Mesh {
+	mat := NewMaterial()
 	return &Mesh{
 		Vertices: make([]Point, 0),
 		Indices:  make([]int, 0),
 		Position: *NewPoint(0, 0, 0),
-		Material: NewMaterial(),
+		Material: &mat,
 	}
 }
 

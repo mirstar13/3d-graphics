@@ -6,7 +6,7 @@ type SurfaceRenderContext struct {
 	LightingSystem *LightingSystem
 	Normal         Point
 	SurfacePoint   Point
-	Material       Material
+	Material       IMaterial
 	DZ             float64
 }
 
@@ -67,9 +67,10 @@ func CalculateSurfaceLighting(ctx SurfaceRenderContext) (Color, rune) {
 		intensity *= ao
 
 		// Simple color based on material
-		baseR := float64(ctx.Material.DiffuseColor.R)
-		baseG := float64(ctx.Material.DiffuseColor.G)
-		baseB := float64(ctx.Material.DiffuseColor.B)
+		baseColor := ctx.Material.GetDiffuseColor(0, 0)
+		baseR := float64(baseColor.R)
+		baseG := float64(baseColor.G)
+		baseB := float64(baseColor.B)
 
 		finalR := baseR * intensity
 		finalG := baseG * intensity

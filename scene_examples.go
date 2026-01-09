@@ -47,7 +47,7 @@ func BasicGeometryDemo(scene *Scene) {
 		Point{X: 5, Y: 0, Z: 0},
 		'x',
 	)
-	tri.SetMaterial(triMat)
+	tri.SetMaterial(&triMat)
 	triNode := NewSceneNodeWithObject("Triangle", tri)
 	scene.AddNode(triNode)
 
@@ -60,7 +60,7 @@ func BasicGeometryDemo(scene *Scene) {
 		Point{X: 15, Y: 8, Z: 0},
 		Point{X: 10, Y: 8, Z: 0},
 	)
-	quad.SetMaterial(quadMat)
+	quad.SetMaterial(&quadMat)
 	quadNode := NewSceneNodeWithObject("Quad", quad)
 	scene.AddNode(quadNode)
 
@@ -95,14 +95,14 @@ func MeshGeneratorsDemo(scene *Scene) {
 	// Cube (using indexed geometry)
 	cubeMat := NewMaterial()
 	cubeMat.DiffuseColor = Color{200, 100, 100}
-	cube := scene.CreateCube("Cube", 8, cubeMat)
+	cube := scene.CreateCube("Cube", 8, &cubeMat)
 	cube.Transform.SetPosition(-20, 0, 0)
 	cube.AddTag("rotating")
 
 	// Sphere (procedurally generated)
 	sphereMat := NewMaterial()
 	sphereMat.DiffuseColor = Color{100, 200, 100}
-	sphere := scene.CreateSphere("Sphere", 6, 24, 24, sphereMat)
+	sphere := scene.CreateSphere("Sphere", 6, 24, 24, &sphereMat)
 	sphere.Transform.SetPosition(0, 0, 0)
 	sphere.AddTag("rotating")
 
@@ -110,7 +110,7 @@ func MeshGeneratorsDemo(scene *Scene) {
 	torusMesh := GenerateTorus(8.0, 2.5, 32, 16)
 	torusMat := NewMaterial()
 	torusMat.DiffuseColor = Color{100, 100, 200}
-	torusMesh.Material = torusMat
+	torusMesh.Material = &torusMat
 	torus := NewSceneNodeWithObject("Torus", torusMesh)
 	torus.Transform.SetPosition(20, 0, 0)
 	scene.AddNode(torus)
@@ -154,7 +154,7 @@ func LightingShowcaseDemo(scene *Scene) {
 		mat.SpecularColor = ColorWhite
 		mat.Shininess = 64
 		mat.SpecularStrength = 0.8
-		sphere := scene.CreateSphere(names[i], 6, 24, 24, mat)
+		sphere := scene.CreateSphere(names[i], 6, 24, 24, &mat)
 		sphere.Transform.SetPosition(pos, 0, 0)
 		sphere.AddTag(fmt.Sprintf("lighting-%d", i))
 	}
@@ -186,7 +186,7 @@ func MaterialShowcaseDemo(scene *Scene) {
 	mat1.DiffuseColor = ColorRed
 	mat1.Shininess = 4
 	mat1.SpecularStrength = 0.1
-	sphere1 := scene.CreateSphere("Matte", 6, 24, 24, mat1)
+	sphere1 := scene.CreateSphere("Matte", 6, 24, 24, &mat1)
 	sphere1.Transform.SetPosition(positions[0], 0, 0)
 
 	// 2. Medium Specular
@@ -194,7 +194,7 @@ func MaterialShowcaseDemo(scene *Scene) {
 	mat2.DiffuseColor = ColorGreen
 	mat2.Shininess = 32
 	mat2.SpecularStrength = 0.5
-	sphere2 := scene.CreateSphere("Medium", 6, 24, 24, mat2)
+	sphere2 := scene.CreateSphere("Medium", 6, 24, 24, &mat2)
 	sphere2.Transform.SetPosition(positions[1], 0, 0)
 
 	// 3. High Specular (Shiny)
@@ -202,14 +202,14 @@ func MaterialShowcaseDemo(scene *Scene) {
 	mat3.DiffuseColor = ColorBlue
 	mat3.Shininess = 128
 	mat3.SpecularStrength = 1.0
-	sphere3 := scene.CreateSphere("Shiny", 6, 24, 24, mat3)
+	sphere3 := scene.CreateSphere("Shiny", 6, 24, 24, &mat3)
 	sphere3.Transform.SetPosition(positions[2], 0, 0)
 
 	// 4. Wireframe Material
 	mat4 := NewMaterial()
 	mat4.Wireframe = true
 	mat4.WireframeColor = ColorYellow
-	sphere4 := scene.CreateSphere("Wireframe", 6, 16, 16, mat4)
+	sphere4 := scene.CreateSphere("Wireframe", 6, 16, 16, &mat4)
 	sphere4.Transform.SetPosition(positions[3], 0, 0)
 
 	// 5. PBR Material
@@ -219,10 +219,7 @@ func MaterialShowcaseDemo(scene *Scene) {
 	pbrMat.Roughness = 0.2
 
 	// Create sphere with PBR - note we need to convert PBR params to basic material for now
-	mat5 := NewMaterial()
-	mat5.DiffuseColor = pbrMat.Albedo
-	mat5.Shininess = (1.0 - pbrMat.Roughness) * 128.0
-	mat5.SpecularStrength = pbrMat.Metallic
+	mat5 := pbrMat
 	sphere5 := scene.CreateSphere("PBR", 6, 24, 24, mat5)
 	sphere5.Transform.SetPosition(positions[4], 0, 0)
 
@@ -251,39 +248,39 @@ func TransformHierarchyDemo(scene *Scene) {
 	// Sun (root)
 	sunMat := NewMaterial()
 	sunMat.DiffuseColor = ColorYellow
-	sun := scene.CreateSphere("Sun", 5, 20, 20, sunMat)
+	sun := scene.CreateSphere("Sun", 5, 20, 20, &sunMat)
 	sun.Transform.SetPosition(0, 0, 0)
 
 	// Earth (child of sun)
 	earthMat := NewMaterial()
 	earthMat.DiffuseColor = ColorBlue
-	earth := scene.CreateSphere("Earth", 3, 16, 16, earthMat)
+	earth := scene.CreateSphere("Earth", 3, 16, 16, &earthMat)
 	earth.Transform.SetPosition(20, 0, 0)
 	scene.AddNodeTo(earth, sun) // Earth is child of sun
 
 	// Moon (child of earth)
 	moonMat := NewMaterial()
 	moonMat.DiffuseColor = Color{200, 200, 200}
-	moon := scene.CreateSphere("Moon", 1, 12, 12, moonMat)
+	moon := scene.CreateSphere("Moon", 1, 12, 12, &moonMat)
 	moon.Transform.SetPosition(5, 0, 0)
 	scene.AddNodeTo(moon, earth) // Moon is child of earth
 
 	// Robot arm on the side
 	baseMat := NewMaterial()
 	baseMat.DiffuseColor = Color{100, 100, 100}
-	base := scene.CreateCube("RobotBase", 4, baseMat)
+	base := scene.CreateCube("RobotBase", 4, &baseMat)
 	base.Transform.SetPosition(40, -8, 0)
 
 	arm1Mat := NewMaterial()
 	arm1Mat.DiffuseColor = ColorRed
-	arm1 := scene.CreateCube("RobotArm1", 2, arm1Mat)
+	arm1 := scene.CreateCube("RobotArm1", 2, &arm1Mat)
 	arm1.Transform.SetPosition(0, 6, 0)
 	arm1.Transform.SetScale(0.5, 3, 0.5)
 	scene.AddNodeTo(arm1, base)
 
 	arm2Mat := NewMaterial()
 	arm2Mat.DiffuseColor = ColorGreen
-	arm2 := scene.CreateCube("RobotArm2", 2, arm2Mat)
+	arm2 := scene.CreateCube("RobotArm2", 2, &arm2Mat)
 	arm2.Transform.SetPosition(0, 6, 0)
 	arm2.Transform.SetScale(0.4, 2.5, 0.4)
 	scene.AddNodeTo(arm2, arm1)
@@ -345,18 +342,18 @@ func LODSystemDemo(scene *Scene) {
 			G: uint8(150),
 			B: uint8(200 - i*10),
 		}
-		highDetail.Material = mat
+		highDetail.Material = &mat
 
 		// Create LOD group
 		lodGroup := NewLODGroup()
 		lodGroup.AddLOD(highDetail, 40.0)
 
 		medDetail := SimplifyMesh(highDetail, 0.6)
-		medDetail.Material = mat
+		medDetail.Material = &mat
 		lodGroup.AddLOD(medDetail, 80.0)
 
 		lowDetail := SimplifyMesh(highDetail, 0.3)
-		lowDetail.Material = mat
+		lowDetail.Material = &mat
 		lodGroup.AddLOD(lowDetail, 150.0)
 
 		name := fmt.Sprintf("LOD_%d", i)
@@ -406,7 +403,7 @@ func SpatialPartitioningDemo(scene *Scene) {
 		}
 
 		name := fmt.Sprintf("Spatial_%d", i)
-		obj := scene.CreateCube(name, 4, mat)
+		obj := scene.CreateCube(name, 4, &mat)
 		obj.Transform.SetPosition(x, height, z)
 		obj.AddTag("spatial")
 	}
@@ -415,7 +412,7 @@ func SpatialPartitioningDemo(scene *Scene) {
 	queryMat := NewMaterial()
 	queryMat.DiffuseColor = ColorYellow
 	queryMat.Wireframe = true
-	query := scene.CreateSphere("QuerySphere", 15, 16, 16, queryMat)
+	query := scene.CreateSphere("QuerySphere", 15, 16, 16, &queryMat)
 	query.Transform.SetPosition(0, 0, 0)
 
 	fmt.Printf("Created %d objects for spatial queries\n", numObjects)
@@ -450,7 +447,7 @@ func CollisionPhysicsDemo(scene *Scene) {
 	probeMat := NewMaterial()
 	probeMat.DiffuseColor = ColorYellow
 	probeMat.Shininess = 64
-	probe := scene.CreateCube("Probe", 5, probeMat)
+	probe := scene.CreateCube("Probe", 5, &probeMat)
 	probe.Transform.SetPosition(0, 0, 0)
 	probe.AddTag("probe")
 
@@ -466,7 +463,7 @@ func CollisionPhysicsDemo(scene *Scene) {
 		mat.DiffuseColor = Color{100, 150, 200}
 		mat.Shininess = 32
 		name := fmt.Sprintf("Obstacle_%d", i)
-		obstacle := scene.CreateCube(name, 7, mat)
+		obstacle := scene.CreateCube(name, 7, &mat)
 		obstacle.Transform.SetPosition(pos.x, pos.y, pos.z)
 		obstacle.Transform.SetRotation(float64(i)*0.2, float64(i)*0.3, 0)
 		obstacle.AddTag("obstacle")
@@ -476,7 +473,7 @@ func CollisionPhysicsDemo(scene *Scene) {
 	targetMat := NewMaterial()
 	targetMat.DiffuseColor = ColorRed
 	targetMat.Shininess = 64
-	target := scene.CreateSphere("Target", 3, 16, 16, targetMat)
+	target := scene.CreateSphere("Target", 3, 16, 16, &targetMat)
 	target.Transform.SetPosition(15, 5, 0)
 	target.AddTag("target")
 
@@ -507,10 +504,12 @@ func AnimateCollisionPhysics(scene *Scene, time float64) {
 
 			// Change probe color based on collision
 			if mesh, ok := probe.Object.(*Mesh); ok {
-				if colliding {
-					mesh.Material.DiffuseColor = ColorRed
-				} else {
-					mesh.Material.DiffuseColor = ColorYellow
+				if mat, ok := mesh.Material.(*Material); ok {
+					if colliding {
+						mat.DiffuseColor = ColorRed
+					} else {
+						mat.DiffuseColor = ColorYellow
+					}
 				}
 			}
 		}
@@ -533,7 +532,9 @@ func AnimateCollisionPhysics(scene *Scene, time float64) {
 				// Visual feedback - change target color if ray hits it
 				if hit.Node == target {
 					if mesh, ok := target.Object.(*Mesh); ok {
-						mesh.Material.DiffuseColor = ColorGreen
+						if mat, ok := mesh.Material.(*Material); ok {
+							mat.DiffuseColor = ColorGreen
+						}
 					}
 				}
 			}
@@ -573,7 +574,7 @@ func AdvancedRenderingDemo(scene *Scene) {
 		}
 
 		name := fmt.Sprintf("Clip_%d", i)
-		cube := scene.CreateCube(name, 8, mat)
+		cube := scene.CreateCube(name, 8, &mat)
 		cube.Transform.SetPosition(0, 0, -dist)
 		cube.AddTag("clipping")
 	}
@@ -585,7 +586,7 @@ func AdvancedRenderingDemo(scene *Scene) {
 		mat.DiffuseColor = ColorCyan
 
 		name := fmt.Sprintf("Frustum_%d", i)
-		sphere := scene.CreateSphere(name, 5, 16, 16, mat)
+		sphere := scene.CreateSphere(name, 5, 16, 16, &mat)
 		sphere.Transform.SetPosition(
 			math.Cos(angle)*80,
 			0,
@@ -637,17 +638,17 @@ func PerformanceTestDemo(scene *Scene) {
 				G: uint8(80 + (z * 20)),
 				B: uint8(150 + (y * 30)),
 			}
-			baseMesh.Material = mat
+			baseMesh.Material = &mat
 
 			lodGroup := NewLODGroup()
 			lodGroup.AddLOD(baseMesh, 35.0)
 
 			medMesh := SimplifyMesh(baseMesh, 0.6)
-			medMesh.Material = mat
+			medMesh.Material = &mat
 			lodGroup.AddLOD(medMesh, 70.0)
 
 			lowMesh := SimplifyMesh(baseMesh, 0.3)
-			lowMesh.Material = mat
+			lowMesh.Material = &mat
 			lodGroup.AddLOD(lowMesh, 140.0)
 
 			name := fmt.Sprintf("Perf_%d_%d", x, z)

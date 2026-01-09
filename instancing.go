@@ -14,7 +14,7 @@ type InstanceData struct {
 type InstancedMesh struct {
 	BaseMesh  *Mesh
 	Instances []InstanceData
-	Material  Material
+	Material  IMaterial
 	Enabled   bool
 }
 
@@ -72,7 +72,7 @@ func (im *InstancedMesh) SetInstanceColor(index int, color Color) {
 // InstanceBatch groups instances for efficient rendering
 type InstanceBatch struct {
 	Mesh      *Mesh
-	Material  Material
+	Material  IMaterial
 	Instances []InstanceData
 }
 
@@ -89,7 +89,7 @@ func NewInstanceManager() *InstanceManager {
 }
 
 // AddInstance adds an instance to be rendered
-func (im *InstanceManager) AddInstance(mesh *Mesh, material Material, transform Matrix4x4, color Color) {
+func (im *InstanceManager) AddInstance(mesh *Mesh, material IMaterial, transform Matrix4x4, color Color) {
 	batch, exists := im.batches[mesh]
 	if !exists {
 		batch = &InstanceBatch{

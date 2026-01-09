@@ -528,10 +528,10 @@ func (r *OpenGLRenderer) RenderTriangle(tri *Triangle, worldMatrix Matrix4x4, ca
 	p2 := worldMatrix.TransformPoint(tri.P2)
 
 	// Get color
-	color := tri.Material.DiffuseColor
+	color := tri.Material.GetDiffuseColor(0, 0)
 
 	// Check if wireframe mode
-	if tri.Material.Wireframe {
+	if tri.Material.IsWireframe() {
 		// Render as lines (edges only)
 		rf := float32(color.R) / 255.0
 		gf := float32(color.G) / 255.0
@@ -614,12 +614,13 @@ func (r *OpenGLRenderer) RenderMesh(mesh *Mesh, worldMatrix Matrix4x4, camera *C
 				finalP2 := worldMatrix.TransformPoint(p2)
 
 				// FIXED: Use mesh material instead of hardcoded values
-				color := mesh.Material.DiffuseColor
+				color := mesh.Material.GetDiffuseColor(0, 0)
 
-				if isWireframe := mesh.Material.Wireframe; isWireframe {
-					rf := float32(mesh.Material.WireframeColor.R) / 255.0
-					gf := float32(mesh.Material.WireframeColor.G) / 255.0
-					bf := float32(mesh.Material.WireframeColor.B) / 255.0
+				if isWireframe := mesh.Material.IsWireframe(); isWireframe {
+					wireColor := mesh.Material.GetWireframeColor()
+					rf := float32(wireColor.R) / 255.0
+					gf := float32(wireColor.G) / 255.0
+					bf := float32(wireColor.B) / 255.0
 
 					r.addLineVertex(finalP0, rf, gf, bf)
 					r.addLineVertex(finalP1, rf, gf, bf)

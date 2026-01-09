@@ -419,7 +419,7 @@ func (sn *SceneNode) SetObject(obj any) {
 }
 
 // CreateCube creates a cube scene node using indexed geometry
-func (s *Scene) CreateCube(name string, size float64, material Material) *SceneNode {
+func (s *Scene) CreateCube(name string, size float64, material *Material) *SceneNode {
 	node := NewSceneNode(name)
 	mesh := NewMesh()
 	mesh.Material = material
@@ -462,7 +462,7 @@ func (s *Scene) CreateCube(name string, size float64, material Material) *SceneN
 }
 
 // CreateSphere creates a sphere scene node using optimized geometry
-func (s *Scene) CreateSphere(name string, radius float64, rings, sectors int, material Material) *SceneNode {
+func (s *Scene) CreateSphere(name string, radius float64, rings, sectors int, material IMaterial) *SceneNode {
 	node := NewSceneNode(name)
 	// Use the optimized generator
 	mesh := GenerateSphere(radius, rings, sectors)

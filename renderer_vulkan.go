@@ -903,7 +903,7 @@ func (r *VulkanRenderer) addTriangleVertices(tri *Triangle, worldMatrix Matrix4x
 	p1 := worldMatrix.TransformPoint(tri.P1)
 	p2 := worldMatrix.TransformPoint(tri.P2)
 
-	color := tri.Material.DiffuseColor
+	color := tri.Material.GetDiffuseColor(0, 0)
 	c := [3]float32{float32(color.R) / 255.0, float32(color.G) / 255.0, float32(color.B) / 255.0}
 
 	r.currentVertices = append(r.currentVertices,

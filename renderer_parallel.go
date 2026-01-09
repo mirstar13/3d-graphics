@@ -620,7 +620,7 @@ func (sr *ScanlineRenderer) renderTriangleScanline(tri *Triangle, y int, camera 
 			tr.ZBuffer[y][x] = z
 			if tr.UseColor {
 				// Simplified coloring for scanline demo
-				tr.ColorBuffer[y][x] = tri.Material.DiffuseColor
+				tr.ColorBuffer[y][x] = tri.Material.GetDiffuseColor(0, 0)
 				tr.Surface[y][x] = '#'
 			} else {
 				tr.Surface[y][x] = '#'

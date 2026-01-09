@@ -127,7 +127,7 @@ func LoadOBJ(filepath string) (*Mesh, error) {
 				if mat, exists := materialLib.Materials[parts[1]]; exists {
 					currentMaterial = mat
 					// Apply material to mesh
-					mesh.Material = *currentMaterial
+					mesh.Material = currentMaterial
 				}
 			}
 			continue
