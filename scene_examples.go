@@ -142,25 +142,24 @@ func AnimateMeshGenerators(scene *Scene) {
 
 func LightingShowcaseDemo(scene *Scene) {
 	fmt.Println("=== Lighting Showcase Demo ===")
-	fmt.Println("Showcasing: 5 different lighting setups on identical spheres")
+	fmt.Println("Showcasing: Multiple lighting scenarios with IMaterial")
 
-	// Create 5 spheres in a row, each with different lighting
 	positions := []float64{-40, -20, 0, 20, 40}
 	names := []string{"Ambient", "Directional", "3-Point", "Colored", "Dynamic"}
 
 	for i, pos := range positions {
+		// Create material using IMaterial interface
 		mat := NewMaterial()
 		mat.DiffuseColor = Color{180, 180, 180}
 		mat.SpecularColor = ColorWhite
 		mat.Shininess = 64
 		mat.SpecularStrength = 0.8
-
 		sphere := scene.CreateSphere(names[i], 6, 24, 24, mat)
 		sphere.Transform.SetPosition(pos, 0, 0)
 		sphere.AddTag(fmt.Sprintf("lighting-%d", i))
 	}
 
-	fmt.Println("Created 5 spheres, each demonstrating different lighting")
+	fmt.Println("Each sphere demonstrates different lighting with proper material system")
 }
 
 func AnimateLightingShowcase(scene *Scene, time float64) {
@@ -178,11 +177,11 @@ func AnimateLightingShowcase(scene *Scene, time float64) {
 
 func MaterialShowcaseDemo(scene *Scene) {
 	fmt.Println("=== Material Showcase Demo ===")
-	fmt.Println("Showcasing: Basic, Diffuse, Specular, Wireframe, PBR materials")
+	fmt.Println("Showcasing: IMaterial system with various material types")
 
 	positions := []float64{-30, -15, 0, 15, 30}
 
-	// 1. Low Specular (Matte)
+	// 1. Matte Material (Low Specular)
 	mat1 := NewMaterial()
 	mat1.DiffuseColor = ColorRed
 	mat1.Shininess = 4
@@ -206,28 +205,28 @@ func MaterialShowcaseDemo(scene *Scene) {
 	sphere3 := scene.CreateSphere("Shiny", 6, 24, 24, mat3)
 	sphere3.Transform.SetPosition(positions[2], 0, 0)
 
-	// 4. Wireframe
+	// 4. Wireframe Material
 	mat4 := NewMaterial()
-	mat4.DiffuseColor = ColorYellow
 	mat4.Wireframe = true
 	mat4.WireframeColor = ColorYellow
 	sphere4 := scene.CreateSphere("Wireframe", 6, 16, 16, mat4)
 	sphere4.Transform.SetPosition(positions[3], 0, 0)
 
-	// 5. Solid + Wireframe Overlay
+	// 5. PBR Material
+	pbrMat := NewPBRMaterial()
+	pbrMat.Albedo = ColorMagenta
+	pbrMat.Metallic = 0.8
+	pbrMat.Roughness = 0.2
+
+	// Create sphere with PBR - note we need to convert PBR params to basic material for now
 	mat5 := NewMaterial()
-	mat5.DiffuseColor = ColorMagenta
-	mat5.Shininess = 64
-	sphere5 := scene.CreateSphere("Solid", 6, 24, 24, mat5)
+	mat5.DiffuseColor = pbrMat.Albedo
+	mat5.Shininess = (1.0 - pbrMat.Roughness) * 128.0
+	mat5.SpecularStrength = pbrMat.Metallic
+	sphere5 := scene.CreateSphere("PBR", 6, 24, 24, mat5)
 	sphere5.Transform.SetPosition(positions[4], 0, 0)
 
-	mat5wire := NewMaterial()
-	mat5wire.Wireframe = true
-	mat5wire.WireframeColor = ColorWhite
-	sphere5wire := scene.CreateSphere("Overlay", 6.1, 16, 16, mat5wire)
-	sphere5wire.Transform.SetPosition(positions[4], 0, 0)
-
-	fmt.Println("Created 5 spheres with different material properties")
+	fmt.Println("Created 5 spheres demonstrating IMaterial system")
 }
 
 func AnimateMaterialShowcase(scene *Scene) {
@@ -447,13 +446,15 @@ func CollisionPhysicsDemo(scene *Scene) {
 	fmt.Println("=== Collision & Physics Demo ===")
 	fmt.Println("Showcasing: AABB, OBB, raycasting, line-of-sight")
 
-	// Create moving probe
+	// Create moving probe with proper bounds
 	probeMat := NewMaterial()
 	probeMat.DiffuseColor = ColorYellow
+	probeMat.Shininess = 64
 	probe := scene.CreateCube("Probe", 5, probeMat)
 	probe.Transform.SetPosition(0, 0, 0)
+	probe.AddTag("probe")
 
-	// Create static obstacles
+	// Create static obstacles with proper materials
 	positions := []struct{ x, y, z float64 }{
 		{-20, 0, -15}, {20, 0, -15},
 		{-20, 0, 15}, {20, 0, 15},
@@ -463,6 +464,7 @@ func CollisionPhysicsDemo(scene *Scene) {
 	for i, pos := range positions {
 		mat := NewMaterial()
 		mat.DiffuseColor = Color{100, 150, 200}
+		mat.Shininess = 32
 		name := fmt.Sprintf("Obstacle_%d", i)
 		obstacle := scene.CreateCube(name, 7, mat)
 		obstacle.Transform.SetPosition(pos.x, pos.y, pos.z)
@@ -473,11 +475,13 @@ func CollisionPhysicsDemo(scene *Scene) {
 	// Raycast target
 	targetMat := NewMaterial()
 	targetMat.DiffuseColor = ColorRed
+	targetMat.Shininess = 64
 	target := scene.CreateSphere("Target", 3, 16, 16, targetMat)
 	target.Transform.SetPosition(15, 5, 0)
+	target.AddTag("target")
 
-	fmt.Println("Probe changes color when colliding with obstacles")
-	fmt.Println("Ray is cast from probe to target")
+	fmt.Println("Probe detects collisions and casts rays to target")
+	fmt.Println("Bounding volumes are properly calculated in world space")
 }
 
 func AnimateCollisionPhysics(scene *Scene, time float64) {
@@ -486,6 +490,54 @@ func AnimateCollisionPhysics(scene *Scene, time float64) {
 		probe.Transform.Position.X = math.Sin(time*0.6) * 20.0
 		probe.Transform.Position.Z = math.Cos(time*0.6) * 20.0
 		probe.RotateLocal(0.03, 0.02, 0.01)
+
+		// Check collisions with obstacles
+		probeBounds := scene.computeNodeBounds(probe)
+		if probeBounds != nil {
+			obstacles := scene.FindNodesByTag("obstacle")
+			colliding := false
+
+			for _, obs := range obstacles {
+				obsBounds := scene.computeNodeBounds(obs)
+				if obsBounds != nil && probeBounds.IntersectsAABB(obsBounds) {
+					colliding = true
+					break
+				}
+			}
+
+			// Change probe color based on collision
+			if mesh, ok := probe.Object.(*Mesh); ok {
+				if colliding {
+					mesh.Material.DiffuseColor = ColorRed
+				} else {
+					mesh.Material.DiffuseColor = ColorYellow
+				}
+			}
+		}
+
+		// Raycast to target
+		if target := scene.FindNode("Target"); target != nil {
+			probePos := probe.Transform.GetWorldPosition()
+			targetPos := target.Transform.GetWorldPosition()
+
+			direction := Point{
+				X: targetPos.X - probePos.X,
+				Y: targetPos.Y - probePos.Y,
+				Z: targetPos.Z - probePos.Z,
+			}
+
+			ray := NewRay(probePos, direction)
+			hit := scene.Raycast(ray, 100.0)
+
+			if hit.Hit {
+				// Visual feedback - change target color if ray hits it
+				if hit.Node == target {
+					if mesh, ok := target.Object.(*Mesh); ok {
+						mesh.Material.DiffuseColor = ColorGreen
+					}
+				}
+			}
+		}
 	}
 
 	// Gentle rotation of obstacles

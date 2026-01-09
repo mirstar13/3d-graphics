@@ -10,17 +10,6 @@ type Light struct {
 	IsEnabled bool    // Whether this light is active
 }
 
-// Material defines surface properties for lighting
-type Material struct {
-	DiffuseColor     Color
-	SpecularColor    Color
-	Shininess        float64
-	SpecularStrength float64
-	AmbientStrength  float64
-	Wireframe        bool
-	WireframeColor   Color
-}
-
 // LightingSystem manages all lights and performs lighting calculations
 type LightingSystem struct {
 	Lights           []*Light
@@ -46,19 +35,6 @@ func NewLight(x, y, z float64, color Color, intensity float64) *Light {
 		Color:     color,
 		Intensity: intensity,
 		IsEnabled: true,
-	}
-}
-
-// NewMaterial creates a material with default properties
-func NewMaterial() Material {
-	return Material{
-		DiffuseColor:     ColorWhite,
-		SpecularColor:    ColorWhite,
-		Shininess:        32.0,
-		SpecularStrength: 0.5,
-		AmbientStrength:  0.1,
-		Wireframe:        false,
-		WireframeColor:   ColorWhite,
 	}
 }
 

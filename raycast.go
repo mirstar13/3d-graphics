@@ -99,6 +99,16 @@ func (r *Ray) IntersectsTriangle(t *Triangle) (bool, float64, float64, float64) 
 	return false, 0, 0, 0
 }
 
+func (r *Ray) IntersectsTriangleWorld(t *Triangle, worldTransform Matrix4x4) (bool, float64, float64, float64) {
+	// Transform triangle to world space
+	p0 := worldTransform.TransformPoint(t.P0)
+	p1 := worldTransform.TransformPoint(t.P1)
+	p2 := worldTransform.TransformPoint(t.P2)
+
+	worldTri := &Triangle{P0: p0, P1: p1, P2: p2}
+	return r.IntersectsTriangle(worldTri)
+}
+
 // CameraScreenPointToRay converts a screen coordinate to a world-space ray
 // screenX, screenY are in screen coordinates (pixels)
 // Returns a ray in world space
@@ -133,7 +143,7 @@ func CameraScreenPointToRay(camera *Camera, screenX, screenY, screenWidth, scree
 func (s *Scene) Raycast(ray Ray, maxDistance float64) RayHit {
 	closestHit := RayHit{Hit: false, Distance: maxDistance}
 
-	// Test all renderable objects
+	// Test all renderable objects with proper transforms
 	s.raycastNode(s.Root, ray, &closestHit)
 
 	return closestHit
@@ -145,9 +155,21 @@ func (s *Scene) raycastNode(node *SceneNode, ray Ray, closestHit *RayHit) {
 		return
 	}
 
-	// Test this node's object if it has one
+	// Get world transform for this node
+	worldMatrix := node.Transform.GetWorldMatrix()
+
+	// Test bounding volume first for early rejection
 	if node.Object != nil {
-		s.raycastObject(node, ray, closestHit)
+		bounds := s.computeNodeBounds(node)
+		if bounds != nil {
+			hit, _ := bounds.IntersectsRay(ray)
+			if !hit {
+				return // Skip this branch entirely
+			}
+		}
+
+		// Now test the actual geometry
+		s.raycastObject(node, ray, worldMatrix, closestHit)
 	}
 
 	// Test children
@@ -157,33 +179,123 @@ func (s *Scene) raycastNode(node *SceneNode, ray Ray, closestHit *RayHit) {
 }
 
 // raycastObject tests a ray against a drawable object
-func (s *Scene) raycastObject(node *SceneNode, ray Ray, closestHit *RayHit) {
-	// Get world-transformed object
-	transformed := node.TransformSceneObject()
-	if transformed == nil {
-		return
-	}
-
-	switch obj := transformed.(type) {
+func (s *Scene) raycastObject(node *SceneNode, ray Ray, worldMatrix Matrix4x4, closestHit *RayHit) {
+	switch obj := node.Object.(type) {
 	case *Triangle:
-		s.testTriangle(obj, ray, node, closestHit)
+		// Transform triangle to world space
+		p0 := worldMatrix.TransformPoint(obj.P0)
+		p1 := worldMatrix.TransformPoint(obj.P1)
+		p2 := worldMatrix.TransformPoint(obj.P2)
 
-	case *Quad:
-		// Convert quad to triangles
-		triangles := ConvertQuadToTriangles(obj)
-		for _, tri := range triangles {
-			s.testTriangle(tri, ray, node, closestHit)
+		worldTri := &Triangle{P0: p0, P1: p1, P2: p2}
+		hit, distance, _, _ := ray.IntersectsTriangle(worldTri)
+
+		if hit && distance > 0 && distance < closestHit.Distance {
+			hitPoint := ray.GetPoint(distance)
+
+			var normal Point
+			if obj.UseSetNormal && obj.Normal != nil {
+				normal = worldMatrix.TransformDirection(*obj.Normal)
+			} else {
+				normal = CalculateSurfaceNormal(&p0, &p1, &p2, nil, false)
+			}
+
+			closestHit.Hit = true
+			closestHit.Distance = distance
+			closestHit.Point = hitPoint
+			closestHit.Normal = normal
+			closestHit.Node = node
+			closestHit.Triangle = obj
 		}
 
 	case *Mesh:
-		// Test all triangles in mesh
+		// Process each triangle in the mesh
 		for i := 0; i < len(obj.Indices); i += 3 {
 			if i+2 < len(obj.Indices) {
 				idx0, idx1, idx2 := obj.Indices[i], obj.Indices[i+1], obj.Indices[i+2]
 				if idx0 < len(obj.Vertices) && idx1 < len(obj.Vertices) && idx2 < len(obj.Vertices) {
-					tri := NewTriangle(obj.Vertices[idx0], obj.Vertices[idx1], obj.Vertices[idx2], 'o')
-					tri.Material = obj.Material
-					s.testTriangle(tri, ray, node, closestHit)
+					// Apply mesh position offset, then world transform
+					v0 := obj.Vertices[idx0]
+					localP0 := Point{
+						X: v0.X + obj.Position.X,
+						Y: v0.Y + obj.Position.Y,
+						Z: v0.Z + obj.Position.Z,
+					}
+					p0 := worldMatrix.TransformPoint(localP0)
+
+					v1 := obj.Vertices[idx1]
+					localP1 := Point{
+						X: v1.X + obj.Position.X,
+						Y: v1.Y + obj.Position.Y,
+						Z: v1.Z + obj.Position.Z,
+					}
+					p1 := worldMatrix.TransformPoint(localP1)
+
+					v2 := obj.Vertices[idx2]
+					localP2 := Point{
+						X: v2.X + obj.Position.X,
+						Y: v2.Y + obj.Position.Y,
+						Z: v2.Z + obj.Position.Z,
+					}
+					p2 := worldMatrix.TransformPoint(localP2)
+
+					tri := &Triangle{P0: p0, P1: p1, P2: p2}
+					hit, distance, _, _ := ray.IntersectsTriangle(tri)
+
+					if hit && distance > 0 && distance < closestHit.Distance {
+						closestHit.Hit = true
+						closestHit.Distance = distance
+						closestHit.Point = ray.GetPoint(distance)
+						closestHit.Normal = CalculateSurfaceNormal(&p0, &p1, &p2, nil, false)
+						closestHit.Node = node
+					}
+				}
+			}
+		}
+
+	case *LODGroup:
+		// Raycast against current LOD mesh
+		currentMesh := obj.GetCurrentMesh()
+		if currentMesh != nil {
+			for i := 0; i < len(currentMesh.Indices); i += 3 {
+				if i+2 < len(currentMesh.Indices) {
+					idx0, idx1, idx2 := currentMesh.Indices[i], currentMesh.Indices[i+1], currentMesh.Indices[i+2]
+					if idx0 < len(currentMesh.Vertices) && idx1 < len(currentMesh.Vertices) && idx2 < len(currentMesh.Vertices) {
+						v0 := currentMesh.Vertices[idx0]
+						localP0 := Point{
+							X: v0.X + currentMesh.Position.X,
+							Y: v0.Y + currentMesh.Position.Y,
+							Z: v0.Z + currentMesh.Position.Z,
+						}
+						p0 := worldMatrix.TransformPoint(localP0)
+
+						v1 := currentMesh.Vertices[idx1]
+						localP1 := Point{
+							X: v1.X + currentMesh.Position.X,
+							Y: v1.Y + currentMesh.Position.Y,
+							Z: v1.Z + currentMesh.Position.Z,
+						}
+						p1 := worldMatrix.TransformPoint(localP1)
+
+						v2 := currentMesh.Vertices[idx2]
+						localP2 := Point{
+							X: v2.X + currentMesh.Position.X,
+							Y: v2.Y + currentMesh.Position.Y,
+							Z: v2.Z + currentMesh.Position.Z,
+						}
+						p2 := worldMatrix.TransformPoint(localP2)
+
+						tri := &Triangle{P0: p0, P1: p1, P2: p2}
+						hit, distance, _, _ := ray.IntersectsTriangle(tri)
+
+						if hit && distance > 0 && distance < closestHit.Distance {
+							closestHit.Hit = true
+							closestHit.Distance = distance
+							closestHit.Point = ray.GetPoint(distance)
+							closestHit.Normal = CalculateSurfaceNormal(&p0, &p1, &p2, nil, false)
+							closestHit.Node = node
+						}
+					}
 				}
 			}
 		}

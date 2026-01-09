@@ -127,6 +127,64 @@ func (s *Scene) Update(dt float64) {
 	s.updateNodeRecursive(s.Root, dt)
 }
 
+func (s *Scene) computeNodeBounds(node *SceneNode) *AABB {
+	worldMatrix := node.Transform.GetWorldMatrix()
+
+	switch obj := node.Object.(type) {
+	case *Mesh:
+		if len(obj.Vertices) == 0 {
+			return nil
+		}
+
+		// Transform all vertices to world space
+		// First apply mesh position (local offset), then world transform
+		points := make([]Point, len(obj.Vertices))
+		for i, v := range obj.Vertices {
+			// Vertex position + mesh offset (still in local space)
+			localPoint := Point{
+				X: v.X + obj.Position.X,
+				Y: v.Y + obj.Position.Y,
+				Z: v.Z + obj.Position.Z,
+			}
+			// Now transform to world space
+			points[i] = worldMatrix.TransformPoint(localPoint)
+		}
+
+		return NewAABBFromPoints(points)
+
+	case *Triangle:
+		p0 := worldMatrix.TransformPoint(obj.P0)
+		p1 := worldMatrix.TransformPoint(obj.P1)
+		p2 := worldMatrix.TransformPoint(obj.P2)
+		return NewAABBFromPoints([]Point{p0, p1, p2})
+
+	case *Quad:
+		p0 := worldMatrix.TransformPoint(obj.P0)
+		p1 := worldMatrix.TransformPoint(obj.P1)
+		p2 := worldMatrix.TransformPoint(obj.P2)
+		p3 := worldMatrix.TransformPoint(obj.P3)
+		return NewAABBFromPoints([]Point{p0, p1, p2, p3})
+
+	case *LODGroup:
+		// Get current mesh from LOD group
+		currentMesh := obj.GetCurrentMesh()
+		if currentMesh != nil && len(currentMesh.Vertices) > 0 {
+			points := make([]Point, len(currentMesh.Vertices))
+			for i, v := range currentMesh.Vertices {
+				localPoint := Point{
+					X: v.X + currentMesh.Position.X,
+					Y: v.Y + currentMesh.Position.Y,
+					Z: v.Z + currentMesh.Position.Z,
+				}
+				points[i] = worldMatrix.TransformPoint(localPoint)
+			}
+			return NewAABBFromPoints(points)
+		}
+	}
+
+	return nil
+}
+
 func (s *Scene) updateNodeRecursive(node *SceneNode, dt float64) {
 	if !node.IsEnabled() {
 		return

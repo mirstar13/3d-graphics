@@ -34,79 +34,91 @@ type IMaterial interface {
 	SampleSpecular(u, v float64) float64
 }
 
-// BasicMaterial wraps the existing Material struct to implement IMaterial
-type BasicMaterial struct {
-	Material
+// Material defines surface properties for lighting
+type Material struct {
+	DiffuseColor     Color
+	SpecularColor    Color
+	Shininess        float64
+	SpecularStrength float64
+	AmbientStrength  float64
+	Wireframe        bool
+	WireframeColor   Color
 }
 
-func NewBasicMaterial() *BasicMaterial {
-	return &BasicMaterial{
-		Material: NewMaterial(),
+func NewMaterial() Material {
+	return Material{
+		DiffuseColor:     ColorWhite,
+		SpecularColor:    ColorWhite,
+		Shininess:        32.0,
+		SpecularStrength: 0.5,
+		AmbientStrength:  0.1,
+		Wireframe:        false,
+		WireframeColor:   ColorWhite,
 	}
 }
 
-func (bm *BasicMaterial) GetType() MaterialType {
+func (m *Material) GetType() MaterialType {
 	return MaterialTypeBasic
 }
 
-func (bm *BasicMaterial) GetDiffuseColor(u, v float64) Color {
-	return bm.Material.DiffuseColor
+func (m *Material) GetDiffuseColor(u, v float64) Color {
+	return m.DiffuseColor
 }
 
-func (bm *BasicMaterial) GetSpecularColor() Color {
-	return bm.Material.SpecularColor
+func (m *Material) GetSpecularColor() Color {
+	return m.SpecularColor
 }
 
-func (bm *BasicMaterial) GetShininess() float64 {
-	return bm.Material.Shininess
+func (m *Material) GetShininess() float64 {
+	return m.Shininess
 }
 
-func (bm *BasicMaterial) GetSpecularStrength() float64 {
-	return bm.Material.SpecularStrength
+func (m *Material) GetSpecularStrength() float64 {
+	return m.SpecularStrength
 }
 
-func (bm *BasicMaterial) GetAmbientStrength() float64 {
-	return bm.Material.AmbientStrength
+func (m *Material) GetAmbientStrength() float64 {
+	return m.AmbientStrength
 }
 
-func (bm *BasicMaterial) IsWireframe() bool {
-	return bm.Material.Wireframe
+func (m *Material) IsWireframe() bool {
+	return m.Wireframe
 }
 
-func (bm *BasicMaterial) GetWireframeColor() Color {
-	return bm.Material.WireframeColor
+func (m *Material) GetWireframeColor() Color {
+	return m.WireframeColor
 }
 
-func (bm *BasicMaterial) GetMetallic() float64 {
+func (m *Material) GetMetallic() float64 {
 	return 0.0
 }
 
-func (bm *BasicMaterial) GetRoughness() float64 {
+func (m *Material) GetRoughness() float64 {
 	return 0.5
 }
 
-func (bm *BasicMaterial) HasDiffuseTexture() bool {
+func (m *Material) HasDiffuseTexture() bool {
 	return false
 }
 
-func (bm *BasicMaterial) HasNormalMap() bool {
+func (m *Material) HasNormalMap() bool {
 	return false
 }
 
-func (bm *BasicMaterial) HasSpecularMap() bool {
+func (m *Material) HasSpecularMap() bool {
 	return false
 }
 
-func (bm *BasicMaterial) SampleDiffuse(u, v float64) Color {
-	return bm.Material.DiffuseColor
+func (m *Material) SampleDiffuse(u, v float64) Color {
+	return m.DiffuseColor
 }
 
-func (bm *BasicMaterial) SampleNormal(u, v float64) Point {
+func (m *Material) SampleNormal(u, v float64) Point {
 	return Point{X: 0, Y: 0, Z: 1}
 }
 
-func (bm *BasicMaterial) SampleSpecular(u, v float64) float64 {
-	return bm.Material.SpecularStrength
+func (m *Material) SampleSpecular(u, v float64) float64 {
+	return m.SpecularStrength
 }
 
 // TexturedMaterialExt extends TexturedMaterial to implement IMaterial
@@ -128,31 +140,31 @@ func (tm *TexturedMaterialExt) GetDiffuseColor(u, v float64) Color {
 	if tm.UseTextures && tm.DiffuseTexture != nil {
 		return tm.DiffuseTexture.Sample(u, v, tm.TextureFilter, tm.TextureWrap)
 	}
-	return tm.Material.DiffuseColor
+	return tm.DiffuseColor
 }
 
 func (tm *TexturedMaterialExt) GetSpecularColor() Color {
-	return tm.Material.SpecularColor
+	return tm.SpecularColor
 }
 
 func (tm *TexturedMaterialExt) GetShininess() float64 {
-	return tm.Material.Shininess
+	return tm.Shininess
 }
 
 func (tm *TexturedMaterialExt) GetSpecularStrength() float64 {
-	return tm.Material.SpecularStrength
+	return tm.SpecularStrength
 }
 
 func (tm *TexturedMaterialExt) GetAmbientStrength() float64 {
-	return tm.Material.AmbientStrength
+	return tm.AmbientStrength
 }
 
 func (tm *TexturedMaterialExt) IsWireframe() bool {
-	return tm.Material.Wireframe
+	return tm.Wireframe
 }
 
 func (tm *TexturedMaterialExt) GetWireframeColor() Color {
-	return tm.Material.WireframeColor
+	return tm.WireframeColor
 }
 
 func (tm *TexturedMaterialExt) GetMetallic() float64 {
@@ -179,7 +191,7 @@ func (tm *TexturedMaterialExt) SampleDiffuse(u, v float64) Color {
 	if tm.HasDiffuseTexture() {
 		return tm.DiffuseTexture.Sample(u, v, tm.TextureFilter, tm.TextureWrap)
 	}
-	return tm.Material.DiffuseColor
+	return tm.DiffuseColor
 }
 
 func (tm *TexturedMaterialExt) SampleNormal(u, v float64) Point {
@@ -195,7 +207,7 @@ func (tm *TexturedMaterialExt) SampleSpecular(u, v float64) float64 {
 		specColor := tm.SpecularMap.Sample(u, v, tm.TextureFilter, tm.TextureWrap)
 		return float64(specColor.R) / 255.0
 	}
-	return tm.Material.SpecularStrength
+	return tm.SpecularStrength
 }
 
 // UnpackNormalMap converts RGB color to tangent space normal

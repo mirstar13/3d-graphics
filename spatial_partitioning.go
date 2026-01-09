@@ -217,34 +217,36 @@ func (ot *Octree) rayQueryRecursive(node *OctreeNode, ray Ray, maxDist float64, 
 
 // getObjectBounds computes bounds for a scene node
 func (ot *Octree) getObjectBounds(node *SceneNode) *AABB {
-	worldTransform := node.GetWorldTransform()
+	worldMatrix := node.Transform.GetWorldMatrix()
 
 	switch obj := node.Object.(type) {
 	case *Mesh:
-		localBoundsVol := ComputeMeshBounds(obj)
-		if aabb, ok := localBoundsVol.(*AABB); ok {
-			return TransformAABB(aabb, worldTransform)
+		if len(obj.Vertices) == 0 {
+			return nil
 		}
-		return NewAABB(Point{}, Point{})
-	case *LODGroup:
-		if obj.BoundingVolume != nil {
-			if aabb, ok := obj.BoundingVolume.(*AABB); ok {
-				return TransformAABB(aabb, worldTransform)
+		points := make([]Point, len(obj.Vertices))
+		for i, v := range obj.Vertices {
+			localPoint := Point{
+				X: v.X + obj.Position.X,
+				Y: v.Y + obj.Position.Y,
+				Z: v.Z + obj.Position.Z,
 			}
+			points[i] = worldMatrix.TransformPoint(localPoint)
 		}
-	case *LODGroupWithTransitions:
-		if obj.BoundingVolume != nil {
-			if aabb, ok := obj.BoundingVolume.(*AABB); ok {
-				return TransformAABB(aabb, worldTransform)
-			}
-		}
+		return NewAABBFromPoints(points)
+
 	case *Triangle:
-		localBounds := ComputeTriangleBounds(obj)
-		return TransformAABB(localBounds, worldTransform)
+		p0 := worldMatrix.TransformPoint(obj.P0)
+		p1 := worldMatrix.TransformPoint(obj.P1)
+		p2 := worldMatrix.TransformPoint(obj.P2)
+		return NewAABBFromPoints([]Point{p0, p1, p2})
+
 	case *Quad:
-		points := []Point{obj.P0, obj.P1, obj.P2, obj.P3}
-		localBounds := NewAABBFromPoints(points)
-		return TransformAABB(localBounds, worldTransform)
+		p0 := worldMatrix.TransformPoint(obj.P0)
+		p1 := worldMatrix.TransformPoint(obj.P1)
+		p2 := worldMatrix.TransformPoint(obj.P2)
+		p3 := worldMatrix.TransformPoint(obj.P3)
+		return NewAABBFromPoints([]Point{p0, p1, p2, p3})
 	}
 	return nil
 }
@@ -481,37 +483,38 @@ func (bvh *BVH) Rebuild() {
 }
 
 func (bvh *BVH) computeObjectBounds(node *SceneNode) *AABB {
-	worldTransform := node.GetWorldTransform()
+	worldMatrix := node.Transform.GetWorldMatrix()
 
 	switch obj := node.Object.(type) {
 	case *Mesh:
-		localBoundsVol := ComputeMeshBounds(obj)
-		if aabb, ok := localBoundsVol.(*AABB); ok {
-			return TransformAABB(aabb, worldTransform)
+		if len(obj.Vertices) == 0 {
+			return NewAABB(Point{}, Point{})
 		}
-		return NewAABB(Point{}, Point{})
-	case *LODGroup:
-		if obj.BoundingVolume != nil {
-			if aabb, ok := obj.BoundingVolume.(*AABB); ok {
-				return TransformAABB(aabb, worldTransform)
+		points := make([]Point, len(obj.Vertices))
+		for i, v := range obj.Vertices {
+			localPoint := Point{
+				X: v.X + obj.Position.X,
+				Y: v.Y + obj.Position.Y,
+				Z: v.Z + obj.Position.Z,
 			}
+			points[i] = worldMatrix.TransformPoint(localPoint)
 		}
-	case *LODGroupWithTransitions:
-		if obj.BoundingVolume != nil {
-			if aabb, ok := obj.BoundingVolume.(*AABB); ok {
-				return TransformAABB(aabb, worldTransform)
-			}
-		}
+		return NewAABBFromPoints(points)
+
 	case *Triangle:
-		localBounds := ComputeTriangleBounds(obj)
-		return TransformAABB(localBounds, worldTransform)
+		p0 := worldMatrix.TransformPoint(obj.P0)
+		p1 := worldMatrix.TransformPoint(obj.P1)
+		p2 := worldMatrix.TransformPoint(obj.P2)
+		return NewAABBFromPoints([]Point{p0, p1, p2})
+
 	case *Quad:
-		points := []Point{obj.P0, obj.P1, obj.P2, obj.P3}
-		localBounds := NewAABBFromPoints(points)
-		return TransformAABB(localBounds, worldTransform)
+		p0 := worldMatrix.TransformPoint(obj.P0)
+		p1 := worldMatrix.TransformPoint(obj.P1)
+		p2 := worldMatrix.TransformPoint(obj.P2)
+		p3 := worldMatrix.TransformPoint(obj.P3)
+		return NewAABBFromPoints([]Point{p0, p1, p2, p3})
 	}
 
-	// Default fallback
 	pos := node.Transform.GetWorldPosition()
 	return NewAABB(pos, pos)
 }
@@ -578,37 +581,4 @@ func (s *Scene) BuildBVH() *BVH {
 	}
 
 	return NewBVH(objectNodes)
-}
-
-func (s *Scene) computeNodeBounds(node *SceneNode) *AABB {
-	worldTransform := node.GetWorldTransform()
-
-	switch obj := node.Object.(type) {
-	case *Mesh:
-		localBoundsVol := ComputeMeshBounds(obj)
-		if aabb, ok := localBoundsVol.(*AABB); ok {
-			return TransformAABB(aabb, worldTransform)
-		}
-		return NewAABB(Point{}, Point{})
-	case *LODGroup:
-		if obj.BoundingVolume != nil {
-			if aabb, ok := obj.BoundingVolume.(*AABB); ok {
-				return TransformAABB(aabb, worldTransform)
-			}
-		}
-	case *LODGroupWithTransitions:
-		if obj.BoundingVolume != nil {
-			if aabb, ok := obj.BoundingVolume.(*AABB); ok {
-				return TransformAABB(aabb, worldTransform)
-			}
-		}
-	case *Triangle:
-		localBounds := ComputeTriangleBounds(obj)
-		return TransformAABB(localBounds, worldTransform)
-	case *Quad:
-		points := []Point{obj.P0, obj.P1, obj.P2, obj.P3}
-		localBounds := NewAABBFromPoints(points)
-		return TransformAABB(localBounds, worldTransform)
-	}
-	return nil
 }
