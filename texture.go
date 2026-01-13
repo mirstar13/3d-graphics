@@ -66,6 +66,21 @@ func NewTextureFromImage(img image.Image) *Texture {
 	return tex
 }
 
+// SetPixel sets a pixel color at the given coordinates
+func (t *Texture) SetPixel(x, y int, color Color) {
+	if x >= 0 && x < t.Width && y >= 0 && y < t.Height {
+		t.Data[y*t.Width+x] = color
+	}
+}
+
+// GetPixel gets a pixel color at the given coordinates
+func (t *Texture) GetPixel(x, y int) Color {
+	if x >= 0 && x < t.Width && y >= 0 && y < t.Height {
+		return t.Data[y*t.Width+x]
+	}
+	return ColorBlack
+}
+
 // Sample samples the texture at UV coordinates with filtering
 func (t *Texture) Sample(u, v float64, filter TextureFilter, wrap TextureWrap) Color {
 	// Apply wrapping

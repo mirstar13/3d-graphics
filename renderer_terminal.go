@@ -203,6 +203,8 @@ func (r *TerminalRenderer) renderNode(node *SceneNode, worldMatrix Matrix4x4, ca
 		r.renderQuad(obj, worldMatrix, camera)
 	case *Mesh:
 		r.RenderMesh(obj, worldMatrix, camera)
+	case *InstancedMesh:
+		r.RenderInstancedMesh(obj, worldMatrix, camera)
 	case *Line:
 		r.RenderLine(obj, worldMatrix, camera)
 	case *Circle:
@@ -226,14 +228,16 @@ func (r *TerminalRenderer) RenderTriangle(tri *Triangle, worldMatrix Matrix4x4, 
 		return
 	}
 
-	transformed := &Triangle{
-		P0:           p0,
-		P1:           p1,
-		P2:           p2,
-		char:         tri.char,
-		Material:     tri.Material,
-		UseSetNormal: tri.UseSetNormal,
-	}
+	// Use object pool to reduce allocations
+	transformed := AcquireTriangle()
+	defer ReleaseTriangle(transformed)
+	
+	transformed.P0 = p0
+	transformed.P1 = p1
+	transformed.P2 = p2
+	transformed.char = tri.char
+	transformed.Material = tri.Material
+	transformed.UseSetNormal = tri.UseSetNormal
 
 	if tri.UseSetNormal && tri.Normal != nil {
 		transformedNormal := worldMatrix.TransformDirection(*tri.Normal)
@@ -302,16 +306,46 @@ func (r *TerminalRenderer) RenderMesh(mesh *Mesh, worldMatrix Matrix4x4, camera 
 				p2.Y += mesh.Position.Y
 				p2.Z += mesh.Position.Z
 
-				tri := &Triangle{
-					P0:       p0,
-					P1:       p1,
-					P2:       p2,
-					char:     'o',
-					Material: mesh.Material,
-				}
+				// Use object pool for triangle allocation
+				tri := AcquireTriangle()
+				tri.P0 = p0
+				tri.P1 = p1
+				tri.P2 = p2
+				tri.char = 'o'
+				tri.Material = mesh.Material
+				
 				r.RenderTriangle(tri, IdentityMatrix(), camera)
+				
+				ReleaseTriangle(tri)
 			}
 		}
+	}
+}
+
+// RenderInstancedMesh renders multiple instances of the same mesh
+func (r *TerminalRenderer) RenderInstancedMesh(instMesh *InstancedMesh, worldMatrix Matrix4x4, camera *Camera) {
+	if !instMesh.Enabled || instMesh.BaseMesh == nil {
+		return
+	}
+
+	// Render each instance with its own transform
+	for _, instance := range instMesh.Instances {
+		// Combine world matrix with instance transform
+		finalMatrix := worldMatrix.Multiply(instance.Transform)
+		
+		// Temporarily override material color if instance has custom color
+		originalMat := instMesh.BaseMesh.Material
+		if instance.Color.R != 0 || instance.Color.G != 0 || instance.Color.B != 0 {
+			tempMat := NewMaterial()
+			tempMat.DiffuseColor = instance.Color
+			instMesh.BaseMesh.Material = &tempMat
+		}
+		
+		// Render the mesh with instance transform
+		r.RenderMesh(instMesh.BaseMesh, finalMatrix, camera)
+		
+		// Restore original material
+		instMesh.BaseMesh.Material = originalMat
 	}
 }
 

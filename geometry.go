@@ -334,6 +334,7 @@ func (c *Circle) RotateLocal(axis byte, angle float64) {
 // Mesh represents a collection of indexed vertices
 type Mesh struct {
 	Vertices []Point
+	UVs      []TextureCoord // UV coordinates per vertex
 	Indices  []int
 	Position Point
 	Material IMaterial // Added to store material for the whole mesh
@@ -344,6 +345,7 @@ func NewMesh() *Mesh {
 	mat := NewMaterial()
 	return &Mesh{
 		Vertices: make([]Point, 0),
+		UVs:      make([]TextureCoord, 0),
 		Indices:  make([]int, 0),
 		Position: *NewPoint(0, 0, 0),
 		Material: &mat,
@@ -358,6 +360,18 @@ func (m *Mesh) SetPosition(x, y, z float64) {
 // AddVertex adds a raw vertex to the mesh and returns its index
 func (m *Mesh) AddVertex(x, y, z float64) int {
 	m.Vertices = append(m.Vertices, Point{X: x, Y: y, Z: z})
+	return len(m.Vertices) - 1
+}
+
+// AddUV adds a UV coordinate to the mesh
+func (m *Mesh) AddUV(u, v float64) {
+	m.UVs = append(m.UVs, TextureCoord{U: u, V: v})
+}
+
+// AddVertexWithUV adds a vertex with UV coordinate
+func (m *Mesh) AddVertexWithUV(x, y, z, u, v float64) int {
+	m.Vertices = append(m.Vertices, Point{X: x, Y: y, Z: z})
+	m.UVs = append(m.UVs, TextureCoord{U: u, V: v})
 	return len(m.Vertices) - 1
 }
 

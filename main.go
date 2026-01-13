@@ -20,6 +20,9 @@ const (
 	DemoCollisionPhysics
 	DemoAdvancedRendering
 	DemoPerformanceTest
+	DemoAdvancedFeatures
+	DemoTextureShowcase
+	DemoShadowMapping
 )
 
 // RenderMode specifies the rendering approach
@@ -115,13 +118,16 @@ func main() {
 	fmt.Println("  8  - Collision & Physics (AABB, OBB, Raycasting)")
 	fmt.Println("  9  - Advanced Rendering (Anti-aliasing, Clipping, Frustum)")
 	fmt.Println("  10 - Performance Test (Stress test with many objects)")
+	fmt.Println("  11 - Advanced Features (PBR, Textures, Shadows, Instancing)")
+	fmt.Println("  12 - Texture Showcase (UV mapping, procedural textures)")
+	fmt.Println("  13 - Shadow Mapping (Real-time shadows with PCF)")
 	fmt.Println()
-	fmt.Print("Enter choice (1-10): ")
+	fmt.Print("Enter choice (1-13): ")
 
 	var choice int
 	fmt.Scanln(&choice)
 
-	if choice < 1 || choice > 10 {
+	if choice < 1 || choice > 13 {
 		fmt.Println("Invalid choice, using Basic Geometry demo")
 		choice = 1
 	}
@@ -564,6 +570,21 @@ func configureCamera(camera *Camera, demoType int, orientation OrientationType) 
 		camera.Transform.SetRotation(0, 0, 0)
 		camera.Far = 500.0
 
+	case DemoAdvancedFeatures:
+		camera.Transform.SetPosition(0, 20, -80*float64(orientation))
+		camera.Transform.SetRotation(0, 0, 0)
+		camera.Far = 400.0
+
+	case DemoTextureShowcase:
+		camera.Transform.SetPosition(0, 0, 60*float64(orientation))
+		camera.Transform.SetRotation(0, 0, 0)
+		camera.Far = 200.0
+
+	case DemoShadowMapping:
+		camera.Transform.SetPosition(0, 15, 40*float64(orientation))
+		camera.Transform.SetRotation(0, 0, 0)
+		camera.Far = 200.0
+
 	default:
 		camera.Transform.SetPosition(0, 10, -60)
 		camera.Transform.SetRotation(0, 0, 0)
@@ -623,6 +644,21 @@ func configureCameraController(controller *CameraController, demoType int) {
 		controller.SetOrbitCenter(0, 0, 0)
 		controller.SetOrbitHeight(50.0)
 
+	case DemoAdvancedFeatures:
+		controller.SetOrbitRadius(100.0)
+		controller.SetOrbitCenter(0, 0, 0)
+		controller.SetOrbitHeight(25.0)
+
+	case DemoTextureShowcase:
+		controller.SetOrbitRadius(70.0)
+		controller.SetOrbitCenter(0, 0, 0)
+		controller.SetOrbitHeight(15.0)
+
+	case DemoShadowMapping:
+		controller.SetOrbitRadius(60.0)
+		controller.SetOrbitCenter(0, 0, 0)
+		controller.SetOrbitHeight(20.0)
+
 	default:
 		controller.SetOrbitRadius(80.0)
 		controller.SetOrbitCenter(0, 0, 0)
@@ -665,6 +701,12 @@ func buildScene(scene *Scene, demoType int, material Material) {
 		AdvancedRenderingDemo(scene)
 	case DemoPerformanceTest:
 		PerformanceTestDemo(scene)
+	case DemoAdvancedFeatures:
+		AdvancedFeaturesDemo(scene)
+	case DemoTextureShowcase:
+		TextureShowcaseDemo(scene)
+	case DemoShadowMapping:
+		ShadowMappingDemo(scene)
 	default:
 		BasicGeometryDemo(scene)
 	}
@@ -692,6 +734,12 @@ func animateSceneDemo(scene *Scene, demoType int, time float64) {
 		AnimateAdvancedRendering(scene)
 	case DemoPerformanceTest:
 		AnimatePerformanceTest(scene)
+	case DemoAdvancedFeatures:
+		AnimateAdvancedFeatures(scene, time)
+	case DemoTextureShowcase:
+		AnimateAdvancedFeatures(scene, time) // Reuse advanced features animation
+	case DemoShadowMapping:
+		AnimateAdvancedFeatures(scene, time) // Reuse animation for shadow casters
 	}
 
 	/*

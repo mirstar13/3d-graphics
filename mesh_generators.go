@@ -34,9 +34,9 @@ func GenerateSphere(radius float64, rings, sectors int) *Mesh {
 			// Add the single unique vertex to the list
 			// Note: We are no longer making Quads here. Just points.
 			mesh.AddVertex(x, y, z)
-
-			// Optional: If your Mesh struct supports UVs:
-			// mesh.AddUV(u, v)
+			
+			// Add UV coordinates
+			mesh.AddUV(u, 1.0-v) // Flip V for OpenGL convention
 		}
 	}
 
@@ -106,6 +106,7 @@ func GenerateTorus(majorRadius, minorRadius float64, majorSegments, minorSegment
 			z := (majorRadius + minorRadius*cosPhi) * sinTheta
 
 			mesh.AddVertex(x, y, z)
+			mesh.AddUV(u, v)
 		}
 	}
 

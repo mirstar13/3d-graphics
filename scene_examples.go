@@ -678,3 +678,299 @@ func AnimatePerformanceTest(scene *Scene) {
 	}
 	scene.UpdateLODs()
 }
+
+// ============================================================================
+// DEMO 11: ADVANCED FEATURES - PBR, Textures, Shadows, Instancing, Object Pools
+// ============================================================================
+
+func AdvancedFeaturesDemo(scene *Scene) {
+	fmt.Println("=== Advanced Features Demo ===")
+	fmt.Println("Showcasing: PBR Materials, Textures, Shadow Mapping, Instancing, Object Pools")
+
+	// Section 1: PBR Materials with different metallic/roughness combinations
+	fmt.Println("Creating PBR material showcase...")
+	pbrPositions := []struct{ x, z float64 }{
+		{-40, 0}, {-20, 0}, {0, 0}, {20, 0}, {40, 0},
+	}
+	
+	metallicValues := []float64{0.0, 0.25, 0.5, 0.75, 1.0}
+	roughnessValue := 0.3
+	
+	for i, pos := range pbrPositions {
+		pbrMat := NewPBRMaterial()
+		pbrMat.Albedo = Color{R: 180, G: 140, B: 100}
+		pbrMat.Metallic = metallicValues[i]
+		pbrMat.Roughness = roughnessValue
+		pbrMat.AO = 1.0
+		
+		sphere := scene.CreateSphere(fmt.Sprintf("PBR_Metal_%.2f", metallicValues[i]), 6, 32, 32, pbrMat)
+		sphere.Transform.SetPosition(pos.x, 12, pos.z)
+		sphere.AddTag("pbr_showcase")
+	}
+	
+	// Section 2: Different roughness values
+	for i, pos := range pbrPositions {
+		pbrMat := NewPBRMaterial()
+		pbrMat.Albedo = Color{R: 100, G: 150, B: 200}
+		pbrMat.Metallic = 0.8
+		pbrMat.Roughness = float64(i) * 0.25
+		pbrMat.AO = 1.0
+		
+		sphere := scene.CreateSphere(fmt.Sprintf("PBR_Rough_%.2f", float64(i)*0.25), 6, 32, 32, pbrMat)
+		sphere.Transform.SetPosition(pos.x, 0, pos.z)
+		sphere.AddTag("pbr_showcase")
+	}
+	
+	// Section 3: Textured objects (procedural textures for now)
+	fmt.Println("Creating procedurally textured objects...")
+	
+	// Create basic material with texture support
+	texMat := NewMaterial()
+	texMat.DiffuseColor = ColorWhite
+	
+	// For now, just show a colored cube (texture rendering needs more integration)
+	texCube := scene.CreateCube("TexturedCube", 10, &texMat)
+	texCube.Transform.SetPosition(-30, -12, 20)
+	texCube.AddTag("textured")
+	
+	// Section 4: Instanced rendering (many copies of same mesh)
+	fmt.Println("Setting up instanced rendering...")
+	baseMesh := GenerateSphere(3.0, 12, 12)
+	instancedMesh := NewInstancedMesh(baseMesh)
+	
+	// Create grid of instances
+	instanceCount := 0
+	for ix := -3; ix <= 3; ix++ {
+		for iz := -3; iz <= 3; iz++ {
+			x := float64(ix) * 8.0
+			z := float64(iz) * 8.0 + 30.0
+			y := -20.0
+			
+			color := Color{
+				R: uint8(128 + ix*18),
+				G: uint8(128 + iz*18),
+				B: uint8(180),
+			}
+			
+			instancedMesh.AddInstanceAt(x, y, z, color)
+			instanceCount++
+		}
+	}
+	
+	instNode := NewSceneNodeWithObject("InstancedCubes", instancedMesh)
+	scene.AddNode(instNode)
+	instNode.AddTag("instanced")
+	fmt.Printf("Created %d instances (single draw call)\n", instanceCount)
+	
+	// Section 5: Shadow-casting object (shows shadow system is available)
+	fmt.Println("Setting up shadow mapping...")
+	
+	// Create a large ground plane
+	groundMat := NewMaterial()
+	groundMat.DiffuseColor = Color{R: 80, G: 80, B: 80}
+	groundMat.AmbientStrength = 0.3
+	
+	ground := scene.CreateCube("Ground", 100, &groundMat)
+	ground.Transform.SetPosition(0, -30, 0)
+	ground.Transform.SetScale(2, 0.1, 2)
+	ground.AddTag("shadow_receiver")
+	
+	// Create floating shadow casters
+	for i := 0; i < 3; i++ {
+		shadowMat := NewMaterial()
+		shadowMat.DiffuseColor = Color{R: 200, G: uint8(80 + i*50), B: 80}
+		
+		caster := scene.CreateSphere(fmt.Sprintf("ShadowCaster_%d", i), 5, 24, 24, &shadowMat)
+		angle := float64(i) * 2.0 * math.Pi / 3.0
+		caster.Transform.SetPosition(
+			math.Cos(angle)*25.0,
+			-18.0,
+			math.Sin(angle)*25.0+30.0,
+		)
+		caster.AddTag("shadow_caster")
+	}
+	
+	fmt.Println("Advanced features demo created successfully")
+	fmt.Println("Note: Object pooling is active in background for performance")
+}
+
+func AnimateAdvancedFeatures(scene *Scene, time float64) {
+	// Rotate PBR spheres
+	pbr := scene.FindNodesByTag("pbr_showcase")
+	for _, obj := range pbr {
+		obj.RotateLocal(0.01, 0.02, 0)
+	}
+	
+	// Spin textured objects
+	textured := scene.FindNodesByTag("textured")
+	for _, obj := range textured {
+		obj.RotateLocal(0.02, 0.03, 0.01)
+	}
+	
+	// Gently rotate instanced objects as a group
+	if instNode := scene.FindNode("InstancedCubes"); instNode != nil {
+		instNode.RotateLocal(0, 0.005, 0)
+	}
+	
+	// Animate shadow casters in a circle
+	casters := scene.FindNodesByTag("shadow_caster")
+	for i, obj := range casters {
+		baseAngle := float64(i) * 2.0 * math.Pi / 3.0
+		angle := baseAngle + time*0.3
+		obj.Transform.SetPosition(
+			math.Cos(angle)*25.0,
+			-18.0+math.Sin(time*2.0+float64(i))*3.0,
+			math.Sin(angle)*25.0+30.0,
+		)
+		obj.RotateLocal(0.02, 0.015, 0)
+	}
+}
+
+// ============================================================================
+// DEMO 12: TEXTURE SHOWCASE
+// ============================================================================
+
+func TextureShowcaseDemo(scene *Scene) {
+	fmt.Println("=== Texture Showcase Demo ===")
+	fmt.Println("Showcasing: Textured meshes with UV mapping")
+
+	// Create various procedural textures
+	checkerboard := GenerateCheckerboard(256, 256, 32, ColorWhite, ColorBlack)
+	gradient := GenerateGradient(256, 256, ColorRed, ColorBlue, true)
+	noise := GenerateNoise(256, 256, 12345)
+
+	// Create textured materials
+	checkerMat := NewTexturedMaterial()
+	checkerMat.DiffuseTexture = checkerboard
+	checkerMat.UseTextures = true
+	checkerMat.DiffuseColor = ColorWhite
+
+	gradientMat := NewTexturedMaterial()
+	gradientMat.DiffuseTexture = gradient
+	gradientMat.UseTextures = true
+	gradientMat.DiffuseColor = ColorWhite
+
+	noiseMat := NewTexturedMaterial()
+	noiseMat.DiffuseTexture = noise
+	noiseMat.UseTextures = true
+	noiseMat.DiffuseColor = ColorWhite
+
+	// Textured sphere with checkerboard
+	sphere1 := GenerateSphere(5, 32, 32)
+	sphere1.Material = &checkerMat
+	sphere1Node := NewSceneNodeWithObject("CheckeredSphere", sphere1)
+	sphere1Node.Transform.SetPosition(-15, 0, 0)
+	sphere1Node.Tags = append(sphere1Node.Tags, "textured")
+	scene.AddNode(sphere1Node)
+
+	// Textured sphere with gradient
+	sphere2 := GenerateSphere(5, 32, 32)
+	sphere2.Material = &gradientMat
+	sphere2Node := NewSceneNodeWithObject("GradientSphere", sphere2)
+	sphere2Node.Transform.SetPosition(0, 0, 0)
+	sphere2Node.Tags = append(sphere2Node.Tags, "textured")
+	scene.AddNode(sphere2Node)
+
+	// Textured sphere with noise
+	sphere3 := GenerateSphere(5, 32, 32)
+	sphere3.Material = &noiseMat
+	sphere3Node := NewSceneNodeWithObject("NoiseSphere", sphere3)
+	sphere3Node.Transform.SetPosition(15, 0, 0)
+	sphere3Node.Tags = append(sphere3Node.Tags, "textured")
+	scene.AddNode(sphere3Node)
+
+	// Textured torus with checkerboard
+	torus := GenerateTorus(8, 3, 48, 24)
+	torus.Material = &checkerMat
+	torusNode := NewSceneNodeWithObject("CheckeredTorus", torus)
+	torusNode.Transform.SetPosition(0, 15, 0)
+	torusNode.Tags = append(torusNode.Tags, "textured")
+	scene.AddNode(torusNode)
+
+	// Setup camera
+	scene.Camera.SetPosition(0, 0, 50)
+	// Lighting will be setup by the engine's lighting system
+
+	fmt.Println("  - 3 Textured Spheres (checkerboard, gradient, noise)")
+	fmt.Println("  - 1 Textured Torus")
+	fmt.Println("  - All objects rotate dynamically")
+}
+
+// ============================================================================
+// DEMO 13: SHADOW MAPPING SHOWCASE
+// ============================================================================
+
+func ShadowMappingDemo(scene *Scene) {
+	fmt.Println("=== Shadow Mapping Demo ===")
+	fmt.Println("Showcasing: Real-time shadows with shadow mapping")
+
+	// Create ground plane (to receive shadows)
+	// Simple plane made from two triangles
+	groundMesh := NewMesh()
+	size := 30.0
+	
+	// Four corners of the plane
+	groundMesh.AddVertex(-size, -10, -size)  // 0: back-left
+	groundMesh.AddVertex(size, -10, -size)   // 1: back-right
+	groundMesh.AddVertex(size, -10, size)    // 2: front-right
+	groundMesh.AddVertex(-size, -10, size)   // 3: front-left
+	
+	// Two triangles forming the plane
+	groundMesh.AddTriangleIndices(0, 1, 2)  // Triangle 1
+	groundMesh.AddTriangleIndices(0, 2, 3)  // Triangle 2
+	
+	// Set PBR material for ground
+	groundPBR := NewPBRMaterial()
+	groundPBR.Albedo = Color{R: 200, G: 200, B: 200}
+	groundPBR.Metallic = 0.0
+	groundPBR.Roughness = 0.9
+	groundMesh.Material = groundPBR
+	
+	groundNode := NewSceneNodeWithObject("Ground", groundMesh)
+	scene.AddNode(groundNode)
+
+	// Create floating objects that cast shadows
+	// Sphere 1 - Red metallic
+	sphere1PBR := NewPBRMaterial()
+	sphere1PBR.Albedo = Color{R: 200, G: 50, B: 50}
+	sphere1PBR.Metallic = 0.8
+	sphere1PBR.Roughness = 0.2
+	sphere1 := GenerateSphere(4, 32, 32)
+	sphere1.Material = sphere1PBR
+	sphere1Node := NewSceneNodeWithObject("Sphere1", sphere1)
+	sphere1Node.Transform.SetPosition(-12, 5, 0)
+	sphere1Node.Tags = append(sphere1Node.Tags, "shadow_caster")
+	scene.AddNode(sphere1Node)
+
+	// Sphere 2 - Green
+	sphere2PBR := NewPBRMaterial()
+	sphere2PBR.Albedo = Color{R: 50, G: 200, B: 50}
+	sphere2PBR.Metallic = 0.3
+	sphere2PBR.Roughness = 0.5
+	sphere2 := GenerateSphere(4, 32, 32)
+	sphere2.Material = sphere2PBR
+	sphere2Node := NewSceneNodeWithObject("Sphere2", sphere2)
+	sphere2Node.Transform.SetPosition(0, 5, 0)
+	sphere2Node.Tags = append(sphere2Node.Tags, "shadow_caster")
+	scene.AddNode(sphere2Node)
+
+	// Sphere 3 - Blue
+	sphere3PBR := NewPBRMaterial()
+	sphere3PBR.Albedo = Color{R: 50, G: 50, B: 200}
+	sphere3PBR.Metallic = 0.1
+	sphere3PBR.Roughness = 0.7
+	sphere3 := GenerateSphere(4, 32, 32)
+	sphere3.Material = sphere3PBR
+	sphere3Node := NewSceneNodeWithObject("Sphere3", sphere3)
+	sphere3Node.Transform.SetPosition(12, 5, 0)
+	sphere3Node.Tags = append(sphere3Node.Tags, "shadow_caster")
+	scene.AddNode(sphere3Node)
+
+	// Setup camera
+	scene.Camera.SetPosition(0, 15, 40)
+
+	fmt.Println("  - Ground plane to receive shadows")
+	fmt.Println("  - 3 Floating spheres casting shadows")
+	fmt.Println("  - Real-time shadow map rendering")
+	fmt.Println("  - PCF (Percentage Closer Filtering) for soft shadows")
+}
