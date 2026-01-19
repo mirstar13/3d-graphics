@@ -900,11 +900,11 @@ func (r *OpenGLRenderer) createBuffers() error {
 	gl.VertexAttribPointer(1, 3, gl.FLOAT, false, stride, gl.PtrOffset(3*4))
 	gl.EnableVertexAttribArray(1)
 
-	// Color attribute (location 2) - Offset 32 (3+3+2 floats)
+	// Color attribute (location 2) - Offset 32 bytes (8 floats: 3+3+2)
 	gl.VertexAttribPointer(2, 3, gl.FLOAT, false, stride, gl.PtrOffset(8*4))
 	gl.EnableVertexAttribArray(2)
 
-	// UV attribute (location 3) - Offset 24 (3+3 floats)
+	// UV attribute (location 3) - Offset 24 bytes (6 floats: 3+3)
 	gl.VertexAttribPointer(3, 2, gl.FLOAT, false, stride, gl.PtrOffset(6*4))
 	gl.EnableVertexAttribArray(3)
 
