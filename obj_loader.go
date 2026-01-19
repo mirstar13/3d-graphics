@@ -158,6 +158,9 @@ func LoadOBJ(filepath string) (*Mesh, error) {
 		return nil, fmt.Errorf("no vertices found in OBJ file")
 	}
 
+	// Calculate normals after loading
+	mesh.CalculateNormals()
+
 	return mesh, nil
 }
 
