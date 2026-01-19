@@ -37,41 +37,41 @@ type OpenGLRenderer struct {
 	lineUniformProj  int32
 
 	// PBR shader uniforms
-	pbrUniformModel       int32
-	pbrUniformView        int32
-	pbrUniformProj        int32
-	pbrUniformMetallic    int32
-	pbrUniformRoughness   int32
-	pbrUniformAlbedo      int32
-	pbrUniformCameraPos   int32
-	pbrUniformLightPos    int32
-	pbrUniformLightColor  int32
+	pbrUniformModel            int32
+	pbrUniformView             int32
+	pbrUniformProj             int32
+	pbrUniformMetallic         int32
+	pbrUniformRoughness        int32
+	pbrUniformAlbedo           int32
+	pbrUniformCameraPos        int32
+	pbrUniformLightPos         int32
+	pbrUniformLightColor       int32
 	pbrUniformLightSpaceMatrix int32
-	pbrUniformShadowMap   int32
-	pbrUniformUseShadows  int32
+	pbrUniformShadowMap        int32
+	pbrUniformUseShadows       int32
 
 	// Texture support
-	textureProgram        uint32
-	textureVAO            uint32
-	textureVBO            uint32
-	textureUniformModel   int32
-	textureUniformView    int32
-	textureUniformProj    int32
-	textureUniformSampler int32
+	textureProgram           uint32
+	textureVAO               uint32
+	textureVBO               uint32
+	textureUniformModel      int32
+	textureUniformView       int32
+	textureUniformProj       int32
+	textureUniformSampler    int32
 	textureUniformUseTexture int32
-	texturedVertices      []TexturedVertex
-	textureCache          map[*Texture]uint32 // Cache OpenGL texture IDs
-	activeTexture         *Texture             // Current texture being rendered
+	texturedVertices         []TexturedVertex
+	textureCache             map[*Texture]uint32 // Cache OpenGL texture IDs
+	activeTexture            *Texture            // Current texture being rendered
 
 	// Shadow mapping support
-	shadowProgram         uint32   // Depth-only shader for shadow pass
-	shadowFBO             uint32   // Framebuffer for shadow map
-	shadowDepthTexture    uint32   // Depth texture
-	shadowResolution      int      // Shadow map resolution (e.g., 2048)
-	shadowUniformModel    int32
+	shadowProgram                 uint32 // Depth-only shader for shadow pass
+	shadowFBO                     uint32 // Framebuffer for shadow map
+	shadowDepthTexture            uint32 // Depth texture
+	shadowResolution              int    // Shadow map resolution (e.g., 2048)
+	shadowUniformModel            int32
 	shadowUniformLightSpaceMatrix int32
-	enableShadows         bool
-	shadowLightMatrix     Matrix4x4 // Light space transformation matrix
+	enableShadows                 bool
+	shadowLightMatrix             Matrix4x4 // Light space transformation matrix
 
 	// Vertex data
 	maxVertices     int
@@ -748,7 +748,7 @@ func (r *OpenGLRenderer) createShadowMapFBO() error {
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_BORDER)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_BORDER)
-	
+
 	// Set border color to white (1.0) so areas outside shadow map are not in shadow
 	borderColor := []float32{1.0, 1.0, 1.0, 1.0}
 	gl.TexParameterfv(gl.TEXTURE_2D, gl.TEXTURE_BORDER_COLOR, &borderColor[0])
@@ -867,7 +867,7 @@ func (r *OpenGLRenderer) createBuffers() error {
 	// Store PBR VAO/VBO
 	r.pbrVAO = pbrVAO
 	r.pbrVBO = pbrVBO
-	
+
 	// Create VAO and VBO for textured rendering
 	var textureVAO, textureVBO uint32
 	gl.GenVertexArrays(1, &textureVAO)
@@ -922,13 +922,13 @@ func (r *OpenGLRenderer) Shutdown() {
 	gl.DeleteProgram(r.pbrProgram)
 	gl.DeleteProgram(r.textureProgram)
 	gl.DeleteProgram(r.shadowProgram)
-	
+
 	// Delete cached textures
 	for _, texID := range r.textureCache {
 		gl.DeleteTextures(1, &texID)
 	}
 	r.textureCache = make(map[*Texture]uint32)
-	
+
 	// Delete shadow resources
 	if r.shadowDepthTexture != 0 {
 		gl.DeleteTextures(1, &r.shadowDepthTexture)
@@ -1051,7 +1051,7 @@ func (r *OpenGLRenderer) Present() {
 		pbrVertexCount := int32(len(r.pbrVertices))
 		gl.DrawArrays(gl.TRIANGLES, 0, pbrVertexCount)
 		gl.BindVertexArray(0)
-		
+
 		// Unbind shadow map
 		gl.ActiveTexture(gl.TEXTURE1)
 		gl.BindTexture(gl.TEXTURE_2D, 0)
@@ -1090,7 +1090,7 @@ func (r *OpenGLRenderer) Present() {
 		textureVertexCount := int32(len(r.texturedVertices))
 		gl.DrawArrays(gl.TRIANGLES, 0, textureVertexCount)
 		gl.BindVertexArray(0)
-		
+
 		// Unbind texture
 		gl.BindTexture(gl.TEXTURE_2D, 0)
 	}
@@ -1333,12 +1333,12 @@ func (r *OpenGLRenderer) RenderMesh(mesh *Mesh, worldMatrix Matrix4x4, camera *C
 	}
 
 	// Iterate over each triangle in the mesh.
-	for i := 0; i < len(mesh.Indices)-2; i += 3 {
+	for i := 0; i+2 < len(mesh.Indices); i += 3 {
 		// Get the indices for the triangle's vertices.
 		idx0, idx1, idx2 := mesh.Indices[i], mesh.Indices[i+1], mesh.Indices[i+2]
 
 		// Bounds check for vertex indices.
-		if idx0 >= len(mesh.Vertices) || idx1 >= len(mesh.Vertices) || idx2 >= len(mesh.Vertices) {
+		if idx0 < 0 || idx0 >= len(mesh.Vertices) || idx1 < 0 || idx1 >= len(mesh.Vertices) || idx2 < 0 || idx2 >= len(mesh.Vertices) {
 			continue
 		}
 
@@ -1445,7 +1445,7 @@ func (r *OpenGLRenderer) RenderInstancedMesh(instMesh *InstancedMesh, worldMatri
 	for _, instance := range instMesh.Instances {
 		// Combine world matrix with instance transform
 		finalMatrix := worldMatrix.Multiply(instance.Transform)
-		
+
 		// Temporarily override material color if instance has custom color
 		originalMat := instMesh.BaseMesh.Material
 		if instance.Color.R != 0 || instance.Color.G != 0 || instance.Color.B != 0 {
@@ -1460,10 +1460,10 @@ func (r *OpenGLRenderer) RenderInstancedMesh(instMesh *InstancedMesh, worldMatri
 			}
 			instMesh.BaseMesh.Material = &tempMat
 		}
-		
+
 		// Render the mesh with instance transform
 		r.RenderMesh(instMesh.BaseMesh, finalMatrix, camera)
-		
+
 		// Restore original material
 		instMesh.BaseMesh.Material = originalMat
 	}
@@ -1732,14 +1732,14 @@ func (r *OpenGLRenderer) RenderTexturedMesh(mesh *Mesh, worldMatrix Matrix4x4, c
 func (r *OpenGLRenderer) calculateLightSpaceMatrix(lightPos Point, sceneCenter Point) Matrix4x4 {
 	// Create light view matrix (look at scene center from light position)
 	viewMatrix := CreateLookAtMatrix(lightPos, sceneCenter, Point{X: 0, Y: 1, Z: 0})
-	
+
 	// Create orthographic projection for shadow map
 	// Adjust size based on scene bounds
 	size := 50.0
 	near := 0.1
 	far := 200.0
 	projMatrix := CreateOrthographicMatrix(-size, size, -size, size, near, far)
-	
+
 	// Combine matrices
 	return projMatrix.Multiply(viewMatrix)
 }
@@ -1799,7 +1799,7 @@ func (r *OpenGLRenderer) renderNodeShadow(node *SceneNode, worldMatrix Matrix4x4
 		if currentMesh != nil && len(currentMesh.Vertices) > 0 && len(currentMesh.Indices) > 0 {
 			r.renderMeshShadow(currentMesh, worldMatrix)
 		}
-	// Skip lines, points, etc. for shadow pass
+		// Skip lines, points, etc. for shadow pass
 	}
 }
 
