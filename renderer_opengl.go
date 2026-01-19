@@ -50,6 +50,17 @@ type OpenGLRenderer struct {
 	pbrUniformShadowMap   int32
 	pbrUniformUseShadows  int32
 
+	pbrUniformAlbedoMap       int32
+	pbrUniformUseAlbedoMap    int32
+	pbrUniformNormalMap       int32
+	pbrUniformUseNormalMap    int32
+	pbrUniformMetallicMap     int32
+	pbrUniformUseMetallicMap  int32
+	pbrUniformRoughnessMap    int32
+	pbrUniformUseRoughnessMap int32
+	pbrUniformAOMap           int32
+	pbrUniformUseAOMap        int32
+
 	// Texture support
 	textureProgram        uint32
 	textureVAO            uint32
@@ -62,6 +73,7 @@ type OpenGLRenderer struct {
 	texturedVertices      []TexturedVertex
 	textureCache          map[*Texture]uint32 // Cache OpenGL texture IDs
 	activeTexture         *Texture             // Current texture being rendered
+	activePBRMaterial     *PBRMaterial         // Current PBR material being rendered
 
 	// Shadow mapping support
 	shadowProgram         uint32   // Depth-only shader for shadow pass
@@ -95,10 +107,11 @@ type OpenGLRenderer struct {
 	frameCount  int
 }
 
-// PBRVertex represents a vertex with position, normal, and color for PBR rendering
+// PBRVertex represents a vertex with position, normal, UV, and color for PBR rendering
 type PBRVertex struct {
 	Pos    [3]float32
 	Normal [3]float32
+	UV     [2]float32
 	Color  [3]float32
 }
 
@@ -169,10 +182,12 @@ void main() {
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec3 aNormal;
 layout (location = 2) in vec3 aColor;
+layout (location = 3) in vec2 aUV;
 
 out vec3 FragPos;
 out vec3 Normal;
 out vec3 BaseColor;
+out vec2 TexCoord;
 out vec4 FragPosLightSpace;
 
 uniform mat4 model;
@@ -185,6 +200,7 @@ void main() {
     FragPos = worldPos.xyz;
     Normal = mat3(transpose(inverse(model))) * aNormal;
     BaseColor = aColor;
+    TexCoord = aUV;
     FragPosLightSpace = lightSpaceMatrix * worldPos;
     gl_Position = proj * view * worldPos;
 }
@@ -195,6 +211,7 @@ void main() {
 in vec3 FragPos;
 in vec3 Normal;
 in vec3 BaseColor;
+in vec2 TexCoord;
 in vec4 FragPosLightSpace;
 
 out vec4 FragColor;
@@ -207,6 +224,15 @@ uniform float roughness;
 uniform vec3 albedo;
 uniform sampler2D shadowMap;
 uniform bool useShadows;
+
+uniform sampler2D albedoMap;
+uniform bool useAlbedoMap;
+uniform sampler2D metallicMap;
+uniform bool useMetallicMap;
+uniform sampler2D roughnessMap;
+uniform bool useRoughnessMap;
+uniform sampler2D aoMap;
+uniform bool useAOMap;
 
 const float PI = 3.14159265359;
 
@@ -289,12 +315,15 @@ void main() {
     vec3 N = normalize(Normal);
     vec3 V = normalize(cameraPos - FragPos);
     
-    // Use albedo uniform if non-zero, otherwise use vertex color
-    vec3 materialAlbedo = (albedo.r + albedo.g + albedo.b > 0.01) ? albedo : BaseColor;
+    // Sample maps
+    vec3 materialAlbedo = useAlbedoMap ? texture(albedoMap, TexCoord).rgb : ((length(albedo) > 0.01) ? albedo : BaseColor);
+    float materialMetallic = useMetallicMap ? texture(metallicMap, TexCoord).r : metallic;
+    float materialRoughness = useRoughnessMap ? texture(roughnessMap, TexCoord).r : roughness;
+    float materialAO = useAOMap ? texture(aoMap, TexCoord).r : 1.0;
     
     // Calculate reflectance at normal incidence
     vec3 F0 = vec3(0.04); 
-    F0 = mix(F0, materialAlbedo, metallic);
+    F0 = mix(F0, materialAlbedo, materialMetallic);
     
     // Lighting calculation
     vec3 L = normalize(lightPos - FragPos);
@@ -304,8 +333,8 @@ void main() {
     vec3 radiance = lightColor * attenuation;
     
     // BRDF
-    float NDF = distributionGGX(N, H, roughness);
-    float G = geometrySmith(N, V, L, roughness);
+    float NDF = distributionGGX(N, H, materialRoughness);
+    float G = geometrySmith(N, V, L, materialRoughness);
     vec3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);
     
     vec3 numerator = NDF * G * F;
@@ -314,7 +343,7 @@ void main() {
     
     vec3 kS = F;
     vec3 kD = vec3(1.0) - kS;
-    kD *= 1.0 - metallic;
+    kD *= 1.0 - materialMetallic;
     
     float NdotL = max(dot(N, L), 0.0);
     
@@ -324,7 +353,7 @@ void main() {
     vec3 Lo = (kD * materialAlbedo / PI + specular) * radiance * NdotL * shadow;
     
     // Ambient
-    vec3 ambient = vec3(0.03) * materialAlbedo;
+    vec3 ambient = vec3(0.03) * materialAlbedo * materialAO;
     vec3 color = ambient + Lo;
     
     // Tone mapping
@@ -641,6 +670,17 @@ func (r *OpenGLRenderer) createPBRShaderProgram() error {
 	r.pbrUniformShadowMap = gl.GetUniformLocation(program, gl.Str("shadowMap\x00"))
 	r.pbrUniformUseShadows = gl.GetUniformLocation(program, gl.Str("useShadows\x00"))
 
+	r.pbrUniformAlbedoMap = gl.GetUniformLocation(program, gl.Str("albedoMap\x00"))
+	r.pbrUniformUseAlbedoMap = gl.GetUniformLocation(program, gl.Str("useAlbedoMap\x00"))
+	r.pbrUniformNormalMap = gl.GetUniformLocation(program, gl.Str("normalMap\x00"))
+	r.pbrUniformUseNormalMap = gl.GetUniformLocation(program, gl.Str("useNormalMap\x00"))
+	r.pbrUniformMetallicMap = gl.GetUniformLocation(program, gl.Str("metallicMap\x00"))
+	r.pbrUniformUseMetallicMap = gl.GetUniformLocation(program, gl.Str("useMetallicMap\x00"))
+	r.pbrUniformRoughnessMap = gl.GetUniformLocation(program, gl.Str("roughnessMap\x00"))
+	r.pbrUniformUseRoughnessMap = gl.GetUniformLocation(program, gl.Str("useRoughnessMap\x00"))
+	r.pbrUniformAOMap = gl.GetUniformLocation(program, gl.Str("aoMap\x00"))
+	r.pbrUniformUseAOMap = gl.GetUniformLocation(program, gl.Str("useAOMap\x00"))
+
 	fmt.Println("[OpenGL] PBR shader program created successfully")
 	return nil
 }
@@ -846,21 +886,27 @@ func (r *OpenGLRenderer) createBuffers() error {
 	gl.GenBuffers(1, &pbrVBO)
 	gl.BindBuffer(gl.ARRAY_BUFFER, pbrVBO)
 
-	// Allocate buffer for PBR vertices (pos(3) + normal(3) + color(3) = 9 floats)
-	pbrBufferSize := r.maxVertices * 9 * 4
+	// Allocate buffer for PBR vertices (pos(3) + normal(3) + uv(2) + color(3) = 11 floats)
+	pbrBufferSize := r.maxVertices * 11 * 4
 	gl.BufferData(gl.ARRAY_BUFFER, pbrBufferSize, nil, gl.DYNAMIC_DRAW)
 
+	stride := int32(11 * 4)
+
 	// Position attribute (location 0)
-	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, 9*4, gl.PtrOffset(0))
+	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, stride, gl.PtrOffset(0))
 	gl.EnableVertexAttribArray(0)
 
 	// Normal attribute (location 1)
-	gl.VertexAttribPointer(1, 3, gl.FLOAT, false, 9*4, gl.PtrOffset(3*4))
+	gl.VertexAttribPointer(1, 3, gl.FLOAT, false, stride, gl.PtrOffset(3*4))
 	gl.EnableVertexAttribArray(1)
 
-	// Color attribute (location 2)
-	gl.VertexAttribPointer(2, 3, gl.FLOAT, false, 9*4, gl.PtrOffset(6*4))
+	// Color attribute (location 2) - Offset 32 (3+3+2 floats)
+	gl.VertexAttribPointer(2, 3, gl.FLOAT, false, stride, gl.PtrOffset(8*4))
 	gl.EnableVertexAttribArray(2)
+
+	// UV attribute (location 3) - Offset 24 (3+3 floats)
+	gl.VertexAttribPointer(3, 2, gl.FLOAT, false, stride, gl.PtrOffset(6*4))
+	gl.EnableVertexAttribArray(3)
 
 	gl.BindVertexArray(0)
 
@@ -962,161 +1008,13 @@ func (r *OpenGLRenderer) Present() {
 		return
 	}
 
-	// FIXED: Limit buffer size
-	const MAX_VERTICES = 1000000
-
-	// Render regular vertices
-	if len(r.currentVertices) > MAX_VERTICES {
-		r.currentVertices = r.currentVertices[:MAX_VERTICES]
-	}
-
-	if len(r.currentVertices) > 0 {
-		// Upload vertex data
-		gl.BindBuffer(gl.ARRAY_BUFFER, r.vbo)
-		dataSize := len(r.currentVertices) * 24
-		gl.BufferSubData(gl.ARRAY_BUFFER, 0, dataSize, gl.Ptr(r.currentVertices))
-
-		// Use shader program
-		gl.UseProgram(r.program)
-
-		// Update matrices
-		r.updateMatrices(r.uniformModel, r.uniformView, r.uniformProj)
-
-		// Draw
-		gl.BindVertexArray(r.vao)
-		vertexCount := int32(len(r.currentVertices))
-		gl.DrawArrays(gl.TRIANGLES, 0, vertexCount)
-		gl.BindVertexArray(0)
-	}
-
-	// Render PBR vertices
-	if len(r.pbrVertices) > 0 {
-		if len(r.pbrVertices) > MAX_VERTICES {
-			r.pbrVertices = r.pbrVertices[:MAX_VERTICES]
-		}
-
-		// Upload PBR vertex data
-		gl.BindBuffer(gl.ARRAY_BUFFER, r.pbrVBO)
-		pbrDataSize := len(r.pbrVertices) * 36 // 9 floats * 4 bytes
-		gl.BufferSubData(gl.ARRAY_BUFFER, 0, pbrDataSize, gl.Ptr(r.pbrVertices))
-
-		// Use PBR shader program
-		gl.UseProgram(r.pbrProgram)
-
-		// Update matrices
-		r.updateMatrices(r.pbrUniformModel, r.pbrUniformView, r.pbrUniformProj)
-
-		// Set PBR uniforms (use first light if available)
-		if r.LightingSystem != nil && len(r.LightingSystem.Lights) > 0 {
-			light := r.LightingSystem.Lights[0]
-			gl.Uniform3f(r.pbrUniformLightPos, float32(light.Position.X), float32(light.Position.Y), float32(light.Position.Z))
-			gl.Uniform3f(r.pbrUniformLightColor, float32(light.Color.R)/255.0, float32(light.Color.G)/255.0, float32(light.Color.B)/255.0)
-		} else {
-			// Default light
-			gl.Uniform3f(r.pbrUniformLightPos, 0, 100, 0)
-			gl.Uniform3f(r.pbrUniformLightColor, 1.0, 1.0, 1.0)
-		}
-
-		// Set camera position
-		if r.Camera != nil {
-			camPos := r.Camera.GetPosition()
-			gl.Uniform3f(r.pbrUniformCameraPos, float32(camPos.X), float32(camPos.Y), float32(camPos.Z))
-		}
-
-		// Default PBR parameters (will be overridden per-material later)
-		gl.Uniform1f(r.pbrUniformMetallic, 0.5)
-		gl.Uniform1f(r.pbrUniformRoughness, 0.5)
-		gl.Uniform3f(r.pbrUniformAlbedo, 0, 0, 0) // 0 means use vertex color
-
-		// Set shadow uniforms
-		if r.enableShadows {
-			// Upload light space matrix
-			var m [16]float32
-			for i := 0; i < 16; i++ {
-				m[i] = float32(r.shadowLightMatrix.M[i])
-			}
-			gl.UniformMatrix4fv(r.pbrUniformLightSpaceMatrix, 1, false, &m[0])
-
-			// Bind shadow map texture
-			gl.ActiveTexture(gl.TEXTURE1)
-			gl.BindTexture(gl.TEXTURE_2D, r.shadowDepthTexture)
-			gl.Uniform1i(r.pbrUniformShadowMap, 1)
-			gl.Uniform1i(r.pbrUniformUseShadows, 1)
-		} else {
-			gl.Uniform1i(r.pbrUniformUseShadows, 0)
-		}
-
-		// Draw PBR geometry
-		gl.BindVertexArray(r.pbrVAO)
-		pbrVertexCount := int32(len(r.pbrVertices))
-		gl.DrawArrays(gl.TRIANGLES, 0, pbrVertexCount)
-		gl.BindVertexArray(0)
-		
-		// Unbind shadow map
-		gl.ActiveTexture(gl.TEXTURE1)
-		gl.BindTexture(gl.TEXTURE_2D, 0)
-	}
-
-	// Render textured vertices
-	if len(r.texturedVertices) > 0 {
-		if len(r.texturedVertices) > MAX_VERTICES {
-			r.texturedVertices = r.texturedVertices[:MAX_VERTICES]
-		}
-
-		// Upload textured vertex data
-		gl.BindBuffer(gl.ARRAY_BUFFER, r.textureVBO)
-		textureDataSize := len(r.texturedVertices) * 32 // 8 floats * 4 bytes
-		gl.BufferSubData(gl.ARRAY_BUFFER, 0, textureDataSize, gl.Ptr(r.texturedVertices))
-
-		// Use texture shader program
-		gl.UseProgram(r.textureProgram)
-
-		// Update matrices
-		r.updateMatrices(r.textureUniformModel, r.textureUniformView, r.textureUniformProj)
-
-		// Bind and activate texture if available
-		if r.activeTexture != nil {
-			texID := r.uploadTexture(r.activeTexture)
-			gl.ActiveTexture(gl.TEXTURE0)
-			gl.BindTexture(gl.TEXTURE_2D, texID)
-			gl.Uniform1i(r.textureUniformSampler, 0)
-			gl.Uniform1i(r.textureUniformUseTexture, 1) // Enable texture
-		} else {
-			gl.Uniform1i(r.textureUniformUseTexture, 0) // Disable texture
-		}
-
-		// Draw textured geometry
-		gl.BindVertexArray(r.textureVAO)
-		textureVertexCount := int32(len(r.texturedVertices))
-		gl.DrawArrays(gl.TRIANGLES, 0, textureVertexCount)
-		gl.BindVertexArray(0)
-		
-		// Unbind texture
-		gl.BindTexture(gl.TEXTURE_2D, 0)
-	}
-
-	// Render lines (if any)
-	if len(r.lineVertices) > 0 {
-		gl.BindBuffer(gl.ARRAY_BUFFER, r.lineVBO)
-		lineDataSize := len(r.lineVertices) * 4
-		gl.BufferSubData(gl.ARRAY_BUFFER, 0, lineDataSize, gl.Ptr(r.lineVertices))
-
-		gl.UseProgram(r.lineProgram)
-		r.updateMatrices(r.lineUniformModel, r.lineUniformView, r.lineUniformProj)
-
-		gl.BindVertexArray(r.lineVAO)
-		lineVertexCount := int32(len(r.lineVertices) / 6)
-		gl.DrawArrays(gl.LINES, 0, lineVertexCount)
-		gl.BindVertexArray(0)
-	}
+	r.FlushStandard()
+	r.FlushPBR()
+	r.FlushTextured()
+	r.FlushLines()
 
 	r.window.SwapBuffers()
 	r.frameCount++
-
-	// Clear vertices after rendering
-	r.currentVertices = r.currentVertices[:0]
-	r.pbrVertices = r.pbrVertices[:0]
-	r.lineVertices = r.lineVertices[:0]
 
 	if r.frameCount%60 == 0 && r.ShowDebugInfo {
 		r.window.SetTitle(fmt.Sprintf("Go 3D Engine (OpenGL) - Frame %d", r.frameCount))
@@ -1317,9 +1215,18 @@ func (r *OpenGLRenderer) RenderMesh(mesh *Mesh, worldMatrix Matrix4x4, camera *C
 
 	// Check if this is a PBR material
 	isPBR := false
+	var pbrMat *PBRMaterial
 	if mesh.Material != nil {
-		if _, ok := mesh.Material.(*PBRMaterial); ok {
+		if mat, ok := mesh.Material.(*PBRMaterial); ok {
 			isPBR = true
+			pbrMat = mat
+		}
+	}
+
+	if isPBR {
+		if r.activePBRMaterial != pbrMat {
+			r.FlushPBR()
+			r.activePBRMaterial = pbrMat
 		}
 	}
 
@@ -1361,9 +1268,22 @@ func (r *OpenGLRenderer) RenderMesh(mesh *Mesh, worldMatrix Matrix4x4, camera *C
 
 				if isPBR {
 					// Use PBR rendering path with normals
-					r.addPBRVertex(finalP0, worldNormal, rf, gf, bf)
-					r.addPBRVertex(finalP1, worldNormal, rf, gf, bf)
-					r.addPBRVertex(finalP2, worldNormal, rf, gf, bf)
+					var u0, v0, u1, v1, u2, v2 float32
+					if len(mesh.UVs) > 0 {
+						if idx0 < len(mesh.UVs) {
+							u0, v0 = float32(mesh.UVs[idx0].U), float32(mesh.UVs[idx0].V)
+						}
+						if idx1 < len(mesh.UVs) {
+							u1, v1 = float32(mesh.UVs[idx1].U), float32(mesh.UVs[idx1].V)
+						}
+						if idx2 < len(mesh.UVs) {
+							u2, v2 = float32(mesh.UVs[idx2].U), float32(mesh.UVs[idx2].V)
+						}
+					}
+
+					r.addPBRVertex(finalP0, worldNormal, u0, v0, rf, gf, bf)
+					r.addPBRVertex(finalP1, worldNormal, u1, v1, rf, gf, bf)
+					r.addPBRVertex(finalP2, worldNormal, u2, v2, rf, gf, bf)
 				} else {
 					// Apply simple lighting (FIXED)
 					if r.LightingSystem != nil {
@@ -1522,6 +1442,9 @@ func (r *OpenGLRenderer) RenderPoint(point *Point, worldMatrix Matrix4x4, camera
 }
 
 func (r *OpenGLRenderer) addVertex(p Point, red, green, blue float32) {
+	if len(r.currentVertices) >= r.maxVertices {
+		r.FlushStandard()
+	}
 	r.currentVertices = append(r.currentVertices,
 		VulkanVertex{
 			Pos:   [3]float32{float32(p.X), float32(p.Y), float32(p.Z)},
@@ -1530,17 +1453,25 @@ func (r *OpenGLRenderer) addVertex(p Point, red, green, blue float32) {
 	)
 }
 
-func (r *OpenGLRenderer) addPBRVertex(p Point, normal Point, red, green, blue float32) {
+func (r *OpenGLRenderer) addPBRVertex(p Point, normal Point, u, v float32, red, green, blue float32) {
+	if len(r.pbrVertices) >= r.maxVertices {
+		r.FlushPBR()
+	}
 	r.pbrVertices = append(r.pbrVertices,
 		PBRVertex{
 			Pos:    [3]float32{float32(p.X), float32(p.Y), float32(p.Z)},
 			Normal: [3]float32{float32(normal.X), float32(normal.Y), float32(normal.Z)},
+			UV:     [2]float32{u, v},
 			Color:  [3]float32{red, green, blue},
 		},
 	)
 }
 
 func (r *OpenGLRenderer) addLineVertex(p Point, red, green, blue float32) {
+	// Limit line buffer arbitrarily to 60000 floats (10k vertices)
+	if len(r.lineVertices) >= 60000 {
+		r.FlushLines()
+	}
 	r.lineVertices = append(r.lineVertices,
 		float32(p.X), float32(p.Y), float32(p.Z), // Position
 		red, green, blue, // Color
@@ -1657,7 +1588,10 @@ func (r *OpenGLRenderer) RenderTexturedMesh(mesh *Mesh, worldMatrix Matrix4x4, c
 	}
 
 	// Set active texture for this batch
-	r.activeTexture = texture
+	if r.activeTexture != texture {
+		r.FlushTextured()
+		r.activeTexture = texture
+	}
 
 	// Get material color
 	color := ColorWhite
@@ -1825,4 +1759,201 @@ func (r *OpenGLRenderer) renderMeshShadow(mesh *Mesh, worldMatrix Matrix4x4) {
 	// Cleanup temporary VAO/VBO
 	gl.DeleteVertexArrays(1, &shadowVAO)
 	gl.DeleteBuffers(1, &shadowVBO)
+}
+
+func (r *OpenGLRenderer) FlushStandard() {
+	if len(r.currentVertices) == 0 {
+		return
+	}
+
+	gl.BindBuffer(gl.ARRAY_BUFFER, r.vbo)
+	dataSize := len(r.currentVertices) * 24
+	gl.BufferSubData(gl.ARRAY_BUFFER, 0, dataSize, gl.Ptr(r.currentVertices))
+
+	gl.UseProgram(r.program)
+	r.updateMatrices(r.uniformModel, r.uniformView, r.uniformProj)
+
+	gl.BindVertexArray(r.vao)
+	gl.DrawArrays(gl.TRIANGLES, 0, int32(len(r.currentVertices)))
+	gl.BindVertexArray(0)
+
+	r.currentVertices = r.currentVertices[:0]
+}
+
+func (r *OpenGLRenderer) FlushPBR() {
+	if len(r.pbrVertices) == 0 {
+		return
+	}
+
+	gl.BindBuffer(gl.ARRAY_BUFFER, r.pbrVBO)
+	dataSize := len(r.pbrVertices) * 44 // 11 floats * 4 bytes
+	gl.BufferSubData(gl.ARRAY_BUFFER, 0, dataSize, gl.Ptr(r.pbrVertices))
+
+	gl.UseProgram(r.pbrProgram)
+	r.updateMatrices(r.pbrUniformModel, r.pbrUniformView, r.pbrUniformProj)
+
+	// Set Uniforms
+	if r.LightingSystem != nil && len(r.LightingSystem.Lights) > 0 {
+		light := r.LightingSystem.Lights[0]
+		gl.Uniform3f(r.pbrUniformLightPos, float32(light.Position.X), float32(light.Position.Y), float32(light.Position.Z))
+		gl.Uniform3f(r.pbrUniformLightColor, float32(light.Color.R)/255.0, float32(light.Color.G)/255.0, float32(light.Color.B)/255.0)
+	} else {
+		gl.Uniform3f(r.pbrUniformLightPos, 0, 100, 0)
+		gl.Uniform3f(r.pbrUniformLightColor, 1.0, 1.0, 1.0)
+	}
+
+	if r.Camera != nil {
+		camPos := r.Camera.GetPosition()
+		gl.Uniform3f(r.pbrUniformCameraPos, float32(camPos.X), float32(camPos.Y), float32(camPos.Z))
+	}
+
+	if r.activePBRMaterial != nil {
+		gl.Uniform1f(r.pbrUniformMetallic, float32(r.activePBRMaterial.Metallic))
+		gl.Uniform1f(r.pbrUniformRoughness, float32(r.activePBRMaterial.Roughness))
+		col := r.activePBRMaterial.Albedo
+		gl.Uniform3f(r.pbrUniformAlbedo, float32(col.R)/255.0, float32(col.G)/255.0, float32(col.B)/255.0)
+
+		r.bindPBRTextures()
+	} else {
+		gl.Uniform1f(r.pbrUniformMetallic, 0.5)
+		gl.Uniform1f(r.pbrUniformRoughness, 0.5)
+		gl.Uniform3f(r.pbrUniformAlbedo, 0, 0, 0)
+		r.disablePBRTextures()
+	}
+
+	if r.enableShadows {
+		var m [16]float32
+		for i := 0; i < 16; i++ {
+			m[i] = float32(r.shadowLightMatrix.M[i])
+		}
+		gl.UniformMatrix4fv(r.pbrUniformLightSpaceMatrix, 1, false, &m[0])
+
+		gl.ActiveTexture(gl.TEXTURE5) // Slot 5 for shadow map
+		gl.BindTexture(gl.TEXTURE_2D, r.shadowDepthTexture)
+		gl.Uniform1i(r.pbrUniformShadowMap, 5)
+		gl.Uniform1i(r.pbrUniformUseShadows, 1)
+	} else {
+		gl.Uniform1i(r.pbrUniformUseShadows, 0)
+	}
+
+	gl.BindVertexArray(r.pbrVAO)
+	gl.DrawArrays(gl.TRIANGLES, 0, int32(len(r.pbrVertices)))
+	gl.BindVertexArray(0)
+
+	r.pbrVertices = r.pbrVertices[:0]
+}
+
+func (r *OpenGLRenderer) FlushTextured() {
+	if len(r.texturedVertices) == 0 {
+		return
+	}
+
+	gl.BindBuffer(gl.ARRAY_BUFFER, r.textureVBO)
+	dataSize := len(r.texturedVertices) * 32
+	gl.BufferSubData(gl.ARRAY_BUFFER, 0, dataSize, gl.Ptr(r.texturedVertices))
+
+	gl.UseProgram(r.textureProgram)
+	r.updateMatrices(r.textureUniformModel, r.textureUniformView, r.textureUniformProj)
+
+	if r.activeTexture != nil {
+		texID := r.uploadTexture(r.activeTexture)
+		gl.ActiveTexture(gl.TEXTURE0)
+		gl.BindTexture(gl.TEXTURE_2D, texID)
+		gl.Uniform1i(r.textureUniformSampler, 0)
+		gl.Uniform1i(r.textureUniformUseTexture, 1)
+	} else {
+		gl.Uniform1i(r.textureUniformUseTexture, 0)
+	}
+
+	gl.BindVertexArray(r.textureVAO)
+	gl.DrawArrays(gl.TRIANGLES, 0, int32(len(r.texturedVertices)))
+	gl.BindVertexArray(0)
+
+	r.texturedVertices = r.texturedVertices[:0]
+}
+
+func (r *OpenGLRenderer) FlushLines() {
+	if len(r.lineVertices) == 0 {
+		return
+	}
+
+	gl.BindBuffer(gl.ARRAY_BUFFER, r.lineVBO)
+	dataSize := len(r.lineVertices) * 4
+	gl.BufferSubData(gl.ARRAY_BUFFER, 0, dataSize, gl.Ptr(r.lineVertices))
+
+	gl.UseProgram(r.lineProgram)
+	r.updateMatrices(r.lineUniformModel, r.lineUniformView, r.lineUniformProj)
+
+	gl.BindVertexArray(r.lineVAO)
+	gl.DrawArrays(gl.LINES, 0, int32(len(r.lineVertices)/6))
+	gl.BindVertexArray(0)
+
+	r.lineVertices = r.lineVertices[:0]
+}
+
+func (r *OpenGLRenderer) bindPBRTextures() {
+	mat := r.activePBRMaterial
+
+	// Albedo (Slot 0)
+	if mat.UseTextures && mat.AlbedoMap != nil {
+		texID := r.uploadTexture(mat.AlbedoMap)
+		gl.ActiveTexture(gl.TEXTURE0)
+		gl.BindTexture(gl.TEXTURE_2D, texID)
+		gl.Uniform1i(r.pbrUniformAlbedoMap, 0)
+		gl.Uniform1i(r.pbrUniformUseAlbedoMap, 1)
+	} else {
+		gl.Uniform1i(r.pbrUniformUseAlbedoMap, 0)
+	}
+
+	// Normal (Slot 1)
+	if mat.UseTextures && mat.NormalMap != nil {
+		texID := r.uploadTexture(mat.NormalMap)
+		gl.ActiveTexture(gl.TEXTURE1)
+		gl.BindTexture(gl.TEXTURE_2D, texID)
+		gl.Uniform1i(r.pbrUniformNormalMap, 1) // Note: I need to add pbrUniformNormalMap to struct!
+		gl.Uniform1i(r.pbrUniformUseNormalMap, 1) // And this!
+	} else {
+		// gl.Uniform1i(r.pbrUniformUseNormalMap, 0)
+		// Skip normal map uniforms for now as I didn't add them to struct yet
+	}
+
+	// Metallic (Slot 2)
+	if mat.UseTextures && mat.MetallicMap != nil {
+		texID := r.uploadTexture(mat.MetallicMap)
+		gl.ActiveTexture(gl.TEXTURE2)
+		gl.BindTexture(gl.TEXTURE_2D, texID)
+		gl.Uniform1i(r.pbrUniformMetallicMap, 2)
+		gl.Uniform1i(r.pbrUniformUseMetallicMap, 1)
+	} else {
+		gl.Uniform1i(r.pbrUniformUseMetallicMap, 0)
+	}
+
+	// Roughness (Slot 3)
+	if mat.UseTextures && mat.RoughnessMap != nil {
+		texID := r.uploadTexture(mat.RoughnessMap)
+		gl.ActiveTexture(gl.TEXTURE3)
+		gl.BindTexture(gl.TEXTURE_2D, texID)
+		gl.Uniform1i(r.pbrUniformRoughnessMap, 3)
+		gl.Uniform1i(r.pbrUniformUseRoughnessMap, 1)
+	} else {
+		gl.Uniform1i(r.pbrUniformUseRoughnessMap, 0)
+	}
+
+	// AO (Slot 4)
+	if mat.UseTextures && mat.AOMap != nil {
+		texID := r.uploadTexture(mat.AOMap)
+		gl.ActiveTexture(gl.TEXTURE4)
+		gl.BindTexture(gl.TEXTURE_2D, texID)
+		gl.Uniform1i(r.pbrUniformAOMap, 4)
+		gl.Uniform1i(r.pbrUniformUseAOMap, 1)
+	} else {
+		gl.Uniform1i(r.pbrUniformUseAOMap, 0)
+	}
+}
+
+func (r *OpenGLRenderer) disablePBRTextures() {
+	gl.Uniform1i(r.pbrUniformUseAlbedoMap, 0)
+	gl.Uniform1i(r.pbrUniformUseMetallicMap, 0)
+	gl.Uniform1i(r.pbrUniformUseRoughnessMap, 0)
+	gl.Uniform1i(r.pbrUniformUseAOMap, 0)
 }

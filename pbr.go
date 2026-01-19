@@ -195,11 +195,26 @@ func CalculatePBRLighting(
 	ambientLight Color,
 	ambientIntensity float64,
 ) Color {
-	// Sample material properties (u,v = 0,0 for now, needs proper UV)
-	albedo := material.GetDiffuseColor(0, 0)
-	metallic := material.GetMetallic()
-	roughness := material.GetRoughness()
-	ao := material.GetAmbientStrength()
+	return CalculatePBRLightingWithUV(surfacePoint, normal, viewDir, material, lights, ambientLight, ambientIntensity, 0, 0, nil)
+}
+
+// CalculatePBRLightingWithUV computes lighting with UV support and shadows
+func CalculatePBRLightingWithUV(
+	surfacePoint Point,
+	normal Point,
+	viewDir Point,
+	material *PBRMaterial,
+	lights []*Light,
+	ambientLight Color,
+	ambientIntensity float64,
+	u, v float64,
+	shadowCallback func(*Light, Point) float64,
+) Color {
+	// Sample material properties
+	albedo := material.GetDiffuseColor(u, v)
+	metallic := material.SampleMetallic(u, v)
+	roughness := material.SampleRoughness(u, v)
+	ao := material.SampleAO(u, v)
 
 	// Calculate F0 (base reflectivity)
 	// Dielectrics have F0 around 0.04, metals use albedo as F0
@@ -240,10 +255,17 @@ func CalculatePBRLighting(
 
 		// Attenuation
 		attenuation := 1.0 / (distance * distance)
+
+		// Shadow factor
+		shadow := 1.0
+		if shadowCallback != nil {
+			shadow = shadowCallback(light, surfacePoint)
+		}
+
 		radiance := Point{
-			X: float64(light.Color.R) / 255.0 * light.Intensity * attenuation,
-			Y: float64(light.Color.G) / 255.0 * light.Intensity * attenuation,
-			Z: float64(light.Color.B) / 255.0 * light.Intensity * attenuation,
+			X: float64(light.Color.R) / 255.0 * light.Intensity * attenuation * shadow,
+			Y: float64(light.Color.G) / 255.0 * light.Intensity * attenuation * shadow,
+			Z: float64(light.Color.B) / 255.0 * light.Intensity * attenuation * shadow,
 		}
 
 		// Cook-Torrance BRDF

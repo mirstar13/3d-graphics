@@ -68,10 +68,14 @@ type Triangle struct {
 	P0           Point
 	P1           Point
 	P2           Point
+	UV0          TextureCoord
+	UV1          TextureCoord
+	UV2          TextureCoord
 	Normal       *Point
 	Material     IMaterial
 	char         byte
 	UseSetNormal bool
+	HasUVs       bool
 }
 
 // NewTriangle creates a new triangle
@@ -85,7 +89,17 @@ func NewTriangle(p0, p1, p2 Point, char byte) *Triangle {
 		Material:     &mat,
 		Normal:       nil,
 		UseSetNormal: false,
+		HasUVs:       false,
 	}
+}
+
+// SetUVs sets the UV coordinates for the triangle
+func (t *Triangle) SetUVs(uv0, uv1, uv2 TextureCoord) *Triangle {
+	t.UV0 = uv0
+	t.UV1 = uv1
+	t.UV2 = uv2
+	t.HasUVs = true
+	return t
 }
 
 // SetMaterial sets the material

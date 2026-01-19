@@ -38,6 +38,12 @@ func NewParallelRenderer(renderer Renderer, numWorkers, tileSize int) *ParallelR
 
 // RenderSceneParallel renders scene using multiple threads
 func (pr *ParallelRenderer) RenderSceneParallel(scene *Scene) {
+	// OpenGL contexts are thread-local, so we can't use parallel rendering
+	if _, ok := pr.Renderer.(*OpenGLRenderer); ok {
+		pr.Renderer.RenderScene(scene)
+		return
+	}
+
 	pr.Renderer.BeginFrame()
 	pr.Pools.ResetAll()
 
@@ -107,8 +113,54 @@ func (pr *ParallelRenderer) generateTiles(nodes []*SceneNode, camera *Camera) {
 	tilesX := (width + pr.TileSize - 1) / pr.TileSize
 	tilesY := (height + pr.TileSize - 1) / pr.TileSize
 
+	// Pre-allocate bins
+	bins := make([][]*SceneNode, tilesX*tilesY)
+	for i := range bins {
+		bins[i] = make([]*SceneNode, 0)
+	}
+
+	// Bin nodes
+	for _, node := range nodes {
+		var aabb *AABB
+		switch obj := node.Object.(type) {
+		case *Mesh:
+			bounds := ComputeMeshBounds(obj)
+			if b, ok := bounds.(*AABB); ok {
+				aabb = b
+			}
+		case *Triangle:
+			aabb = ComputeTriangleBounds(obj)
+		default:
+			// Fallback: use point bounds at node position
+			pos := node.Transform.GetWorldPosition()
+			aabb = NewAABB(pos, pos)
+		}
+
+		if aabb != nil {
+			worldAABB := TransformAABB(aabb, node.GetWorldTransform())
+			minX, minY, maxX, maxY := projectAABBToScreen(worldAABB, camera, width, height)
+
+			startTx := clampInt(minX/pr.TileSize, 0, tilesX-1)
+			endTx := clampInt(maxX/pr.TileSize, 0, tilesX-1)
+			startTy := clampInt(minY/pr.TileSize, 0, tilesY-1)
+			endTy := clampInt(maxY/pr.TileSize, 0, tilesY-1)
+
+			for ty := startTy; ty <= endTy; ty++ {
+				for tx := startTx; tx <= endTx; tx++ {
+					idx := ty*tilesX + tx
+					bins[idx] = append(bins[idx], node)
+				}
+			}
+		}
+	}
+
 	for ty := 0; ty < tilesY; ty++ {
 		for tx := 0; tx < tilesX; tx++ {
+			idx := ty*tilesX + tx
+			if len(bins[idx]) == 0 {
+				continue
+			}
+
 			x := tx * pr.TileSize
 			y := ty * pr.TileSize
 			w := pr.TileSize
@@ -122,7 +174,7 @@ func (pr *ParallelRenderer) generateTiles(nodes []*SceneNode, camera *Camera) {
 
 			tile := RenderTile{
 				X: x, Y: y, Width: w, Height: h,
-				Nodes: nodes, Camera: camera,
+				Nodes: bins[idx], Camera: camera,
 			}
 			pr.tileQueue <- tile
 		}
@@ -176,14 +228,11 @@ func (pr *ParallelRenderer) renderNodeWithRenderer(node *SceneNode, worldMatrix 
 
 // RenderBatched renders scene by binning nodes into screen tiles to reduce overdraw
 func (pr *ParallelRenderer) RenderBatched(scene *Scene) {
-	/*
-		// Check if using OpenGL and skip parallel rendering
-		if _, ok := pr.Renderer.(*OpenGLRenderer); ok {
-			// OpenGL renderer doesn't support parallel rendering safely
-			pr.Renderer.RenderScene(scene)
-			return
-		}
-	*/
+	// OpenGL contexts are thread-local, so we can't use parallel rendering
+	if _, ok := pr.Renderer.(*OpenGLRenderer); ok {
+		pr.Renderer.RenderScene(scene)
+		return
+	}
 
 	pr.Renderer.BeginFrame()
 	pr.Pools.ResetAll()
@@ -371,6 +420,12 @@ func NewJobBasedRenderer(renderer Renderer, numWorkers int) *JobBasedRenderer {
 
 // RenderSceneJobs renders scene using job-based parallelism
 func (jr *JobBasedRenderer) RenderSceneJobs(scene *Scene) {
+	// OpenGL contexts are thread-local, so we can't use parallel rendering
+	if _, ok := jr.Renderer.(*OpenGLRenderer); ok {
+		jr.Renderer.RenderScene(scene)
+		return
+	}
+
 	jr.Renderer.BeginFrame()
 	jr.Pools.ResetAll()
 
