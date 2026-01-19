@@ -1313,9 +1313,12 @@ func (r *OpenGLRenderer) RenderTriangle(tri *Triangle, worldMatrix Matrix4x4, ca
 }
 
 func (r *OpenGLRenderer) RenderMesh(mesh *Mesh, worldMatrix Matrix4x4, camera *Camera) {
-	meshPos := worldMatrix.TransformPoint(mesh.Position)
+	// If the mesh has no vertices or faces, there's nothing to render.
+	if len(mesh.Vertices) == 0 || len(mesh.Indices) == 0 {
+		return
+	}
 
-	// Check if this is a PBR material
+	// Determine if we should use the PBR rendering path.
 	isPBR := false
 	if mesh.Material != nil {
 		if _, ok := mesh.Material.(*PBRMaterial); ok {
@@ -1323,89 +1326,112 @@ func (r *OpenGLRenderer) RenderMesh(mesh *Mesh, worldMatrix Matrix4x4, camera *C
 		}
 	}
 
-	for i := 0; i < len(mesh.Indices); i += 3 {
-		if i+2 < len(mesh.Indices) {
-			idx0, idx1, idx2 := mesh.Indices[i], mesh.Indices[i+1], mesh.Indices[i+2]
-			if idx0 < len(mesh.Vertices) && idx1 < len(mesh.Vertices) && idx2 < len(mesh.Vertices) {
-				p0 := Point{X: mesh.Vertices[idx0].X + meshPos.X, Y: mesh.Vertices[idx0].Y + meshPos.Y, Z: mesh.Vertices[idx0].Z + meshPos.Z}
-				p1 := Point{X: mesh.Vertices[idx1].X + meshPos.X, Y: mesh.Vertices[idx1].Y + meshPos.Y, Z: mesh.Vertices[idx1].Z + meshPos.Z}
-				p2 := Point{X: mesh.Vertices[idx2].X + meshPos.X, Y: mesh.Vertices[idx2].Y + meshPos.Y, Z: mesh.Vertices[idx2].Z + meshPos.Z}
+	// Check if the mesh has pre-calculated normals. This should be true for all meshes now.
+	hasNormals := len(mesh.Normals) == len(mesh.Vertices)
+	if !hasNormals {
+		// Log a warning or handle error, as this indicates a problem in mesh creation/loading.
+		// For now, we'll skip rendering triangles that are missing normals.
+		return
+	}
 
-				finalP0 := worldMatrix.TransformPoint(p0)
-				finalP1 := worldMatrix.TransformPoint(p1)
-				finalP2 := worldMatrix.TransformPoint(p2)
+	// Iterate over each triangle in the mesh.
+	for i := 0; i < len(mesh.Indices)-2; i += 3 {
+		// Get the indices for the triangle's vertices.
+		idx0, idx1, idx2 := mesh.Indices[i], mesh.Indices[i+1], mesh.Indices[i+2]
 
-				// FIXED: Use mesh material instead of hardcoded values
-				color := mesh.Material.GetDiffuseColor(0, 0)
+		// Bounds check for vertex indices.
+		if idx0 >= len(mesh.Vertices) || idx1 >= len(mesh.Vertices) || idx2 >= len(mesh.Vertices) {
+			continue
+		}
 
-				if isWireframe := mesh.Material.IsWireframe(); isWireframe {
-					wireColor := mesh.Material.GetWireframeColor()
-					rf := float32(wireColor.R) / 255.0
-					gf := float32(wireColor.G) / 255.0
-					bf := float32(wireColor.B) / 255.0
+		// Get local-space vertex positions and apply mesh's local position offset.
+		v0, v1, v2 := mesh.Vertices[idx0], mesh.Vertices[idx1], mesh.Vertices[idx2]
+		p0_local := Point{X: v0.X + mesh.Position.X, Y: v0.Y + mesh.Position.Y, Z: v0.Z + mesh.Position.Z}
+		p1_local := Point{X: v1.X + mesh.Position.X, Y: v1.Y + mesh.Position.Y, Z: v1.Z + mesh.Position.Z}
+		p2_local := Point{X: v2.X + mesh.Position.X, Y: v2.Y + mesh.Position.Y, Z: v2.Z + mesh.Position.Z}
 
-					r.addLineVertex(finalP0, rf, gf, bf)
-					r.addLineVertex(finalP1, rf, gf, bf)
-					r.addLineVertex(finalP1, rf, gf, bf)
-					r.addLineVertex(finalP2, rf, gf, bf)
-					r.addLineVertex(finalP2, rf, gf, bf)
-					r.addLineVertex(finalP0, rf, gf, bf)
-					continue
-				}
+		// Transform vertex positions to world space.
+		finalP0 := worldMatrix.TransformPoint(p0_local)
+		finalP1 := worldMatrix.TransformPoint(p1_local)
+		finalP2 := worldMatrix.TransformPoint(p2_local)
 
-				// Calculate normal for all cases
-				normal := CalculateSurfaceNormal(&p0, &p1, &p2, nil, false)
-				worldNormal := worldMatrix.TransformDirection(normal)
+		// Get the material color for the triangle.
+		color := mesh.Material.GetDiffuseColor(0, 0)
+		rf, gf, bf := float32(color.R)/255.0, float32(color.G)/255.0, float32(color.B)/255.0
 
-				rf, gf, bf := float32(color.R)/255.0, float32(color.G)/255.0, float32(color.B)/255.0
+		// Handle wireframe rendering.
+		if mesh.Material.IsWireframe() {
+			wireColor := mesh.Material.GetWireframeColor()
+			wrf, wgf, wbf := float32(wireColor.R)/255.0, float32(wireColor.G)/255.0, float32(wireColor.B)/255.0
+			r.addLineVertex(finalP0, wrf, wgf, wbf)
+			r.addLineVertex(finalP1, wrf, wgf, wbf)
+			r.addLineVertex(finalP1, wrf, wgf, wbf)
+			r.addLineVertex(finalP2, wrf, wgf, wbf)
+			r.addLineVertex(finalP2, wrf, wgf, wbf)
+			r.addLineVertex(finalP0, wrf, wgf, wbf)
+			continue
+		}
 
-				if isPBR {
-					// Use PBR rendering path with normals
-					r.addPBRVertex(finalP0, worldNormal, rf, gf, bf)
-					r.addPBRVertex(finalP1, worldNormal, rf, gf, bf)
-					r.addPBRVertex(finalP2, worldNormal, rf, gf, bf)
-				} else {
-					// Apply simple lighting (FIXED)
-					if r.LightingSystem != nil {
-						intensity := 0.2 // Ambient base
-						for _, light := range r.LightingSystem.Lights {
-							if !light.IsEnabled {
-								continue
-							}
+		if isPBR {
+			// PBR Path: Use smooth, per-vertex normals.
+			n0, n1, n2 := mesh.Normals[idx0], mesh.Normals[idx1], mesh.Normals[idx2]
+			worldNormal0 := worldMatrix.TransformDirection(n0)
+			worldNormal1 := worldMatrix.TransformDirection(n1)
+			worldNormal2 := worldMatrix.TransformDirection(n2)
 
-							centerX := (finalP0.X + finalP1.X + finalP2.X) / 3.0
-							centerY := (finalP0.Y + finalP1.Y + finalP2.Y) / 3.0
-							centerZ := (finalP0.Z + finalP1.Z + finalP2.Z) / 3.0
+			r.addPBRVertex(finalP0, worldNormal0, rf, gf, bf)
+			r.addPBRVertex(finalP1, worldNormal1, rf, gf, bf)
+			r.addPBRVertex(finalP2, worldNormal2, rf, gf, bf)
+		} else {
+			// Simple Lighting Path: Use an averaged normal from pre-calculated data
+			// to simulate the original flat shading without recalculating from vertices.
+			n0, n1, n2 := mesh.Normals[idx0], mesh.Normals[idx1], mesh.Normals[idx2]
 
-							lx := light.Position.X - centerX
-							ly := light.Position.Y - centerY
-							lz := light.Position.Z - centerZ
-							lx, ly, lz = normalizeVector(lx, ly, lz)
+			// Average vertex normals to get a face normal
+			avgNormal := Point{
+				X: (n0.X + n1.X + n2.X) / 3.0,
+				Y: (n0.Y + n1.Y + n2.Y) / 3.0,
+				Z: (n0.Z + n1.Z + n2.Z) / 3.0,
+			}
 
-							diff := dotProduct(worldNormal.X, worldNormal.Y, worldNormal.Z, lx, ly, lz)
-							if diff > 0 {
-								intensity += diff * light.Intensity * 0.8
-							}
-						}
+			// Transform the averaged normal to world space.
+			worldNormal := worldMatrix.TransformDirection(avgNormal)
 
-						if intensity > 1.0 {
-							intensity = 1.0
-						}
-
-						color = Color{
-							R: uint8(float64(color.R) * intensity),
-							G: uint8(float64(color.G) * intensity),
-							B: uint8(float64(color.B) * intensity),
-						}
-						rf, gf, bf = float32(color.R)/255.0, float32(color.G)/255.0, float32(color.B)/255.0
+			// Apply simple CPU-based lighting.
+			if r.LightingSystem != nil {
+				intensity := 0.2 // Ambient base
+				for _, light := range r.LightingSystem.Lights {
+					if !light.IsEnabled {
+						continue
 					}
 
-					// Use basic rendering path
-					r.addVertex(finalP0, rf, gf, bf)
-					r.addVertex(finalP1, rf, gf, bf)
-					r.addVertex(finalP2, rf, gf, bf)
+					// Center of the triangle in world space for light calculation.
+					centerX := (finalP0.X + finalP1.X + finalP2.X) / 3.0
+					centerY := (finalP0.Y + finalP1.Y + finalP2.Y) / 3.0
+					centerZ := (finalP0.Z + finalP1.Z + finalP2.Z) / 3.0
+
+					lx, ly, lz := light.Position.X-centerX, light.Position.Y-centerY, light.Position.Z-centerZ
+					lx, ly, lz = normalizeVector(lx, ly, lz)
+
+					diff := dotProduct(worldNormal.X, worldNormal.Y, worldNormal.Z, lx, ly, lz)
+					if diff > 0 {
+						intensity += diff * light.Intensity * 0.8
+					}
 				}
+
+				if intensity > 1.0 {
+					intensity = 1.0
+				}
+
+				// Modulate color by light intensity.
+				color.R, color.G, color.B = uint8(float64(color.R)*intensity), uint8(float64(color.G)*intensity), uint8(float64(color.B)*intensity)
+				rf, gf, bf = float32(color.R)/255.0, float32(color.G)/255.0, float32(color.B)/255.0
 			}
+
+			// Add vertices with the calculated flat color to the buffer.
+			r.addVertex(finalP0, rf, gf, bf)
+			r.addVertex(finalP1, rf, gf, bf)
+			r.addVertex(finalP2, rf, gf, bf)
 		}
 	}
 }
