@@ -47,14 +47,14 @@ func NewTerminalRenderer(writer *bufio.Writer, height, width int) *TerminalRende
 	}
 
 	return &TerminalRenderer{
-		Writer:        writer,
-		Height:        height,
-		Width:         width,
-		Surface:       surface,
-		ColorBuffer:   colorBuffer,
-		ZBuffer:       zBuffer,
-		Charset:       DefaultCharset,
-		UseColor:      true,
+		Writer:         writer,
+		Height:         height,
+		Width:          width,
+		Surface:        surface,
+		ColorBuffer:    colorBuffer,
+		ZBuffer:        zBuffer,
+		Charset:        DefaultCharset,
+		UseColor:       true,
 		ShowDebugInfo:  true,
 		ShadowRenderer: NewSimpleShadowRenderer(512), // Moderate resolution for CPU rendering
 		ClipMinX:       0,
@@ -242,7 +242,7 @@ func (r *TerminalRenderer) RenderTriangle(tri *Triangle, worldMatrix Matrix4x4, 
 	// Use object pool to reduce allocations
 	transformed := AcquireTriangle()
 	defer ReleaseTriangle(transformed)
-	
+
 	transformed.P0 = p0
 	transformed.P1 = p1
 	transformed.P2 = p2
@@ -333,9 +333,9 @@ func (r *TerminalRenderer) RenderMesh(mesh *Mesh, worldMatrix Matrix4x4, camera 
 						tri.SetUVs(mesh.UVs[idx0], mesh.UVs[idx1], mesh.UVs[idx2])
 					}
 				}
-				
+
 				r.RenderTriangle(tri, IdentityMatrix(), camera)
-				
+
 				ReleaseTriangle(tri)
 			}
 		}
@@ -352,7 +352,7 @@ func (r *TerminalRenderer) RenderInstancedMesh(instMesh *InstancedMesh, worldMat
 	for _, instance := range instMesh.Instances {
 		// Combine world matrix with instance transform
 		finalMatrix := worldMatrix.Multiply(instance.Transform)
-		
+
 		// Temporarily override material color if instance has custom color
 		originalMat := instMesh.BaseMesh.Material
 		if instance.Color.R != 0 || instance.Color.G != 0 || instance.Color.B != 0 {
@@ -360,10 +360,10 @@ func (r *TerminalRenderer) RenderInstancedMesh(instMesh *InstancedMesh, worldMat
 			tempMat.DiffuseColor = instance.Color
 			instMesh.BaseMesh.Material = &tempMat
 		}
-		
+
 		// Render the mesh with instance transform
 		r.RenderMesh(instMesh.BaseMesh, finalMatrix, camera)
-		
+
 		// Restore original material
 		instMesh.BaseMesh.Material = originalMat
 	}

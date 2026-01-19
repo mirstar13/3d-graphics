@@ -692,22 +692,22 @@ func AdvancedFeaturesDemo(scene *Scene) {
 	pbrPositions := []struct{ x, z float64 }{
 		{-40, 0}, {-20, 0}, {0, 0}, {20, 0}, {40, 0},
 	}
-	
+
 	metallicValues := []float64{0.0, 0.25, 0.5, 0.75, 1.0}
 	roughnessValue := 0.3
-	
+
 	for i, pos := range pbrPositions {
 		pbrMat := NewPBRMaterial()
 		pbrMat.Albedo = Color{R: 180, G: 140, B: 100}
 		pbrMat.Metallic = metallicValues[i]
 		pbrMat.Roughness = roughnessValue
 		pbrMat.AO = 1.0
-		
+
 		sphere := scene.CreateSphere(fmt.Sprintf("PBR_Metal_%.2f", metallicValues[i]), 6, 32, 32, pbrMat)
 		sphere.Transform.SetPosition(pos.x, 12, pos.z)
 		sphere.AddTag("pbr_showcase")
 	}
-	
+
 	// Section 2: Different roughness values
 	for i, pos := range pbrPositions {
 		pbrMat := NewPBRMaterial()
@@ -715,71 +715,71 @@ func AdvancedFeaturesDemo(scene *Scene) {
 		pbrMat.Metallic = 0.8
 		pbrMat.Roughness = float64(i) * 0.25
 		pbrMat.AO = 1.0
-		
+
 		sphere := scene.CreateSphere(fmt.Sprintf("PBR_Rough_%.2f", float64(i)*0.25), 6, 32, 32, pbrMat)
 		sphere.Transform.SetPosition(pos.x, 0, pos.z)
 		sphere.AddTag("pbr_showcase")
 	}
-	
+
 	// Section 3: Textured objects (procedural textures for now)
 	fmt.Println("Creating procedurally textured objects...")
-	
+
 	// Create basic material with texture support
 	texMat := NewMaterial()
 	texMat.DiffuseColor = ColorWhite
-	
+
 	// For now, just show a colored cube (texture rendering needs more integration)
 	texCube := scene.CreateCube("TexturedCube", 10, &texMat)
 	texCube.Transform.SetPosition(-30, -12, 20)
 	texCube.AddTag("textured")
-	
+
 	// Section 4: Instanced rendering (many copies of same mesh)
 	fmt.Println("Setting up instanced rendering...")
 	baseMesh := GenerateSphere(3.0, 12, 12)
 	instancedMesh := NewInstancedMesh(baseMesh)
-	
+
 	// Create grid of instances
 	instanceCount := 0
 	for ix := -3; ix <= 3; ix++ {
 		for iz := -3; iz <= 3; iz++ {
 			x := float64(ix) * 8.0
-			z := float64(iz) * 8.0 + 30.0
+			z := float64(iz)*8.0 + 30.0
 			y := -20.0
-			
+
 			color := Color{
 				R: uint8(128 + ix*18),
 				G: uint8(128 + iz*18),
 				B: uint8(180),
 			}
-			
+
 			instancedMesh.AddInstanceAt(x, y, z, color)
 			instanceCount++
 		}
 	}
-	
+
 	instNode := NewSceneNodeWithObject("InstancedCubes", instancedMesh)
 	scene.AddNode(instNode)
 	instNode.AddTag("instanced")
 	fmt.Printf("Created %d instances (single draw call)\n", instanceCount)
-	
+
 	// Section 5: Shadow-casting object (shows shadow system is available)
 	fmt.Println("Setting up shadow mapping...")
-	
+
 	// Create a large ground plane
 	groundMat := NewMaterial()
 	groundMat.DiffuseColor = Color{R: 80, G: 80, B: 80}
 	groundMat.AmbientStrength = 0.3
-	
+
 	ground := scene.CreateCube("Ground", 100, &groundMat)
 	ground.Transform.SetPosition(0, -30, 0)
 	ground.Transform.SetScale(2, 0.1, 2)
 	ground.AddTag("shadow_receiver")
-	
+
 	// Create floating shadow casters
 	for i := 0; i < 3; i++ {
 		shadowMat := NewMaterial()
 		shadowMat.DiffuseColor = Color{R: 200, G: uint8(80 + i*50), B: 80}
-		
+
 		caster := scene.CreateSphere(fmt.Sprintf("ShadowCaster_%d", i), 5, 24, 24, &shadowMat)
 		angle := float64(i) * 2.0 * math.Pi / 3.0
 		caster.Transform.SetPosition(
@@ -789,7 +789,7 @@ func AdvancedFeaturesDemo(scene *Scene) {
 		)
 		caster.AddTag("shadow_caster")
 	}
-	
+
 	fmt.Println("Advanced features demo created successfully")
 	fmt.Println("Note: Object pooling is active in background for performance")
 }
@@ -800,18 +800,18 @@ func AnimateAdvancedFeatures(scene *Scene, time float64) {
 	for _, obj := range pbr {
 		obj.RotateLocal(0.01, 0.02, 0)
 	}
-	
+
 	// Spin textured objects
 	textured := scene.FindNodesByTag("textured")
 	for _, obj := range textured {
 		obj.RotateLocal(0.02, 0.03, 0.01)
 	}
-	
+
 	// Gently rotate instanced objects as a group
 	if instNode := scene.FindNode("InstancedCubes"); instNode != nil {
 		instNode.RotateLocal(0, 0.005, 0)
 	}
-	
+
 	// Animate shadow casters in a circle
 	casters := scene.FindNodesByTag("shadow_caster")
 	for i, obj := range casters {
@@ -908,24 +908,24 @@ func ShadowMappingDemo(scene *Scene) {
 	// Simple plane made from two triangles
 	groundMesh := NewMesh()
 	size := 30.0
-	
+
 	// Four corners of the plane
-	groundMesh.AddVertex(-size, -10, -size)  // 0: back-left
-	groundMesh.AddVertex(size, -10, -size)   // 1: back-right
-	groundMesh.AddVertex(size, -10, size)    // 2: front-right
-	groundMesh.AddVertex(-size, -10, size)   // 3: front-left
-	
+	groundMesh.AddVertex(-size, -10, -size) // 0: back-left
+	groundMesh.AddVertex(size, -10, -size)  // 1: back-right
+	groundMesh.AddVertex(size, -10, size)   // 2: front-right
+	groundMesh.AddVertex(-size, -10, size)  // 3: front-left
+
 	// Two triangles forming the plane
-	groundMesh.AddTriangleIndices(0, 1, 2)  // Triangle 1
-	groundMesh.AddTriangleIndices(0, 2, 3)  // Triangle 2
-	
+	groundMesh.AddTriangleIndices(0, 1, 2) // Triangle 1
+	groundMesh.AddTriangleIndices(0, 2, 3) // Triangle 2
+
 	// Set PBR material for ground
 	groundPBR := NewPBRMaterial()
 	groundPBR.Albedo = Color{R: 200, G: 200, B: 200}
 	groundPBR.Metallic = 0.0
 	groundPBR.Roughness = 0.9
 	groundMesh.Material = groundPBR
-	
+
 	groundNode := NewSceneNodeWithObject("Ground", groundMesh)
 	scene.AddNode(groundNode)
 

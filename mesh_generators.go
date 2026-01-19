@@ -40,7 +40,7 @@ func GenerateSphere(radius float64, rings, sectors int) *Mesh {
 			ny := y / radius
 			nz := z / radius
 			mesh.AddNormal(nx, ny, nz)
-			
+
 			// Add UV coordinates
 			mesh.AddUV(u, 1.0-v) // Flip V for OpenGL convention
 		}

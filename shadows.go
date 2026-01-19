@@ -60,12 +60,14 @@ func (sm *ShadowMap) SetupLightView(light *Light, target Point, near, far float6
 		up = Point{X: 0, Y: 0, Z: 1}
 	}
 	viewMatrix := CreateLookAtMatrix(light.Position, target, up)
-	
+
 	// Create orthographic projection for directional lights
 	// Size of the shadow map frustum (adjust based on scene size)
-	size := 40.0 // Increased to cover more area
+	// Increased from 20.0 to 40.0 to cover larger scenes and reduce edge clipping.
+	// This trades shadow resolution for coverage area - adjust based on scene requirements.
+	size := 40.0
 	projMatrix := CreateOrthographicMatrix(-size, size, -size, size, near, far)
-	
+
 	// Combine view and projection matrices
 	sm.LightMatrix = projMatrix.Multiply(viewMatrix)
 	sm.LightPos = light.Position

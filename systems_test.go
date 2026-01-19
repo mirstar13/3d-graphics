@@ -149,13 +149,13 @@ func TestBoundingVolumes(t *testing.T) {
 			point  Point
 			inside bool
 		}{
-			{Point{X: 0, Y: 0, Z: 0}, true},     // Center
-			{Point{X: 9, Y: 9, Z: 9}, true},     // Inside
-			{Point{X: 15, Y: 0, Z: 0}, false},   // Outside X
-			{Point{X: 0, Y: 15, Z: 0}, false},   // Outside Y
-			{Point{X: 0, Y: 0, Z: 15}, false},   // Outside Z
-			{Point{X: -10, Y: 0, Z: 0}, true},   // On boundary
-			{Point{X: 10, Y: 10, Z: 10}, true},  // On corner
+			{Point{X: 0, Y: 0, Z: 0}, true},    // Center
+			{Point{X: 9, Y: 9, Z: 9}, true},    // Inside
+			{Point{X: 15, Y: 0, Z: 0}, false},  // Outside X
+			{Point{X: 0, Y: 15, Z: 0}, false},  // Outside Y
+			{Point{X: 0, Y: 0, Z: 15}, false},  // Outside Z
+			{Point{X: -10, Y: 0, Z: 0}, true},  // On boundary
+			{Point{X: 10, Y: 10, Z: 10}, true}, // On corner
 		}
 
 		for _, tc := range testCases {
