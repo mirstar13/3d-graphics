@@ -68,10 +68,14 @@ type Triangle struct {
 	P0           Point
 	P1           Point
 	P2           Point
+	UV0          TextureCoord
+	UV1          TextureCoord
+	UV2          TextureCoord
 	Normal       *Point
 	Material     IMaterial
 	char         byte
 	UseSetNormal bool
+	HasUVs       bool
 }
 
 // NewTriangle creates a new triangle
@@ -85,7 +89,17 @@ func NewTriangle(p0, p1, p2 Point, char byte) *Triangle {
 		Material:     &mat,
 		Normal:       nil,
 		UseSetNormal: false,
+		HasUVs:       false,
 	}
+}
+
+// SetUVs sets the UV coordinates for the triangle
+func (t *Triangle) SetUVs(uv0, uv1, uv2 TextureCoord) *Triangle {
+	t.UV0 = uv0
+	t.UV1 = uv1
+	t.UV2 = uv2
+	t.HasUVs = true
+	return t
 }
 
 // SetMaterial sets the material
@@ -335,7 +349,6 @@ func (c *Circle) RotateLocal(axis byte, angle float64) {
 type Mesh struct {
 	Vertices []Point
 	UVs      []TextureCoord // UV coordinates per vertex
-	Normals  []Point        // Normals per vertex
 	Indices  []int
 	Position Point
 	Material IMaterial // Added to store material for the whole mesh
@@ -347,7 +360,6 @@ func NewMesh() *Mesh {
 	return &Mesh{
 		Vertices: make([]Point, 0),
 		UVs:      make([]TextureCoord, 0),
-		Normals:  make([]Point, 0),
 		Indices:  make([]int, 0),
 		Position: *NewPoint(0, 0, 0),
 		Material: &mat,
@@ -368,11 +380,6 @@ func (m *Mesh) AddVertex(x, y, z float64) int {
 // AddUV adds a UV coordinate to the mesh
 func (m *Mesh) AddUV(u, v float64) {
 	m.UVs = append(m.UVs, TextureCoord{U: u, V: v})
-}
-
-// AddNormal adds a normal vector to the mesh
-func (m *Mesh) AddNormal(x, y, z float64) {
-	m.Normals = append(m.Normals, Point{X: x, Y: y, Z: z})
 }
 
 // AddVertexWithUV adds a vertex with UV coordinate
@@ -404,65 +411,6 @@ func (m *Mesh) AddQuadIndices(i1, i2, i3, i4 int) {
 func (m *Mesh) RotateGlobal(axis byte, angle float64) {
 	for i := range m.Vertices {
 		m.Vertices[i].Rotate(axis, angle)
-	}
-}
-
-// CalculateNormals computes smooth normals for each vertex in the mesh
-// by averaging the normals of the faces connected to each vertex.
-func (m *Mesh) CalculateNormals() {
-	// Initialize normals slice with zero vectors, one for each vertex
-	m.Normals = make([]Point, len(m.Vertices))
-	for i := range m.Vertices {
-		m.Normals[i] = Point{X: 0, Y: 0, Z: 0}
-	}
-
-	// Iterate over each face (triangle) in the mesh
-	for i := 0; i < len(m.Indices); i += 3 {
-		// Get the indices of the vertices that form the triangle
-		i0 := m.Indices[i]
-		i1 := m.Indices[i+1]
-		i2 := m.Indices[i+2]
-
-		// Get the vertex positions
-		v0 := m.Vertices[i0]
-		v1 := m.Vertices[i1]
-		v2 := m.Vertices[i2]
-
-		// Calculate the face normal using the cross product of two edges
-		// Edge 1: v1 - v0
-		e1 := Point{X: v1.X - v0.X, Y: v1.Y - v0.Y, Z: v1.Z - v0.Z}
-		// Edge 2: v2 - v0
-		e2 := Point{X: v2.X - v0.X, Y: v2.Y - v0.Y, Z: v2.Z - v0.Z}
-		// Face normal: e1 x e2
-		faceNormal := Point{
-			X: e1.Y*e2.Z - e1.Z*e2.Y,
-			Y: e1.Z*e2.X - e1.X*e2.Z,
-			Z: e1.X*e2.Y - e1.Y*e2.X,
-		}
-
-		// Add the face normal to the normals of each vertex of the face
-		m.Normals[i0].X += faceNormal.X
-		m.Normals[i0].Y += faceNormal.Y
-		m.Normals[i0].Z += faceNormal.Z
-
-		m.Normals[i1].X += faceNormal.X
-		m.Normals[i1].Y += faceNormal.Y
-		m.Normals[i1].Z += faceNormal.Z
-
-		m.Normals[i2].X += faceNormal.X
-		m.Normals[i2].Y += faceNormal.Y
-		m.Normals[i2].Z += faceNormal.Z
-	}
-
-	// Normalize all the vertex normals
-	for i := range m.Normals {
-		normal := &m.Normals[i]
-		length := math.Sqrt(normal.X*normal.X + normal.Y*normal.Y + normal.Z*normal.Z)
-		if length > 0.0001 {
-			normal.X /= length
-			normal.Y /= length
-			normal.Z /= length
-		}
 	}
 }
 

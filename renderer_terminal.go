@@ -18,6 +18,7 @@ type TerminalRenderer struct {
 	Charset        [9]rune
 	UseColor       bool
 	LightingSystem *LightingSystem
+	ShadowRenderer *SimpleShadowRenderer
 	Camera         *Camera
 	ShowDebugInfo  bool
 	debugBuffer    strings.Builder
@@ -54,11 +55,12 @@ func NewTerminalRenderer(writer *bufio.Writer, height, width int) *TerminalRende
 		ZBuffer:       zBuffer,
 		Charset:       DefaultCharset,
 		UseColor:      true,
-		ShowDebugInfo: true,
-		ClipMinX:      0,
-		ClipMinY:      0,
-		ClipMaxX:      width,
-		ClipMaxY:      height,
+		ShowDebugInfo:  true,
+		ShadowRenderer: NewSimpleShadowRenderer(512), // Moderate resolution for CPU rendering
+		ClipMinX:       0,
+		ClipMinY:       0,
+		ClipMaxX:       width,
+		ClipMaxY:       height,
 	}
 }
 
@@ -178,6 +180,15 @@ func (r *TerminalRenderer) RenderScene(scene *Scene) {
 
 	if r.LightingSystem != nil {
 		r.LightingSystem.SetCamera(scene.Camera)
+
+		// Generate shadow maps
+		if r.ShadowRenderer != nil {
+			for _, light := range r.LightingSystem.Lights {
+				if light.IsEnabled {
+					r.ShadowRenderer.RenderShadowMap(light, scene)
+				}
+			}
+		}
 	}
 
 	nodes := scene.GetRenderableNodes()
@@ -238,6 +249,9 @@ func (r *TerminalRenderer) RenderTriangle(tri *Triangle, worldMatrix Matrix4x4, 
 	transformed.char = tri.char
 	transformed.Material = tri.Material
 	transformed.UseSetNormal = tri.UseSetNormal
+	if tri.HasUVs {
+		transformed.SetUVs(tri.UV0, tri.UV1, tri.UV2)
+	}
 
 	if tri.UseSetNormal && tri.Normal != nil {
 		transformedNormal := worldMatrix.TransformDirection(*tri.Normal)
@@ -313,6 +327,12 @@ func (r *TerminalRenderer) RenderMesh(mesh *Mesh, worldMatrix Matrix4x4, camera 
 				tri.P2 = p2
 				tri.char = 'o'
 				tri.Material = mesh.Material
+
+				if len(mesh.UVs) > 0 {
+					if idx0 < len(mesh.UVs) && idx1 < len(mesh.UVs) && idx2 < len(mesh.UVs) {
+						tri.SetUVs(mesh.UVs[idx0], mesh.UVs[idx1], mesh.UVs[idx2])
+					}
+				}
 				
 				r.RenderTriangle(tri, IdentityMatrix(), camera)
 				
@@ -443,15 +463,32 @@ func (r *TerminalRenderer) fillTriangleWithPerPixelLighting(
 	p1OverZ := Point{X: t.P1.X * invZ1, Y: t.P1.Y * invZ1, Z: t.P1.Z * invZ1}
 	p2OverZ := Point{X: t.P2.X * invZ2, Y: t.P2.Y * invZ2, Z: t.P2.Z * invZ2}
 
+	var uv0OverZ, uv1OverZ, uv2OverZ TextureCoord
+	hasUVs := t.HasUVs
+	if hasUVs {
+		uv0OverZ = TextureCoord{U: t.UV0.U * invZ0, V: t.UV0.V * invZ0}
+		uv1OverZ = TextureCoord{U: t.UV1.U * invZ1, V: t.UV1.V * invZ1}
+		uv2OverZ = TextureCoord{U: t.UV2.U * invZ2, V: t.UV2.V * invZ2}
+	}
+
 	// 3. Sort vertices by Y (Standard Scanline approach)
 	if y1 < y0 {
 		x0, y0, invZ0, p0OverZ, x1, y1, invZ1, p1OverZ = x1, y1, invZ1, p1OverZ, x0, y0, invZ0, p0OverZ
+		if hasUVs {
+			uv0OverZ, uv1OverZ = uv1OverZ, uv0OverZ
+		}
 	}
 	if y2 < y0 {
 		x0, y0, invZ0, p0OverZ, x2, y2, invZ2, p2OverZ = x2, y2, invZ2, p2OverZ, x0, y0, invZ0, p0OverZ
+		if hasUVs {
+			uv0OverZ, uv2OverZ = uv2OverZ, uv0OverZ
+		}
 	}
 	if y2 < y1 {
 		x1, y1, invZ1, p1OverZ, x2, y2, invZ2, p2OverZ = x2, y2, invZ2, p2OverZ, x1, y1, invZ1, p1OverZ
+		if hasUVs {
+			uv1OverZ, uv2OverZ = uv2OverZ, uv1OverZ
+		}
 	}
 
 	totalHeight := y2 - y0
@@ -483,10 +520,16 @@ func (r *TerminalRenderer) fillTriangleWithPerPixelLighting(
 		invZA := invZ0 + alpha*(invZ2-invZ0)
 		pOverZA := lerpPoint3D(p0OverZ, p2OverZ, alpha)
 
+		var uvOverZA TextureCoord
+		if hasUVs {
+			uvOverZA = lerpTextureCoord(uv0OverZ, uv2OverZ, alpha)
+		}
+
 		// Interpolate Short Edge (B)
 		var bx int
 		var invZB float64
 		var pOverZB Point
+		var uvOverZB TextureCoord
 
 		beta := 0.0
 		if secondHalf {
@@ -495,6 +538,9 @@ func (r *TerminalRenderer) fillTriangleWithPerPixelLighting(
 				bx = int(float64(x1) + beta*float64(x2-x1) + 0.5)
 				invZB = invZ1 + beta*(invZ2-invZ1)
 				pOverZB = lerpPoint3D(p1OverZ, p2OverZ, beta)
+				if hasUVs {
+					uvOverZB = lerpTextureCoord(uv1OverZ, uv2OverZ, beta)
+				}
 			}
 		} else {
 			if y1 != y0 {
@@ -502,6 +548,9 @@ func (r *TerminalRenderer) fillTriangleWithPerPixelLighting(
 				bx = int(float64(x0) + beta*float64(x1-x0) + 0.5)
 				invZB = invZ0 + beta*(invZ1-invZ0)
 				pOverZB = lerpPoint3D(p0OverZ, p1OverZ, beta)
+				if hasUVs {
+					uvOverZB = lerpTextureCoord(uv0OverZ, uv1OverZ, beta)
+				}
 			}
 		}
 
@@ -510,6 +559,9 @@ func (r *TerminalRenderer) fillTriangleWithPerPixelLighting(
 			ax, bx = bx, ax
 			invZA, invZB = invZB, invZA
 			pOverZA, pOverZB = pOverZB, pOverZA
+			if hasUVs {
+				uvOverZA, uvOverZB = uvOverZB, uvOverZA
+			}
 		}
 
 		// Respect clipping bounds for X
@@ -548,10 +600,66 @@ func (r *TerminalRenderer) fillTriangleWithPerPixelLighting(
 					Z: currentPOverZ.Z / currentInvZ,
 				}
 
+				// Recover UV
+				var u, v float64
+				if hasUVs {
+					currentUVOverZ := lerpTextureCoord(uvOverZA, uvOverZB, t)
+					u = currentUVOverZ.U / currentInvZ
+					v = currentUVOverZ.V / currentInvZ
+				}
+
 				var pixelColor Color
 				if r.LightingSystem != nil {
-					ao := CalculateSimpleAO(normal)
-					pixelColor = r.LightingSystem.CalculateLighting(pixelWorldPos, normal, material, ao)
+					if pbrMat, ok := material.(*PBRMaterial); ok {
+						shadowCb := func(l *Light, p Point) float64 {
+							if r.ShadowRenderer != nil {
+								if sm := r.ShadowRenderer.ShadowMaps[l]; sm != nil {
+									return sm.CalculateShadow(p)
+								}
+							}
+							return 1.0
+						}
+
+						viewDirX, viewDirY, viewDirZ := camera.GetViewDirection(pixelWorldPos)
+						viewDir := Point{X: viewDirX, Y: viewDirY, Z: viewDirZ}
+
+						pixelColor = CalculatePBRLightingWithUV(pixelWorldPos, normal, viewDir, pbrMat, r.LightingSystem.Lights, r.LightingSystem.AmbientLight, r.LightingSystem.AmbientIntensity, u, v, shadowCb)
+					} else {
+						// Standard Lighting with Shadows & Textures
+						shadowFactor := 1.0
+						if r.ShadowRenderer != nil && len(r.LightingSystem.Lights) > 0 {
+							for _, l := range r.LightingSystem.Lights {
+								if l.IsEnabled {
+									if sm := r.ShadowRenderer.ShadowMaps[l]; sm != nil {
+										shadowFactor = sm.CalculateShadow(pixelWorldPos)
+										break
+									}
+								}
+							}
+						}
+
+						ao := CalculateSimpleAO(normal)
+
+						if texMat, ok := material.(*TexturedMaterial); ok && hasUVs && texMat.UseTextures {
+							litColor := r.LightingSystem.CalculateLighting(pixelWorldPos, normal, material, ao)
+							texColor := texMat.SampleDiffuse(u, v)
+							pixelColor = Color{
+								R: uint8(float64(litColor.R) * float64(texColor.R) / 255.0),
+								G: uint8(float64(litColor.G) * float64(texColor.G) / 255.0),
+								B: uint8(float64(litColor.B) * float64(texColor.B) / 255.0),
+							}
+						} else {
+							pixelColor = r.LightingSystem.CalculateLighting(pixelWorldPos, normal, material, ao)
+						}
+
+						if shadowFactor < 1.0 {
+							pixelColor = Color{
+								R: uint8(float64(pixelColor.R) * (0.2 + 0.8*shadowFactor)),
+								G: uint8(float64(pixelColor.G) * (0.2 + 0.8*shadowFactor)),
+								B: uint8(float64(pixelColor.B) * (0.2 + 0.8*shadowFactor)),
+							}
+						}
+					}
 				} else {
 					pixelColor = r.simpleLighting(normal, material)
 				}
@@ -774,5 +882,12 @@ func lerpPoint3D(a, b Point, t float64) Point {
 		X: a.X + t*(b.X-a.X),
 		Y: a.Y + t*(b.Y-a.Y),
 		Z: a.Z + t*(b.Z-a.Z),
+	}
+}
+
+func lerpTextureCoord(a, b TextureCoord, t float64) TextureCoord {
+	return TextureCoord{
+		U: a.U + t*(b.U-a.U),
+		V: a.V + t*(b.V-a.V),
 	}
 }
