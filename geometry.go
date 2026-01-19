@@ -424,7 +424,7 @@ func (m *Mesh) CalculateNormals() {
 		i2 := m.Indices[i+2]
 
 		// Bounds check for vertex indices to prevent panics on malformed mesh data
-		if i0 >= len(m.Vertices) || i1 >= len(m.Vertices) || i2 >= len(m.Vertices) {
+		if i0 < 0 || i0 >= len(m.Vertices) || i1 < 0 || i1 >= len(m.Vertices) || i2 < 0 || i2 >= len(m.Vertices) {
 			continue
 		}
 

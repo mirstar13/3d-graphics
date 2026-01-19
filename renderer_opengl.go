@@ -1340,7 +1340,7 @@ func (r *OpenGLRenderer) RenderMesh(mesh *Mesh, worldMatrix Matrix4x4, camera *C
 		idx0, idx1, idx2 := mesh.Indices[i], mesh.Indices[i+1], mesh.Indices[i+2]
 
 		// Bounds check for vertex indices.
-		if idx0 >= len(mesh.Vertices) || idx1 >= len(mesh.Vertices) || idx2 >= len(mesh.Vertices) {
+		if idx0 < 0 || idx0 >= len(mesh.Vertices) || idx1 < 0 || idx1 >= len(mesh.Vertices) || idx2 < 0 || idx2 >= len(mesh.Vertices) {
 			continue
 		}
 
