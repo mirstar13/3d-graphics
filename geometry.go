@@ -423,6 +423,11 @@ func (m *Mesh) CalculateNormals() {
 		i1 := m.Indices[i+1]
 		i2 := m.Indices[i+2]
 
+		// Bounds check for vertex indices to prevent panics on malformed mesh data
+		if i0 >= len(m.Vertices) || i1 >= len(m.Vertices) || i2 >= len(m.Vertices) {
+			continue
+		}
+
 		// Get the vertex positions
 		v0 := m.Vertices[i0]
 		v1 := m.Vertices[i1]

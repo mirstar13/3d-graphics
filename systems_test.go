@@ -149,13 +149,13 @@ func TestBoundingVolumes(t *testing.T) {
 			point  Point
 			inside bool
 		}{
-			{Point{X: 0, Y: 0, Z: 0}, true},     // Center
-			{Point{X: 9, Y: 9, Z: 9}, true},     // Inside
-			{Point{X: 15, Y: 0, Z: 0}, false},   // Outside X
-			{Point{X: 0, Y: 15, Z: 0}, false},   // Outside Y
-			{Point{X: 0, Y: 0, Z: 15}, false},   // Outside Z
-			{Point{X: -10, Y: 0, Z: 0}, true},   // On boundary
-			{Point{X: 10, Y: 10, Z: 10}, true},  // On corner
+			{Point{X: 0, Y: 0, Z: 0}, true},    // Center
+			{Point{X: 9, Y: 9, Z: 9}, true},    // Inside
+			{Point{X: 15, Y: 0, Z: 0}, false},  // Outside X
+			{Point{X: 0, Y: 15, Z: 0}, false},  // Outside Y
+			{Point{X: 0, Y: 0, Z: 15}, false},  // Outside Z
+			{Point{X: -10, Y: 0, Z: 0}, true},  // On boundary
+			{Point{X: 10, Y: 10, Z: 10}, true}, // On corner
 		}
 
 		for _, tc := range testCases {
@@ -487,6 +487,44 @@ func TestGeometry(t *testing.T) {
 			len(mesh.Vertices), len(mesh.Indices)/3)
 	})
 
+	t.Run("SphereNormals", func(t *testing.T) {
+		radius := 5.0
+		mesh := GenerateSphere(radius, 16, 16)
+
+		// Check that normals array has the correct length
+		if len(mesh.Normals) != len(mesh.Vertices) {
+			t.Errorf("Expected %d normals, got %d", len(mesh.Vertices), len(mesh.Normals))
+		}
+
+		// Verify that normals are normalized unit vectors
+		for i, normal := range mesh.Normals {
+			length := math.Sqrt(normal.X*normal.X + normal.Y*normal.Y + normal.Z*normal.Z)
+			if math.Abs(length-1.0) > 0.01 {
+				t.Errorf("Normal %d not normalized: length %.4f", i, length)
+			}
+		}
+
+		// For a sphere, normals should point radially outward from center
+		// Check a few sample vertices
+		if len(mesh.Vertices) > 0 {
+			vertex := mesh.Vertices[0]
+			normal := mesh.Normals[0]
+
+			// Vertex position normalized should match normal direction
+			vLen := math.Sqrt(vertex.X*vertex.X + vertex.Y*vertex.Y + vertex.Z*vertex.Z)
+			expectedNormal := Point{X: vertex.X / vLen, Y: vertex.Y / vLen, Z: vertex.Z / vLen}
+
+			// Allow some tolerance due to floating point precision
+			if math.Abs(normal.X-expectedNormal.X) > 0.01 ||
+				math.Abs(normal.Y-expectedNormal.Y) > 0.01 ||
+				math.Abs(normal.Z-expectedNormal.Z) > 0.01 {
+				t.Errorf("Normal direction incorrect for sphere vertex 0")
+			}
+		}
+
+		t.Logf("Sphere normals verified: %d unit vectors", len(mesh.Normals))
+	})
+
 	t.Run("ProceduralTorus", func(t *testing.T) {
 		mesh := GenerateTorus(8.0, 2.5, 16, 16)
 
@@ -500,6 +538,126 @@ func TestGeometry(t *testing.T) {
 
 		t.Logf("Torus generated with %d vertices and %d triangles",
 			len(mesh.Vertices), len(mesh.Indices)/3)
+	})
+
+	t.Run("TorusNormals", func(t *testing.T) {
+		mesh := GenerateTorus(8.0, 2.5, 16, 16)
+
+		// Check that normals array has the correct length
+		if len(mesh.Normals) != len(mesh.Vertices) {
+			t.Errorf("Expected %d normals, got %d", len(mesh.Vertices), len(mesh.Normals))
+		}
+
+		// Verify that normals are normalized unit vectors
+		for i, normal := range mesh.Normals {
+			length := math.Sqrt(normal.X*normal.X + normal.Y*normal.Y + normal.Z*normal.Z)
+			if math.Abs(length-1.0) > 0.01 {
+				t.Errorf("Normal %d not normalized: length %.4f", i, length)
+			}
+		}
+
+		t.Logf("Torus normals verified: %d unit vectors", len(mesh.Normals))
+	})
+
+	t.Run("CalculateNormals", func(t *testing.T) {
+		// Create a simple mesh with a single triangle
+		mesh := NewMesh()
+		mesh.AddVertex(0, 0, 0)
+		mesh.AddVertex(1, 0, 0)
+		mesh.AddVertex(0, 1, 0)
+		mesh.AddTriangleIndices(0, 1, 2)
+
+		// Calculate normals
+		mesh.CalculateNormals()
+
+		// Check that normals were created
+		if len(mesh.Normals) != 3 {
+			t.Errorf("Expected 3 normals, got %d", len(mesh.Normals))
+		}
+
+		// All three vertices of this triangle should have the same normal (facing +Z)
+		for i, normal := range mesh.Normals {
+			// Check normalization
+			length := math.Sqrt(normal.X*normal.X + normal.Y*normal.Y + normal.Z*normal.Z)
+			if math.Abs(length-1.0) > 0.0001 {
+				t.Errorf("Normal %d not normalized: length %.6f", i, length)
+			}
+
+			// The normal should point in the +Z direction (0, 0, 1)
+			// since the triangle is in the XY plane
+			if math.Abs(normal.X) > 0.0001 || math.Abs(normal.Y) > 0.0001 || math.Abs(normal.Z-1.0) > 0.0001 {
+				t.Errorf("Normal %d direction incorrect: got (%.4f, %.4f, %.4f), expected (0, 0, 1)",
+					i, normal.X, normal.Y, normal.Z)
+			}
+		}
+
+		t.Logf("CalculateNormals verified for single triangle")
+	})
+
+	t.Run("CalculateNormalsSmoothing", func(t *testing.T) {
+		// Create a mesh with two triangles sharing an edge to test smoothing
+		mesh := NewMesh()
+		mesh.AddVertex(0, 0, 0) // 0: shared vertex
+		mesh.AddVertex(1, 0, 0) // 1: shared vertex
+		mesh.AddVertex(0, 1, 0) // 2: triangle 1
+		mesh.AddVertex(0, 0, 1) // 3: triangle 2
+
+		// Triangle 1: (0, 1, 2) in XY plane
+		mesh.AddTriangleIndices(0, 1, 2)
+		// Triangle 2: (0, 3, 1) in XZ plane
+		mesh.AddTriangleIndices(0, 3, 1)
+
+		mesh.CalculateNormals()
+
+		// Normals at vertices 0 and 1 should be averaged between the two triangles
+		// They should not be pointing purely in +Z or +Y direction
+		for i := 0; i < 2; i++ {
+			normal := mesh.Normals[i]
+			length := math.Sqrt(normal.X*normal.X + normal.Y*normal.Y + normal.Z*normal.Z)
+
+			if math.Abs(length-1.0) > 0.0001 {
+				t.Errorf("Shared vertex %d normal not normalized: length %.6f", i, length)
+			}
+
+			// Should have both Y and Z components (averaged from both triangles)
+			if normal.Y < 0.1 || normal.Z < 0.1 {
+				t.Errorf("Shared vertex %d normal not properly averaged: (%.4f, %.4f, %.4f)",
+					i, normal.X, normal.Y, normal.Z)
+			}
+		}
+
+		t.Logf("CalculateNormals smoothing verified")
+	})
+
+	t.Run("CalculateNormalsEmptyMesh", func(t *testing.T) {
+		// Test edge case: empty mesh
+		mesh := NewMesh()
+		mesh.CalculateNormals()
+
+		if len(mesh.Normals) != 0 {
+			t.Errorf("Empty mesh should have 0 normals, got %d", len(mesh.Normals))
+		}
+	})
+
+	t.Run("CalculateNormalsInvalidIndices", func(t *testing.T) {
+		// Test edge case: mesh with invalid indices (out of bounds)
+		mesh := NewMesh()
+		mesh.AddVertex(0, 0, 0)
+		mesh.AddVertex(1, 0, 0)
+		mesh.AddVertex(0, 1, 0)
+
+		// Add invalid indices
+		mesh.Indices = []int{0, 1, 10} // Index 10 is out of bounds
+
+		// Should not panic, but skip invalid triangles
+		mesh.CalculateNormals()
+
+		// Normals should still be created for all vertices (but zero for unused ones)
+		if len(mesh.Normals) != 3 {
+			t.Errorf("Expected 3 normals, got %d", len(mesh.Normals))
+		}
+
+		t.Logf("CalculateNormals handles invalid indices gracefully")
 	})
 }
 
