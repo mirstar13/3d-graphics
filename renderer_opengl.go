@@ -1968,4 +1968,5 @@ func (r *OpenGLRenderer) disablePBRTextures() {
 	gl.Uniform1i(r.pbrUniformUseMetallicMap, 0)
 	gl.Uniform1i(r.pbrUniformUseRoughnessMap, 0)
 	gl.Uniform1i(r.pbrUniformUseAOMap, 0)
+	gl.Uniform1i(r.pbrUniformUseNormalMap, 0)
 }
