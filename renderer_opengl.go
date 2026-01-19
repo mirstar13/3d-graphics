@@ -1320,8 +1320,10 @@ func (r *OpenGLRenderer) RenderMesh(mesh *Mesh, worldMatrix Matrix4x4, camera *C
 
 	// Determine if we should use the PBR rendering path.
 	isPBR := false
-	if _, ok := mesh.Material.(*PBRMaterial); ok {
-		isPBR = true
+	if mesh.Material != nil {
+		if _, ok := mesh.Material.(*PBRMaterial); ok {
+			isPBR = true
+		}
 	}
 
 	// Check if the mesh has pre-calculated normals. This should be true for all meshes now.
