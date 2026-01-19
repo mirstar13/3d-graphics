@@ -34,6 +34,12 @@ func GenerateSphere(radius float64, rings, sectors int) *Mesh {
 			// Add the single unique vertex to the list
 			// Note: We are no longer making Quads here. Just points.
 			mesh.AddVertex(x, y, z)
+
+			// The normal for a sphere is the normalized vector from the center to the vertex
+			nx := x / radius
+			ny := y / radius
+			nz := z / radius
+			mesh.AddNormal(nx, ny, nz)
 			
 			// Add UV coordinates
 			mesh.AddUV(u, 1.0-v) // Flip V for OpenGL convention
@@ -106,6 +112,14 @@ func GenerateTorus(majorRadius, minorRadius float64, majorSegments, minorSegment
 			z := (majorRadius + minorRadius*cosPhi) * sinTheta
 
 			mesh.AddVertex(x, y, z)
+
+			// Calculate and add the normal for the torus
+			// This is derived from the partial derivatives of the parametric equations
+			nx := cosPhi * cosTheta
+			ny := sinPhi
+			nz := cosPhi * sinTheta
+			mesh.AddNormal(nx, ny, nz)
+
 			mesh.AddUV(u, v)
 		}
 	}
