@@ -896,13 +896,13 @@ func (r *OpenGLRenderer) createBuffers() error {
 	gl.VertexAttribPointer(1, 3, gl.FLOAT, false, stride, gl.PtrOffset(3*4))
 	gl.EnableVertexAttribArray(1)
 
-	// UV attribute (location 3) - Offset 24 bytes (after 3 position + 3 normal floats)
-	gl.VertexAttribPointer(3, 2, gl.FLOAT, false, stride, gl.PtrOffset(6*4))
-	gl.EnableVertexAttribArray(3)
-
 	// Color attribute (location 2) - Offset 32 bytes (after 3 position + 3 normal + 2 UV floats)
 	gl.VertexAttribPointer(2, 3, gl.FLOAT, false, stride, gl.PtrOffset(8*4))
 	gl.EnableVertexAttribArray(2)
+
+	// UV attribute (location 3) - Offset 24 bytes (after 3 position + 3 normal floats)
+	gl.VertexAttribPointer(3, 2, gl.FLOAT, false, stride, gl.PtrOffset(6*4))
+	gl.EnableVertexAttribArray(3)
 
 	gl.BindVertexArray(0)
 
