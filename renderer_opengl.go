@@ -1923,11 +1923,10 @@ func (r *OpenGLRenderer) bindPBRTextures() {
 		texID := r.uploadTexture(mat.NormalMap)
 		gl.ActiveTexture(gl.TEXTURE1)
 		gl.BindTexture(gl.TEXTURE_2D, texID)
-		gl.Uniform1i(r.pbrUniformNormalMap, 1) // Note: I need to add pbrUniformNormalMap to struct!
-		gl.Uniform1i(r.pbrUniformUseNormalMap, 1) // And this!
+		gl.Uniform1i(r.pbrUniformNormalMap, 1)
+		gl.Uniform1i(r.pbrUniformUseNormalMap, 1)
 	} else {
-		// gl.Uniform1i(r.pbrUniformUseNormalMap, 0)
-		// Skip normal map uniforms for now as I didn't add them to struct yet
+		gl.Uniform1i(r.pbrUniformUseNormalMap, 0)
 	}
 
 	// Metallic (Slot 2)
