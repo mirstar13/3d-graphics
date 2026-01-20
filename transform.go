@@ -147,7 +147,8 @@ func (t *Transform) GetLocalMatrix() Matrix4x4 {
 // GetInverseMatrix returns the cached inverse world matrix
 func (t *Transform) GetInverseMatrix() Matrix4x4 {
 	if t.inverseMatrixDirty {
-		t.inverseMatrix = t.GetWorldMatrix().Invert()
+		mat := t.GetWorldMatrix()
+		t.inverseMatrix = mat.Invert()
 		t.inverseMatrixDirty = false
 	}
 	return t.inverseMatrix
@@ -155,17 +156,20 @@ func (t *Transform) GetInverseMatrix() Matrix4x4 {
 
 // TransformPoint transforms a point from local space to world space (CACHED)
 func (t *Transform) TransformPoint(p Point) Point {
-	return t.GetWorldMatrix().TransformPoint(p)
+	mat := t.GetWorldMatrix()
+	return mat.TransformPoint(p)
 }
 
 // TransformDirection transforms a direction vector (CACHED)
 func (t *Transform) TransformDirection(d Point) Point {
-	return t.GetWorldMatrix().TransformDirection(d)
+	mat := t.GetWorldMatrix()
+	return mat.TransformDirection(d)
 }
 
 // InverseTransformPoint transforms a world-space point to local space (CACHED)
 func (t *Transform) InverseTransformPoint(worldPoint Point) Point {
-	return t.GetInverseMatrix().TransformPoint(worldPoint)
+	mat := t.GetInverseMatrix()
+	return mat.TransformPoint(worldPoint)
 }
 
 // GetWorldPosition returns the world-space position (CACHED)
