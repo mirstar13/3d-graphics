@@ -18,7 +18,7 @@ func IdentityMatrix() Matrix4x4 {
 }
 
 // Multiply multiplies two matrices
-func (m Matrix4x4) Multiply(other Matrix4x4) Matrix4x4 {
+func (m *Matrix4x4) Multiply(other Matrix4x4) Matrix4x4 {
 	var result Matrix4x4
 	for i := 0; i < 4; i++ {
 		for j := 0; j < 4; j++ {
@@ -37,7 +37,7 @@ func (m Matrix4x4) Multiply(other Matrix4x4) Matrix4x4 {
 }
 
 // TransformPoint transforms a point by this matrix
-func (m Matrix4x4) TransformPoint(p Point) Point {
+func (m *Matrix4x4) TransformPoint(p Point) Point {
 	x := m.M[0]*p.X + m.M[1]*p.Y + m.M[2]*p.Z + m.M[3]
 	y := m.M[4]*p.X + m.M[5]*p.Y + m.M[6]*p.Z + m.M[7]
 	z := m.M[8]*p.X + m.M[9]*p.Y + m.M[10]*p.Z + m.M[11]
@@ -50,12 +50,12 @@ func (m Matrix4x4) TransformPoint(p Point) Point {
 }
 
 // MultiplyPoint is an alias for TransformPoint for compatibility
-func (m Matrix4x4) MultiplyPoint(p Point) Point {
+func (m *Matrix4x4) MultiplyPoint(p Point) Point {
 	return m.TransformPoint(p)
 }
 
 // TransformDirection transforms a direction vector (ignores translation)
-func (m Matrix4x4) TransformDirection(d Point) Point {
+func (m *Matrix4x4) TransformDirection(d Point) Point {
 	x := m.M[0]*d.X + m.M[1]*d.Y + m.M[2]*d.Z
 	y := m.M[4]*d.X + m.M[5]*d.Y + m.M[6]*d.Z
 	z := m.M[8]*d.X + m.M[9]*d.Y + m.M[10]*d.Z
@@ -93,7 +93,7 @@ func ComposeMatrix(pos Point, rot Quaternion, scale Point) Matrix4x4 {
 }
 
 // Invert returns the inverse matrix
-func (m Matrix4x4) Invert() Matrix4x4 {
+func (m *Matrix4x4) Invert() Matrix4x4 {
 	// Using adjugate method - full implementation
 	var inv Matrix4x4
 	inv.M[0] = m.M[5]*m.M[10]*m.M[15] - m.M[5]*m.M[11]*m.M[14] - m.M[9]*m.M[6]*m.M[15] +
