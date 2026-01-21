@@ -690,7 +690,7 @@ func (r *TerminalRenderer) fillTriangle(t *Triangle, camera *Camera, color Color
 	// Redirect to the robust lighting function to ensure clipping/perspective consistency
 	// This ensures we don't duplicate the complex clipping logic.
 	// If specific "solid color" behavior is needed, the material can be adjusted.
-	r.fillTriangleWithPerPixelLighting(t, camera, Point{0, 1, 0, 'o'}, t.Material)
+	r.fillTriangleWithPerPixelLighting(t, camera, Point{0, 1, 0}, t.Material)
 }
 
 // renderTriangleWireframe renders triangle edges
