@@ -231,6 +231,18 @@ func (r *TerminalRenderer) RenderTriangle(tri *Triangle, worldMatrix Matrix4x4, 
 	p1 := worldMatrix.TransformPoint(tri.P1)
 	p2 := worldMatrix.TransformPoint(tri.P2)
 
+	// Transform normal if needed
+	var transformedNormal *Point
+	if tri.UseSetNormal && tri.Normal != nil {
+		tn := worldMatrix.TransformDirection(*tri.Normal)
+		transformedNormal = &tn
+	}
+
+	r.renderTriangleInternal(p0, p1, p2, tri, transformedNormal, camera)
+}
+
+// renderTriangleInternal handles the core rendering logic for pre-transformed vertices
+func (r *TerminalRenderer) renderTriangleInternal(p0, p1, p2 Point, originalTri *Triangle, transformedNormal *Point, camera *Camera) {
 	v0 := camera.TransformToViewSpace(p0)
 	v1 := camera.TransformToViewSpace(p1)
 	v2 := camera.TransformToViewSpace(p2)
@@ -242,23 +254,22 @@ func (r *TerminalRenderer) RenderTriangle(tri *Triangle, worldMatrix Matrix4x4, 
 	// Use object pool to reduce allocations
 	transformed := AcquireTriangle()
 	defer ReleaseTriangle(transformed)
-	
+
 	transformed.P0 = p0
 	transformed.P1 = p1
 	transformed.P2 = p2
-	transformed.char = tri.char
-	transformed.Material = tri.Material
-	transformed.UseSetNormal = tri.UseSetNormal
-	if tri.HasUVs {
-		transformed.SetUVs(tri.UV0, tri.UV1, tri.UV2)
+	transformed.char = originalTri.char
+	transformed.Material = originalTri.Material
+	transformed.UseSetNormal = originalTri.UseSetNormal
+	if originalTri.HasUVs {
+		transformed.SetUVs(originalTri.UV0, originalTri.UV1, originalTri.UV2)
 	}
 
-	if tri.UseSetNormal && tri.Normal != nil {
-		transformedNormal := worldMatrix.TransformDirection(*tri.Normal)
-		transformed.Normal = &transformedNormal
+	if originalTri.UseSetNormal && transformedNormal != nil {
+		transformed.Normal = transformedNormal
 	}
 
-	if tri.Material.IsWireframe() {
+	if originalTri.Material.IsWireframe() {
 		r.renderTriangleWireframe(transformed, camera)
 	} else {
 		r.rasterizeTriangleWithLighting(transformed, camera)
@@ -299,44 +310,55 @@ func (r *TerminalRenderer) RenderPoint(point *Point, worldMatrix Matrix4x4, came
 
 // RenderMesh renders a complete mesh
 func (r *TerminalRenderer) RenderMesh(mesh *Mesh, worldMatrix Matrix4x4, camera *Camera) {
+	// Optimization: Pre-transform vertices once per mesh instead of per triangle
+	// This reduces matrix multiplications by a factor of ~6 (depending on mesh topology)
+	transformedVertices := make([]Point, len(mesh.Vertices))
+
+	// Pre-calculate mesh position offsets
+	offsetX, offsetY, offsetZ := mesh.Position.X, mesh.Position.Y, mesh.Position.Z
+	hasOffset := offsetX != 0 || offsetY != 0 || offsetZ != 0
+
+	for i, v := range mesh.Vertices {
+		transformed := worldMatrix.TransformPoint(v)
+		if hasOffset {
+			transformed.X += offsetX
+			transformed.Y += offsetY
+			transformed.Z += offsetZ
+		}
+		transformedVertices[i] = transformed
+	}
+
+	// Reusable triangle struct for metadata passing to internal renderer
+	// We only set metadata (Material, UVs) on this, not vertices
+	tempTri := AcquireTriangle()
+	defer ReleaseTriangle(tempTri)
+	tempTri.char = 'o'
+	tempTri.Material = mesh.Material
+	// Note: Mesh struct doesn't have per-face normals easily accessible here without extra logic,
+	// so we assume UseSetNormal is false unless we compute them.
+	// RenderMesh original code didn't set Normal/UseSetNormal (it was nil/false by default).
+
+	hasUVs := len(mesh.UVs) > 0
+
 	// Render triangles from indexed geometry
 	for i := 0; i < len(mesh.Indices); i += 3 {
 		if i+2 < len(mesh.Indices) {
 			idx0, idx1, idx2 := mesh.Indices[i], mesh.Indices[i+1], mesh.Indices[i+2]
 			if idx0 < len(mesh.Vertices) && idx1 < len(mesh.Vertices) && idx2 < len(mesh.Vertices) {
-				// FIXED: Transform vertices by world matrix
-				p0 := worldMatrix.TransformPoint(mesh.Vertices[idx0])
-				p1 := worldMatrix.TransformPoint(mesh.Vertices[idx1])
-				p2 := worldMatrix.TransformPoint(mesh.Vertices[idx2])
+				// Use pre-transformed vertices
+				p0 := transformedVertices[idx0]
+				p1 := transformedVertices[idx1]
+				p2 := transformedVertices[idx2]
 
-				// Apply mesh position offset in world space
-				p0.X += mesh.Position.X
-				p0.Y += mesh.Position.Y
-				p0.Z += mesh.Position.Z
-				p1.X += mesh.Position.X
-				p1.Y += mesh.Position.Y
-				p1.Z += mesh.Position.Z
-				p2.X += mesh.Position.X
-				p2.Y += mesh.Position.Y
-				p2.Z += mesh.Position.Z
-
-				// Use object pool for triangle allocation
-				tri := AcquireTriangle()
-				tri.P0 = p0
-				tri.P1 = p1
-				tri.P2 = p2
-				tri.char = 'o'
-				tri.Material = mesh.Material
-
-				if len(mesh.UVs) > 0 {
+				// Update UVs on the reuseable triangle if needed
+				if hasUVs {
 					if idx0 < len(mesh.UVs) && idx1 < len(mesh.UVs) && idx2 < len(mesh.UVs) {
-						tri.SetUVs(mesh.UVs[idx0], mesh.UVs[idx1], mesh.UVs[idx2])
+						tempTri.SetUVs(mesh.UVs[idx0], mesh.UVs[idx1], mesh.UVs[idx2])
 					}
 				}
 				
-				r.RenderTriangle(tri, IdentityMatrix(), camera)
-				
-				ReleaseTriangle(tri)
+				// Call internal renderer directly, skipping redundant transforms and allocations
+				r.renderTriangleInternal(p0, p1, p2, tempTri, nil, camera)
 			}
 		}
 	}
