@@ -27,7 +27,11 @@ func (p *Point) SetChar(char byte) *Point {
 func (p *Point) Rotate(axis byte, angle float64) {
 	c := math.Cos(angle)
 	s := math.Sin(angle)
+	p.RotateFast(axis, c, s)
+}
 
+// RotateFast rotates a point using pre-calculated sin/cos values
+func (p *Point) RotateFast(axis byte, c, s float64) {
 	switch axis {
 	case 'x':
 		y, z := p.Y, p.Z
@@ -141,9 +145,12 @@ func (t *Triangle) RotateLocal(axis byte, angle float64) {
 	t.P2.Y -= centerY
 	t.P2.Z -= centerZ
 
-	t.P0.Rotate(axis, angle)
-	t.P1.Rotate(axis, angle)
-	t.P2.Rotate(axis, angle)
+	c := math.Cos(angle)
+	s := math.Sin(angle)
+
+	t.P0.RotateFast(axis, c, s)
+	t.P1.RotateFast(axis, c, s)
+	t.P2.RotateFast(axis, c, s)
 
 	t.P0.X += centerX
 	t.P0.Y += centerY
@@ -158,18 +165,21 @@ func (t *Triangle) RotateLocal(axis byte, angle float64) {
 	t.P2.Z += centerZ
 
 	if t.UseSetNormal && t.Normal != nil {
-		t.Normal.Rotate(axis, angle)
+		t.Normal.RotateFast(axis, c, s)
 	}
 }
 
 // RotateGlobal rotates triangle around world origin
 func (t *Triangle) RotateGlobal(axis byte, angle float64) {
-	t.P0.Rotate(axis, angle)
-	t.P1.Rotate(axis, angle)
-	t.P2.Rotate(axis, angle)
+	c := math.Cos(angle)
+	s := math.Sin(angle)
+
+	t.P0.RotateFast(axis, c, s)
+	t.P1.RotateFast(axis, c, s)
+	t.P2.RotateFast(axis, c, s)
 
 	if t.UseSetNormal && t.Normal != nil {
-		t.Normal.Rotate(axis, angle)
+		t.Normal.RotateFast(axis, c, s)
 	}
 }
 
@@ -225,13 +235,16 @@ func (q *Quad) SetNormal(normal Point) *Quad {
 
 // RotateGlobal rotates quad around world origin
 func (q *Quad) RotateGlobal(axis byte, angle float64) {
-	q.P0.Rotate(axis, angle)
-	q.P1.Rotate(axis, angle)
-	q.P2.Rotate(axis, angle)
-	q.P3.Rotate(axis, angle)
+	c := math.Cos(angle)
+	s := math.Sin(angle)
+
+	q.P0.RotateFast(axis, c, s)
+	q.P1.RotateFast(axis, c, s)
+	q.P2.RotateFast(axis, c, s)
+	q.P3.RotateFast(axis, c, s)
 
 	if q.UseSetNormal && q.Normal != nil {
-		q.Normal.Rotate(axis, angle)
+		q.Normal.RotateFast(axis, c, s)
 	}
 }
 
@@ -257,10 +270,13 @@ func (q *Quad) RotateLocal(axis byte, angle float64) {
 	q.P3.Y -= centerY
 	q.P3.Z -= centerZ
 
-	q.P0.Rotate(axis, angle)
-	q.P1.Rotate(axis, angle)
-	q.P2.Rotate(axis, angle)
-	q.P3.Rotate(axis, angle)
+	c := math.Cos(angle)
+	s := math.Sin(angle)
+
+	q.P0.RotateFast(axis, c, s)
+	q.P1.RotateFast(axis, c, s)
+	q.P2.RotateFast(axis, c, s)
+	q.P3.RotateFast(axis, c, s)
 
 	q.P0.X += centerX
 	q.P0.Y += centerY
@@ -279,7 +295,7 @@ func (q *Quad) RotateLocal(axis byte, angle float64) {
 	q.P3.Z += centerZ
 
 	if q.UseSetNormal && q.Normal != nil {
-		q.Normal.Rotate(axis, angle)
+		q.Normal.RotateFast(axis, c, s)
 	}
 }
 
@@ -320,20 +336,24 @@ func NewCircle(x, y, z, r float64, segments int) *Circle {
 
 // RotateGlobal rotates circle around world origin
 func (c *Circle) RotateGlobal(axis byte, angle float64) {
+	cVal := math.Cos(angle)
+	sVal := math.Sin(angle)
 	for i := range c.Points {
-		c.Points[i].Rotate(axis, angle)
+		c.Points[i].RotateFast(axis, cVal, sVal)
 	}
-	c.Center.Rotate(axis, angle)
+	c.Center.RotateFast(axis, cVal, sVal)
 }
 
 // RotateLocal rotates circle around its center
 func (c *Circle) RotateLocal(axis byte, angle float64) {
+	cVal := math.Cos(angle)
+	sVal := math.Sin(angle)
 	for i := range c.Points {
 		c.Points[i].X -= c.Center.X
 		c.Points[i].Y -= c.Center.Y
 		c.Points[i].Z -= c.Center.Z
 
-		c.Points[i].Rotate(axis, angle)
+		c.Points[i].RotateFast(axis, cVal, sVal)
 
 		c.Points[i].X += c.Center.X
 		c.Points[i].Y += c.Center.Y
@@ -409,16 +429,20 @@ func (m *Mesh) AddQuadIndices(i1, i2, i3, i4 int) {
 
 // RotateGlobal rotates all geometry around world origin
 func (m *Mesh) RotateGlobal(axis byte, angle float64) {
+	c := math.Cos(angle)
+	s := math.Sin(angle)
 	for i := range m.Vertices {
-		m.Vertices[i].Rotate(axis, angle)
+		m.Vertices[i].RotateFast(axis, c, s)
 	}
 }
 
 // RotateLocal rotates all geometry around local origin
 func (m *Mesh) RotateLocal(axis byte, angle float64) {
+	c := math.Cos(angle)
+	s := math.Sin(angle)
 	// For indexed meshes, local rotation is just rotating the vertex offsets
 	for i := range m.Vertices {
-		m.Vertices[i].Rotate(axis, angle)
+		m.Vertices[i].RotateFast(axis, c, s)
 	}
 }
 
