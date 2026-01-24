@@ -9,18 +9,11 @@ import "math"
 // Point represents a 3D point
 type Point struct {
 	X, Y, Z float64
-	char    byte // Legacy field, unused in new architecturec
 }
 
 // NewPoint creates a new point
 func NewPoint(x, y, z float64) *Point {
-	return &Point{X: x, Y: y, Z: z, char: 'o'}
-}
-
-// SetChar is kept for compatibility but unused
-func (p *Point) SetChar(char byte) *Point {
-	p.char = char
-	return p
+	return &Point{X: x, Y: y, Z: z}
 }
 
 // Rotate rotates a point around an axis (legacy helper)
