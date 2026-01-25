@@ -49,6 +49,16 @@ func (m *Matrix4x4) TransformPoint(p Point) Point {
 	return Point{X: x, Y: y, Z: z}
 }
 
+// TransformPointAffine transforms a point by this matrix, assuming it is an affine matrix (bottom row is 0,0,0,1).
+// This avoids calculating W and division, making it faster for model-to-world transformations.
+func (m *Matrix4x4) TransformPointAffine(p Point) Point {
+	return Point{
+		X: m.M[0]*p.X + m.M[1]*p.Y + m.M[2]*p.Z + m.M[3],
+		Y: m.M[4]*p.X + m.M[5]*p.Y + m.M[6]*p.Z + m.M[7],
+		Z: m.M[8]*p.X + m.M[9]*p.Y + m.M[10]*p.Z + m.M[11],
+	}
+}
+
 // MultiplyPoint is an alias for TransformPoint for compatibility
 func (m *Matrix4x4) MultiplyPoint(p Point) Point {
 	return m.TransformPoint(p)
