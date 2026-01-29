@@ -227,9 +227,9 @@ func (r *TerminalRenderer) renderNode(node *SceneNode, worldMatrix Matrix4x4, ca
 
 // RenderTriangle renders a single triangle
 func (r *TerminalRenderer) RenderTriangle(tri *Triangle, worldMatrix Matrix4x4, camera *Camera) {
-	p0 := worldMatrix.TransformPoint(tri.P0)
-	p1 := worldMatrix.TransformPoint(tri.P1)
-	p2 := worldMatrix.TransformPoint(tri.P2)
+	p0 := worldMatrix.TransformPointAffine(tri.P0)
+	p1 := worldMatrix.TransformPointAffine(tri.P1)
+	p2 := worldMatrix.TransformPointAffine(tri.P2)
 
 	// Transform normal if needed
 	var transformedNormal *Point
@@ -278,8 +278,8 @@ func (r *TerminalRenderer) renderTriangleInternal(p0, p1, p2 Point, originalTri 
 
 // RenderLine renders a single line
 func (r *TerminalRenderer) RenderLine(line *Line, worldMatrix Matrix4x4, camera *Camera) {
-	start := worldMatrix.TransformPoint(line.Start)
-	end := worldMatrix.TransformPoint(line.End)
+	start := worldMatrix.TransformPointAffine(line.Start)
+	end := worldMatrix.TransformPointAffine(line.End)
 
 	transformedLine := &Line{Start: start, End: end}
 
@@ -293,7 +293,7 @@ func (r *TerminalRenderer) RenderLine(line *Line, worldMatrix Matrix4x4, camera 
 
 // RenderPoint renders a single point
 func (r *TerminalRenderer) RenderPoint(point *Point, worldMatrix Matrix4x4, camera *Camera) {
-	p := worldMatrix.TransformPoint(*point)
+	p := worldMatrix.TransformPointAffine(*point)
 
 	x, y, z := camera.ProjectPoint(p, r.Height, r.Width)
 	if x == -1 {
@@ -319,7 +319,7 @@ func (r *TerminalRenderer) RenderMesh(mesh *Mesh, worldMatrix Matrix4x4, camera 
 	hasOffset := offsetX != 0 || offsetY != 0 || offsetZ != 0
 
 	for i, v := range mesh.Vertices {
-		transformed := worldMatrix.TransformPoint(v)
+		transformed := worldMatrix.TransformPointAffine(v)
 		if hasOffset {
 			transformed.X += offsetX
 			transformed.Y += offsetY
@@ -803,10 +803,10 @@ func (r *TerminalRenderer) drawLineWithZ(x0, y0, x1, y1 int, z0, z1 float64, col
 
 // renderQuad converts quad to triangles and renders
 func (r *TerminalRenderer) renderQuad(quad *Quad, worldMatrix Matrix4x4, camera *Camera) {
-	p0 := worldMatrix.TransformPoint(quad.P0)
-	p1 := worldMatrix.TransformPoint(quad.P1)
-	p2 := worldMatrix.TransformPoint(quad.P2)
-	p3 := worldMatrix.TransformPoint(quad.P3)
+	p0 := worldMatrix.TransformPointAffine(quad.P0)
+	p1 := worldMatrix.TransformPointAffine(quad.P1)
+	p2 := worldMatrix.TransformPointAffine(quad.P2)
+	p3 := worldMatrix.TransformPointAffine(quad.P3)
 
 	transformed := &Quad{P0: p0, P1: p1, P2: p2, P3: p3, Material: quad.Material, UseSetNormal: quad.UseSetNormal}
 
@@ -834,7 +834,7 @@ func (r *TerminalRenderer) renderCircle(circle *Circle, worldMatrix Matrix4x4, c
 	}
 	transformedPoints := make([]Point, len(circle.Points))
 	for i, p := range circle.Points {
-		transformedPoints[i] = worldMatrix.TransformPoint(p)
+		transformedPoints[i] = worldMatrix.TransformPointAffine(p)
 	}
 	for i := 0; i < len(transformedPoints); i++ {
 		p1 := transformedPoints[i]
