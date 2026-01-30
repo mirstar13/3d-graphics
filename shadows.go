@@ -263,49 +263,50 @@ func (sr *SimpleShadowRenderer) rasterizeDepthTriangle(
 	minY = maxInt(minY, 0)
 	maxY = minInt(maxY, shadowMap.Height-1)
 
-	// Rasterize
-	for y := minY; y <= maxY; y++ {
-		for x := minX; x <= maxX; x++ {
-			// Calculate barycentric coordinates
-			w0, w1, w2 := calculateBarycentricInt(x, y, x0, y0, x1, y1, x2, y2)
-
-			// Check if point is inside triangle
-			if w0 >= 0 && w1 >= 0 && w2 >= 0 {
-				// Interpolate depth
-				depth := w0*z0 + w1*z1 + w2*z2
-
-				// Write to depth buffer
-				shadowMap.WriteDepth(x, y, depth)
-			}
-		}
-	}
-}
-
-// calculateBarycentricInt calculates barycentric coordinates for integer points
-func calculateBarycentricInt(px, py, x0, y0, x1, y1, x2, y2 int) (float64, float64, float64) {
+	// Precompute triangle constants to avoid recomputation in the loop
 	v0x := float64(x1 - x0)
 	v0y := float64(y1 - y0)
 	v1x := float64(x2 - x0)
 	v1y := float64(y2 - y0)
-	v2x := float64(px - x0)
-	v2y := float64(py - y0)
 
 	d00 := v0x*v0x + v0y*v0y
 	d01 := v0x*v1x + v0y*v1y
 	d11 := v1x*v1x + v1y*v1y
-	d20 := v2x*v0x + v2y*v0y
-	d21 := v2x*v1x + v2y*v1y
 
 	denom := d00*d11 - d01*d01
 	if math.Abs(denom) < 1e-10 {
-		return -1, -1, -1
+		return
 	}
 
-	v := (d11*d20 - d01*d21) / denom
-	w := (d00*d21 - d01*d20) / denom
-	u := 1.0 - v - w
+	invDenom := 1.0 / denom
 
-	return u, v, w
+	// Rasterize
+	for y := minY; y <= maxY; y++ {
+		for x := minX; x <= maxX; x++ {
+			// Calculate barycentric coordinates inline using precomputed constants
+			v2x := float64(x - x0)
+			v2y := float64(y - y0)
+
+			d20 := v2x*v0x + v2y*v0y
+			d21 := v2x*v1x + v2y*v1y
+
+			v := (d11*d20 - d01*d21) * invDenom
+			w := (d00*d21 - d01*d20) * invDenom
+			u := 1.0 - v - w
+
+			// Check if point is inside triangle
+			if u >= 0 && v >= 0 && w >= 0 {
+				// Interpolate depth
+				depth := u*z0 + v*z1 + w*z2
+
+				// Write to depth buffer
+				// Inlined checks for performance since x,y are already clamped
+				if depth < shadowMap.DepthBuffer[y][x] {
+					shadowMap.DepthBuffer[y][x] = depth
+				}
+			}
+		}
+	}
 }
 
 // CreateLookAtMatrix creates a view matrix looking at a target
