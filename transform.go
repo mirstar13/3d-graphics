@@ -157,7 +157,7 @@ func (t *Transform) GetInverseMatrix() Matrix4x4 {
 // TransformPoint transforms a point from local space to world space (CACHED)
 func (t *Transform) TransformPoint(p Point) Point {
 	mat := t.GetWorldMatrix()
-	return mat.TransformPoint(p)
+	return mat.TransformPointAffine(p)
 }
 
 // TransformDirection transforms a direction vector (CACHED)
@@ -169,7 +169,7 @@ func (t *Transform) TransformDirection(d Point) Point {
 // InverseTransformPoint transforms a world-space point to local space (CACHED)
 func (t *Transform) InverseTransformPoint(worldPoint Point) Point {
 	mat := t.GetInverseMatrix()
-	return mat.TransformPoint(worldPoint)
+	return mat.TransformPointAffine(worldPoint)
 }
 
 // GetWorldPosition returns the world-space position (CACHED)
