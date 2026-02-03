@@ -1135,9 +1135,9 @@ func (r *OpenGLRenderer) renderNode(node *SceneNode, worldMatrix Matrix4x4, came
 
 func (r *OpenGLRenderer) RenderTriangle(tri *Triangle, worldMatrix Matrix4x4, camera *Camera) {
 	// Transform vertices to world space
-	p0 := worldMatrix.TransformPoint(tri.P0)
-	p1 := worldMatrix.TransformPoint(tri.P1)
-	p2 := worldMatrix.TransformPoint(tri.P2)
+	p0 := worldMatrix.TransformPointAffine(tri.P0)
+	p1 := worldMatrix.TransformPointAffine(tri.P1)
+	p2 := worldMatrix.TransformPointAffine(tri.P2)
 
 	// Get color
 	color := tri.Material.GetDiffuseColor(0, 0)
@@ -1211,7 +1211,7 @@ func (r *OpenGLRenderer) RenderTriangle(tri *Triangle, worldMatrix Matrix4x4, ca
 }
 
 func (r *OpenGLRenderer) RenderMesh(mesh *Mesh, worldMatrix Matrix4x4, camera *Camera) {
-	meshPos := worldMatrix.TransformPoint(mesh.Position)
+	meshPos := worldMatrix.TransformPointAffine(mesh.Position)
 
 	// Check if this is a PBR material
 	isPBR := false
@@ -1238,9 +1238,9 @@ func (r *OpenGLRenderer) RenderMesh(mesh *Mesh, worldMatrix Matrix4x4, camera *C
 				p1 := Point{X: mesh.Vertices[idx1].X + meshPos.X, Y: mesh.Vertices[idx1].Y + meshPos.Y, Z: mesh.Vertices[idx1].Z + meshPos.Z}
 				p2 := Point{X: mesh.Vertices[idx2].X + meshPos.X, Y: mesh.Vertices[idx2].Y + meshPos.Y, Z: mesh.Vertices[idx2].Z + meshPos.Z}
 
-				finalP0 := worldMatrix.TransformPoint(p0)
-				finalP1 := worldMatrix.TransformPoint(p1)
-				finalP2 := worldMatrix.TransformPoint(p2)
+				finalP0 := worldMatrix.TransformPointAffine(p0)
+				finalP1 := worldMatrix.TransformPointAffine(p1)
+				finalP2 := worldMatrix.TransformPointAffine(p2)
 
 				// FIXED: Use mesh material instead of hardcoded values
 				color := mesh.Material.GetDiffuseColor(0, 0)
@@ -1374,8 +1374,8 @@ func (r *OpenGLRenderer) renderQuad(quad *Quad, worldMatrix Matrix4x4, camera *C
 
 func (r *OpenGLRenderer) RenderLine(line *Line, worldMatrix Matrix4x4, camera *Camera) {
 	// Transform vertices to world space
-	p0 := worldMatrix.TransformPoint(line.Start)
-	p1 := worldMatrix.TransformPoint(line.End)
+	p0 := worldMatrix.TransformPointAffine(line.Start)
+	p1 := worldMatrix.TransformPointAffine(line.End)
 
 	// Use white color for lines
 	rf := float32(1.0)
@@ -1389,7 +1389,7 @@ func (r *OpenGLRenderer) RenderLine(line *Line, worldMatrix Matrix4x4, camera *C
 
 func (r *OpenGLRenderer) RenderPoint(point *Point, worldMatrix Matrix4x4, camera *Camera) {
 	// Transform point to world space
-	p := worldMatrix.TransformPoint(*point)
+	p := worldMatrix.TransformPointAffine(*point)
 
 	// Render as small sphere approximation (octahedron)
 	size := 0.5
@@ -1622,9 +1622,9 @@ func (r *OpenGLRenderer) RenderTexturedMesh(mesh *Mesh, worldMatrix Matrix4x4, c
 		}
 
 		// Transform vertices
-		p0 := worldMatrix.TransformPoint(mesh.Vertices[idx0])
-		p1 := worldMatrix.TransformPoint(mesh.Vertices[idx1])
-		p2 := worldMatrix.TransformPoint(mesh.Vertices[idx2])
+		p0 := worldMatrix.TransformPointAffine(mesh.Vertices[idx0])
+		p1 := worldMatrix.TransformPointAffine(mesh.Vertices[idx1])
+		p2 := worldMatrix.TransformPointAffine(mesh.Vertices[idx2])
 
 		// Get UV coordinates
 		uv0 := mesh.UVs[idx0]
@@ -1731,7 +1731,7 @@ func (r *OpenGLRenderer) renderMeshShadow(mesh *Mesh, worldMatrix Matrix4x4) {
 	positions := make([]float32, 0, len(mesh.Indices)*3)
 	for _, idx := range mesh.Indices {
 		if idx < len(mesh.Vertices) {
-			v := worldMatrix.TransformPoint(mesh.Vertices[idx])
+			v := worldMatrix.TransformPointAffine(mesh.Vertices[idx])
 			positions = append(positions, float32(v.X), float32(v.Y), float32(v.Z))
 		}
 	}
