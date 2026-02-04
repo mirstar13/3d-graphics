@@ -54,6 +54,16 @@ func (m *Matrix4x4) MultiplyPoint(p Point) Point {
 	return m.TransformPoint(p)
 }
 
+// TransformPointAffine transforms a point by this matrix, assuming it is affine (W=1)
+// This is faster than TransformPoint as it skips W calculation and division
+func (m *Matrix4x4) TransformPointAffine(p Point) Point {
+	return Point{
+		X: m.M[0]*p.X + m.M[1]*p.Y + m.M[2]*p.Z + m.M[3],
+		Y: m.M[4]*p.X + m.M[5]*p.Y + m.M[6]*p.Z + m.M[7],
+		Z: m.M[8]*p.X + m.M[9]*p.Y + m.M[10]*p.Z + m.M[11],
+	}
+}
+
 // TransformDirection transforms a direction vector (ignores translation)
 func (m *Matrix4x4) TransformDirection(d Point) Point {
 	x := m.M[0]*d.X + m.M[1]*d.Y + m.M[2]*d.Z
