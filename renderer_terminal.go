@@ -598,36 +598,67 @@ func (r *TerminalRenderer) fillTriangleWithPerPixelLighting(
 
 		width := bx - ax
 
-		for x := startX; x <= endX; x++ {
-			t := 0.0
-			if width != 0 {
-				t = float64(x-ax) / float64(width)
+		// Optimization: Forward Differencing to avoid per-pixel division and repeated interpolation math
+		step := 0.0
+		if width > 0 {
+			step = 1.0 / float64(width)
+		}
+
+		invZStep := (invZB - invZA) * step
+		pOverZStepX := (pOverZB.X - pOverZA.X) * step
+		pOverZStepY := (pOverZB.Y - pOverZA.Y) * step
+		pOverZStepZ := (pOverZB.Z - pOverZA.Z) * step
+
+		var uvOverZStepU, uvOverZStepV float64
+		if hasUVs {
+			uvOverZStepU = (uvOverZB.U - uvOverZA.U) * step
+			uvOverZStepV = (uvOverZB.V - uvOverZA.V) * step
+		}
+
+		// Initialize current values at ax
+		currentInvZ := invZA
+		currentPOverZX := pOverZA.X
+		currentPOverZY := pOverZA.Y
+		currentPOverZZ := pOverZA.Z
+		var currentUVOverZU, currentUVOverZV float64
+		if hasUVs {
+			currentUVOverZU = uvOverZA.U
+			currentUVOverZV = uvOverZA.V
+		}
+
+		// Adjust for clipping (startX could be > ax)
+		dx := float64(startX - ax)
+		if dx != 0 {
+			currentInvZ += invZStep * dx
+			currentPOverZX += pOverZStepX * dx
+			currentPOverZY += pOverZStepY * dx
+			currentPOverZZ += pOverZStepZ * dx
+			if hasUVs {
+				currentUVOverZU += uvOverZStepU * dx
+				currentUVOverZV += uvOverZStepV * dx
 			}
+		}
 
-			// Perspective Correct Interpolation for Pixel
-			currentInvZ := invZA + t*(invZB-invZA)
-
+		for x := startX; x <= endX; x++ {
 			// Depth Buffer Test (using 1/invZ = Z)
 			// Note: We use 1/invZ for depth check.
 			// Smaller Z is closer.
 			z := 1.0 / currentInvZ
 
 			if z > 0 && z < r.ZBuffer[y][x] {
-				currentPOverZ := lerpPoint3D(pOverZA, pOverZB, t)
-
 				// Recover World Position: (P/Z) / (1/Z) = P
+				// Note: currentInvZ is 1/Z, so dividing by it is multiplying by Z.
 				pixelWorldPos := Point{
-					X: currentPOverZ.X / currentInvZ,
-					Y: currentPOverZ.Y / currentInvZ,
-					Z: currentPOverZ.Z / currentInvZ,
+					X: currentPOverZX * z,
+					Y: currentPOverZY * z,
+					Z: currentPOverZZ * z,
 				}
 
 				// Recover UV
 				var u, v float64
 				if hasUVs {
-					currentUVOverZ := lerpTextureCoord(uvOverZA, uvOverZB, t)
-					u = currentUVOverZ.U / currentInvZ
-					v = currentUVOverZ.V / currentInvZ
+					u = currentUVOverZU * z
+					v = currentUVOverZV * z
 				}
 
 				var pixelColor Color
@@ -702,6 +733,16 @@ func (r *TerminalRenderer) fillTriangleWithPerPixelLighting(
 					r.Surface[y][x] = rune(SHADING_RAMP[idx])
 				}
 				r.ZBuffer[y][x] = z
+			}
+
+			// Increment interpolated values
+			currentInvZ += invZStep
+			currentPOverZX += pOverZStepX
+			currentPOverZY += pOverZStepY
+			currentPOverZZ += pOverZStepZ
+			if hasUVs {
+				currentUVOverZU += uvOverZStepU
+				currentUVOverZV += uvOverZStepV
 			}
 		}
 	}
