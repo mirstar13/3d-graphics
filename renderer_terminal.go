@@ -27,6 +27,9 @@ type TerminalRenderer struct {
 	// Clipping bounds (inclusive min, exclusive max)
 	ClipMinX, ClipMinY int
 	ClipMaxX, ClipMaxY int
+
+	// Scratch buffer for vertex transformation
+	vertexScratch []Point
 }
 
 // NewTerminalRenderer creates a new terminal renderer
@@ -312,7 +315,13 @@ func (r *TerminalRenderer) RenderPoint(point *Point, worldMatrix Matrix4x4, came
 func (r *TerminalRenderer) RenderMesh(mesh *Mesh, worldMatrix Matrix4x4, camera *Camera) {
 	// Optimization: Pre-transform vertices once per mesh instead of per triangle
 	// This reduces matrix multiplications by a factor of ~6 (depending on mesh topology)
-	transformedVertices := make([]Point, len(mesh.Vertices))
+
+	// Use scratch buffer to reduce allocations
+	numVertices := len(mesh.Vertices)
+	if cap(r.vertexScratch) < numVertices {
+		r.vertexScratch = make([]Point, numVertices)
+	}
+	transformedVertices := r.vertexScratch[:numVertices]
 
 	// Pre-calculate mesh position offsets
 	offsetX, offsetY, offsetZ := mesh.Position.X, mesh.Position.Y, mesh.Position.Z
