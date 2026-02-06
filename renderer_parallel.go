@@ -103,8 +103,10 @@ func (pr *ParallelRenderer) startWorkers() {
 
 func (pr *ParallelRenderer) worker() {
 	defer pr.wg.Done()
+	// Thread-local scratch buffer for vertex transformation to avoid allocations
+	scratchBuffer := make([]Point, 0, 1024)
 	for tile := range pr.tileQueue {
-		pr.renderTile(tile)
+		scratchBuffer = pr.renderTile(tile, scratchBuffer)
 	}
 }
 
@@ -182,13 +184,16 @@ func (pr *ParallelRenderer) generateTiles(nodes []*SceneNode, camera *Camera) {
 }
 
 // renderTile renders a single tile safely by copying the renderer context
-func (pr *ParallelRenderer) renderTile(tile RenderTile) {
+func (pr *ParallelRenderer) renderTile(tile RenderTile, scratchBuffer []Point) []Point {
 	// CRITICAL FIX: Thread safety via shallow copy
 	// We assume the underlying renderer is *TerminalRenderer
 	if tr, ok := pr.Renderer.(*TerminalRenderer); ok {
 		// Create a shallow copy of the struct
 		// This copies pointers to buffers (shared memory) but creates a local 'ClipRect'
 		rendererCopy := *tr
+
+		// Assign thread-local scratch buffer
+		rendererCopy.vertexScratch = scratchBuffer
 
 		// Set the clip bounds strictly for this tile
 		rendererCopy.SetClipBounds(tile.X, tile.Y, tile.X+tile.Width, tile.Y+tile.Height)
@@ -198,6 +203,8 @@ func (pr *ParallelRenderer) renderTile(tile RenderTile) {
 			worldMatrix := node.Transform.GetWorldMatrix()
 			pr.renderNodeWithRenderer(node, worldMatrix, tile.Camera, &rendererCopy)
 		}
+
+		return rendererCopy.vertexScratch
 	} else {
 		// Fallback for non-terminal renderers (unsafe fallback)
 		for _, node := range tile.Nodes {
@@ -205,6 +212,7 @@ func (pr *ParallelRenderer) renderTile(tile RenderTile) {
 			pr.Renderer.SetClipBounds(tile.X, tile.Y, tile.X+tile.Width, tile.Y+tile.Height)
 			pr.renderNodeWithRenderer(node, worldMatrix, tile.Camera, pr.Renderer)
 		}
+		return scratchBuffer
 	}
 }
 
