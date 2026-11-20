@@ -1,0 +1,15 @@
+demo: 1
+renderer: terminal
+render_mode: single
+anti_aliasing: none
+workers: 4
+tile_size: 32
+width: 0
+height: 0
+fps: 30
+color: auto
+show_debug: true
+profiling: true
+fov_x: 60
+fov_y: 30
+auto_orbit: true
