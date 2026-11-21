@@ -65,8 +65,9 @@ changes to their support. Debug status includes the sleeping-body count.
 Dynamic spheres can opt into continuous collision detection (`BodyDesc.CCD`) against
 static planes, boxes, and triangle meshes. Other pairs and sensors remain discrete;
 fast bodies can tunnel in those cases. CCD has a bounded impact budget and stops
-CCD motion conservatively if exhausted. Dynamic triangle meshes and joints remain
-future work.
+CCD motion conservatively if exhausted. Distance, ball-and-socket, and hinge joints
+support local/world anchors and connected-body collision filtering; hinges also
+support limits and torque-limited motors. Dynamic triangle meshes remain future work.
 Collision shapes are independent of render meshes, LOD, and anti-aliasing.
 
 ## Settings screen
@@ -212,7 +213,7 @@ repeatable PTY test and native Windows/macOS test procedure.
 | 4 | Lantern courtyard | A moving overhead light and visible cast shadows. |
 | 5 | Detail runway | Spheres approach and recede through three complete meshes with timed LOD fades. |
 | 6 | Wave field | 81 instanced columns animate as a wave; useful for comparing CPU modes and AA. |
-| 7 | Physics playground | Falling spheres, stacked crates, a moving platform, and a triangle-mesh ramp. |
+| 7 | Physics playground | Falling spheres, stacked crates, a moving platform, a triangle-mesh ramp, and a joint-driven pendulum. |
 
 These replace the former 13 technical examples. Geometry/material examples were
 combined into the gallery; hierarchy, textures, shadows, LOD, and performance

@@ -44,9 +44,18 @@ func applyImpulse(a, b *body, p, impulse vec) {
 		b.state.AngularVelocity = add(b.state.AngularVelocity, inverseInertia(b, cross(sub(p, b.state.Position), impulse)))
 	}
 }
-func (w *World) solveContacts(warm bool) {
+func (w *World) solveContacts(warm bool, dt float64) {
 	contacts, candidates := w.detect()
 	w.wakeImpacts(contacts)
+	for _, slot := range w.joints {
+		if slot.joint != nil {
+			slot.joint.state.MotorImpulse = 0
+		}
+	}
+	jointRows := w.jointRows(dt, warm)
+	for i := range jointRows {
+		jointRows[i].apply(jointRows[i].impulse, false)
+	}
 	constraints := w.constraintScratch[:0]
 	for _, contact := range contacts {
 		if contact.Sensor {
@@ -75,6 +84,7 @@ func (w *World) solveContacts(warm bool) {
 		applyImpulse(c.a, c.b, contactPoint(c.contact), add(mul(c.contact.Normal, c.normalImpulse), c.tangentImpulse))
 	}
 	for iteration := 0; iteration < w.options.VelocityIterations; iteration++ {
+		solveJointVelocities(jointRows)
 		for i := range constraints {
 			c := &constraints[i]
 			n, p := c.contact.Normal, contactPoint(c.contact)
@@ -105,6 +115,12 @@ func (w *World) solveContacts(warm bool) {
 			c.tangentImpulse = impulse
 		}
 	}
+	for _, row := range jointRows {
+		row.owner.impulses[row.index] = row.impulse
+		if row.index == 6 {
+			row.owner.state.MotorImpulse = row.impulse
+		}
+	}
 	nextCache := w.nextCache
 	if nextCache == nil {
 		nextCache = make(map[contactKey]cachedImpulse, len(constraints))
@@ -123,7 +139,8 @@ func (w *World) solveContacts(warm bool) {
 	}
 	w.nextCache = w.cache
 	w.cache = nextCache
-	for iteration := 0; iteration < w.options.PositionIterations && len(constraints) > 0; iteration++ {
+	for iteration := 0; iteration < w.options.PositionIterations && (len(constraints) > 0 || len(jointRows) > 0); iteration++ {
+		w.correctJoints()
 		positions, _ := w.detect()
 		for _, c := range positions {
 			if c.Sensor || c.Separation >= -penetrationSlop {
@@ -166,7 +183,7 @@ func (w *World) stepBodies(dt float64) {
 		w.advanceCCD(dt)
 	} else {
 		w.advanceBodies(dt)
-		w.solveContacts(true)
+		w.solveContacts(true, dt)
 		w.updateEvents()
 	}
 	w.finishTargets()

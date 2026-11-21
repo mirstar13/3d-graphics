@@ -190,6 +190,7 @@ func (w *World) RemoveBody(id BodyID) error {
 	remove := func() {
 		if _, err := w.lookup(id); err == nil {
 			w.invalidate(id)
+			w.removeAttachedJoints(id)
 			w.bodies[id.slot].body = nil
 			w.bodies[id.slot].generation++
 		}

@@ -13,6 +13,7 @@
 // Resting contact islands sleep and wake on forces, impacts, and support changes.
 // Dynamic spheres optionally sweep against static planes, boxes, and meshes.
 // Other pairs and sensors remain discrete; fast bodies can tunnel in those cases.
-// Joints and dynamic triangle meshes are not supported.
+// Distance, ball, and hinge joints share the solver and sleeping graph.
+// Dynamic triangle meshes are not supported.
 // Diagnostic wall-clock timings do not influence simulation results.
 package physics

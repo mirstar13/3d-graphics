@@ -12,10 +12,17 @@ type bodyBinding struct {
 	node   *engine.SceneNode
 	target func(float64) (engine.Point, engine.Quaternion)
 }
+type jointVisual struct {
+	id   physics.JointID
+	spec demo.JointSpec
+	node *engine.SceneNode
+}
+
 type physicsBindings struct {
-	world *physics.World
-	scene *engine.Scene
-	items []bodyBinding
+	joints []jointVisual
+	world  *physics.World
+	scene  *engine.Scene
+	items  []bodyBinding
 }
 
 func newPhysicsBindings(world *physics.World, scene *engine.Scene, specs []demo.BodySpec) (*physicsBindings, error) {
@@ -78,6 +85,7 @@ func (b *physicsBindings) synchronize() {
 		kept = append(kept, binding)
 	}
 	b.items = kept
+	b.updateJointVisuals()
 }
 
 // setEnabled keeps rendering and physics enabled state under one authority.
@@ -103,4 +111,64 @@ func (b *physicsBindings) present(alpha float64) {
 		binding.node.Transform.SetPosition(p.X, p.Y, p.Z)
 		binding.node.Transform.SetRotationQuaternion(q)
 	}
+	b.updateJointVisuals()
+}
+
+func (b *physicsBindings) addJoints(specs []demo.JointSpec) error {
+	find := func(node *engine.SceneNode) (physics.BodyID, error) {
+		for _, binding := range b.items {
+			if binding.node == node {
+				return binding.id, nil
+			}
+		}
+		return physics.BodyID{}, fmt.Errorf("joint visual has no body binding")
+	}
+	for _, spec := range specs {
+		d := spec.Desc
+		var err error
+		d.BodyA, err = find(spec.A)
+		if err != nil {
+			return err
+		}
+		if spec.B != nil {
+			d.BodyB, err = find(spec.B)
+			if err != nil {
+				return err
+			}
+		}
+		id, err := b.world.AddJoint(d)
+		if err != nil {
+			return err
+		}
+		if d.Kind == physics.DistanceJoint {
+			node := engine.NewSceneNodeWithObject("Joint link", engine.NewLine(engine.Point{}, engine.Point{}))
+			b.scene.AddNode(node)
+			b.joints = append(b.joints, jointVisual{id: id, spec: spec, node: node})
+		}
+	}
+	return nil
+}
+
+func (b *physicsBindings) updateJointVisuals() {
+	kept := b.joints[:0]
+	point := func(node *engine.SceneNode, local engine.Point) engine.Point {
+		if node == nil {
+			return local
+		}
+		v := node.Transform.Rotation.RotateVector(local)
+		p := node.Transform.Position
+		return engine.Point{X: p.X + v.X, Y: p.Y + v.Y, Z: p.Z + v.Z}
+	}
+	for _, visual := range b.joints {
+		if _, err := b.world.Joint(visual.id); err != nil {
+			b.scene.RemoveNode(visual.node)
+			continue
+		}
+		line := visual.node.Object.(*engine.Line)
+		line.Start = point(visual.spec.A, visual.spec.Desc.AnchorA)
+		line.End = point(visual.spec.B, visual.spec.Desc.AnchorB)
+		visual.node.SetEnabled(visual.spec.A.Enabled && (visual.spec.B == nil || visual.spec.B.Enabled))
+		kept = append(kept, visual)
+	}
+	b.joints = kept
 }

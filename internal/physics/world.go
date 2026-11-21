@@ -32,6 +32,7 @@ func DefaultOptions() Options {
 // render, input, or scene-node dependencies and is not thread-safe. Wall-clock
 // measurements are diagnostic only and never influence simulation decisions.
 type World struct {
+	joints                     []jointSlot
 	boundsScratch              []bounds
 	orderScratch, planeScratch []int
 	pairScratch                []bodyPair
@@ -106,7 +107,12 @@ func (w *World) Reset() {
 		slots[i].body = nil
 		slots[i].generation++
 	}
-	*w = World{options: w.options, bodies: slots}
+	joints := w.joints
+	for i := range joints {
+		joints[i].joint = nil
+		joints[i].generation++
+	}
+	*w = World{options: w.options, bodies: slots, joints: joints}
 }
 
 // Stats is a read-only timing snapshot. SimulationTime is in seconds; Substeps

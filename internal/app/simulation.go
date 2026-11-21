@@ -41,6 +41,9 @@ func newConfiguredSimulation(scene *engine.Scene, lighting *engine.LightingSyste
 	if err != nil {
 		return nil, err
 	}
+	if err := bindings.addJoints(demo.PhysicsJoints(scene, preset)); err != nil {
+		return nil, err
+	}
 	sim := &simulation{interpolate: settings.Interpolation, world: world, stepBudget: options.MaxSubsteps, bindings: bindings}
 	sim.hooks = physics.StepHooks{
 		BeforeStep: func(tick physics.Tick) {

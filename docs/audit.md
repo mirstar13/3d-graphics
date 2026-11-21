@@ -235,3 +235,18 @@ and skipping empty position solves, not only the broad-phase change. Settled
 allocations fell from roughly 735 KB to 86 KB per tick. Dense overlapping 128-body
 fixtures still cost about 4.7 ms/tick; contact generation/island work remains a
 cost, and broad-phase acceleration is not a guarantee for dense scenes.
+
+## Joint constraints
+
+Distance, ball-and-socket, and hinge rows share velocity/position iterations with
+contacts. World-local generation handles are invalidated on removal/reset;
+attached joints are removed with their body. Joint connectivity participates in
+wake/sleep traversal without merging islands through static supports. Hinge axes
+must initially align; signed limits lie within -pi..pi relative to creation pose.
+Motors clamp accumulated angular impulse to torque times solve interval. Spring
+compliance and breakage remain separate extensions.
+
+Regression fixtures cover a 10-second pendulum energy/length bound, hanging-chain
+anchor error and wakeup, kinematic attachments, hinge-axis drift, torque/angle
+limits, connected-body filtering, and deferred removal. The playground adds a
+small pendulum and presentation-only link, staying within its geometry budget.

@@ -71,5 +71,20 @@ func (w *World) DebugLines() []engine.DebugLine {
 			line(sub(p, d), add(p, d), engine.ColorWhite)
 		}
 	}
+	for _, slot := range w.joints {
+		j := slot.joint
+		if j == nil || !j.active {
+			continue
+		}
+		a, b, e := w.jointBodies(j.state.JointDesc)
+		if e != nil || a.state.Disabled || b.state.Disabled {
+			continue
+		}
+		pa, pb := jointPoint(a, j.state.AnchorA), jointPoint(b, j.state.AnchorB)
+		line(pa, pb, engine.ColorWhite)
+		if j.state.Kind == HingeJoint {
+			line(pa, add(pa, a.state.Rotation.RotateVector(j.state.AxisA)), engine.ColorWhite)
+		}
+	}
 	return lines
 }

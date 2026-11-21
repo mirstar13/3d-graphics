@@ -38,6 +38,8 @@ func buildPlayground(scene *engine.Scene) {
 		playgroundBox(scene, fmt.Sprintf("Crate%d", i), engine.Point{X: 10, Y: -3.35 + float64(i)*1.82, Z: 6}, engine.Point{X: .9, Y: .9, Z: .9}, palette[0])
 	}
 	playgroundBox(scene, "Platform", engine.Point{X: -3, Y: -2, Z: -6}, engine.Point{X: 2, Y: .4, Z: 2}, palette[3])
+	playgroundBox(scene, "Pendulum", engine.Point{X: -11, Y: 1, Z: 8}, engine.Point{X: .5, Y: .5, Z: .5}, palette[4%len(palette)])
+	playgroundBox(scene, "PendulumStand", engine.Point{X: -13, Y: 0, Z: 8}, engine.Point{X: .15, Y: 4, Z: .15}, palette[1])
 	ramp := engine.NewMesh()
 	ramp.Vertices = rampVertices()
 	ramp.Indices = []int{0, 2, 1, 0, 3, 2}
@@ -96,10 +98,25 @@ func PhysicsSpecs(scene *engine.Scene, index int) ([]BodySpec, error) {
 		return nil, err
 	}
 	add("Ramp", physics.Static, physics.Mesh(mesh))
+	add("Pendulum", physics.Dynamic, physics.Box(engine.Point{X: .5, Y: .5, Z: .5}))
 	for _, spec := range specs {
 		if spec.Node == nil {
 			return nil, fmt.Errorf("physics playground visual is missing")
 		}
 	}
 	return specs, nil
+}
+
+// JointSpec binds visual nodes through the application's body registry. A nil B
+// denotes a world anchor; the descriptor's BodyIDs are assigned by the application.
+type JointSpec struct {
+	A, B *engine.SceneNode
+	Desc physics.JointDesc
+}
+
+func PhysicsJoints(scene *engine.Scene, index int) []JointSpec {
+	if index != PhysicsPlayground {
+		return nil
+	}
+	return []JointSpec{{A: scene.FindNode("Pendulum"), Desc: physics.JointDesc{Kind: physics.DistanceJoint, AnchorB: engine.Point{X: -13, Y: 4, Z: 8}, Length: math.Sqrt(13)}}}
 }

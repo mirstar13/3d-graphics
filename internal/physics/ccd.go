@@ -108,6 +108,9 @@ func (w *World) earliestImpact(dt float64) (float64, bool) {
 			if b == nil || !b.active || b.state.Disabled || b.state.Type != Static || b.state.Collider.Sensor {
 				continue
 			}
+			if w.jointFiltered(a.state.ID, b.state.ID) {
+				continue
+			}
 			kind := b.state.Collider.Shape.kind
 			if kind != PlaneShape && kind != BoxShape && kind != MeshShape {
 				continue
@@ -148,7 +151,7 @@ func (w *World) advanceCCD(dt float64) {
 		remaining -= interval
 		// Warm-start impulses belong to a full fixed interval. Avoid reapplying
 		// those impulses to repeated CCD solves with different interval lengths.
-		w.solveContacts(false)
+		w.solveContacts(false, interval)
 		publish()
 		if !hit {
 			break
@@ -166,7 +169,7 @@ func (w *World) advanceCCD(dt float64) {
 					}
 				}
 				w.advanceBodies(remaining)
-				w.solveContacts(false)
+				w.solveContacts(false, remaining)
 				publish()
 			}
 			break

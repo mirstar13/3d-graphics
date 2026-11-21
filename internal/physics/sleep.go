@@ -12,6 +12,12 @@ func (w *World) wakeConnected(id BodyID, contacts []Contact) {
 			b.state.Sleeping = false
 			b.quietTime = 0
 		}
+		for _, neighbor := range w.jointNeighbors(current) {
+			if neighbor.state.Type == Dynamic && !seen[neighbor.state.ID] {
+				seen[neighbor.state.ID] = true
+				queue = append(queue, neighbor.state.ID)
+			}
+		}
 		for _, c := range contacts {
 			if c.Sensor {
 				continue
@@ -69,6 +75,13 @@ func (w *World) updateSleep(dt float64) {
 	if !w.options.Sleeping {
 		return
 	}
+	jointError := make(map[BodyID]bool)
+	for _, row := range w.jointRows(w.options.FixedStep.Seconds(), false) {
+		if row.error > sleepPenetrationLimit || row.error < -sleepPenetrationLimit {
+			jointError[row.a.state.ID] = true
+			jointError[row.b.state.ID] = true
+		}
+	}
 	seen := make(map[BodyID]bool)
 	for _, slot := range w.bodies {
 		root := slot.body
@@ -80,6 +93,24 @@ func (w *World) updateSleep(dt float64) {
 		quiet := true
 		for i := 0; i < len(island); i++ {
 			b := island[i]
+			if jointError[b.state.ID] {
+				quiet = false
+			}
+			for _, neighbor := range w.jointNeighbors(b.state.ID) {
+				if neighbor.state.Type == Kinematic && moving(neighbor) {
+					quiet = false
+				}
+				if neighbor.state.Type == Dynamic && !seen[neighbor.state.ID] {
+					seen[neighbor.state.ID] = true
+					island = append(island, neighbor)
+				}
+			}
+			for _, slot := range w.joints {
+				j := slot.joint
+				if j != nil && j.active && (j.state.BodyA == b.state.ID || j.state.BodyB == b.state.ID) && j.state.Motor && j.state.MotorSpeed != 0 {
+					quiet = false
+				}
+			}
 			if length(b.state.Velocity) > w.options.SleepLinearThreshold || length(b.state.AngularVelocity) > w.options.SleepAngularThreshold {
 				quiet = false
 			}

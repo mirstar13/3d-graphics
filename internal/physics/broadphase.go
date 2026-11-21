@@ -39,6 +39,9 @@ func (w *World) candidates() []bodyPair {
 		}
 		a, b := w.bodies[i].body, w.bodies[j].body
 		w.solverStats.PairTests++
+		if w.jointFiltered(a.state.ID, b.state.ID) {
+			return
+		}
 		ac, bc := a.state.Collider, b.state.Collider
 		if ac.Layer&bc.Mask == 0 || bc.Layer&ac.Mask == 0 {
 			return
