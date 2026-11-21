@@ -10,7 +10,8 @@
 // to scene nodes. Lifecycle changes inside hooks take effect next tick.
 //
 // The clock bounds catch-up work and never enlarges its integration step.
-// Collision detection is discrete; fast bodies can tunnel. Sleeping, joints,
+// Resting contact islands sleep and wake on forces, impacts, and support changes.
+// Collision detection is discrete; fast bodies can tunnel. Joints,
 // continuous collision detection, and dynamic triangle meshes are not supported.
 // Diagnostic wall-clock timings do not influence simulation results.
 package physics

@@ -1,6 +1,6 @@
 # Physics follow-up implementation plan
 
-Status: implementation in progress. Milestone 1 is implemented; subsequent milestones
+Status: implementation in progress. Milestones 1–2 are implemented; subsequent milestones
 remain queued in the order below. Builds on the completed [rigid-body milestone](rigid-bodies-colliders-plan.md).
 This document tracks the remaining physics work.
 

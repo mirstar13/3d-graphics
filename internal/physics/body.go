@@ -45,6 +45,7 @@ type BodyState struct {
 	Inertia          vec
 	PreviousPosition vec
 	PreviousRotation quat
+	Sleeping         bool
 }
 type body struct {
 	state                                  BodyState
@@ -54,6 +55,7 @@ type body struct {
 	targetRotation                         quat
 	hasTarget                              bool
 	active                                 bool
+	quietTime                              float64
 }
 type bodySlot struct {
 	generation uint64
@@ -302,6 +304,9 @@ func (w *World) addVector(id BodyID, value vec, kind int) error {
 	if !finitePoint(sum) {
 		return fmt.Errorf("force accumulator overflow")
 	}
+	if length(value) > 0 {
+		w.wakeConnected(id, w.contacts)
+	}
 	*target = sum
 	return nil
 }
@@ -317,6 +322,9 @@ func (w *World) SetKinematicTarget(id BodyID, position vec, rotation quat) error
 	}
 	if b.state.Type != Kinematic {
 		return fmt.Errorf("target requires kinematic body")
+	}
+	if position != b.state.Position || rotation.Normalize() != b.state.Rotation {
+		w.wakeConnected(id, w.contacts)
 	}
 	b.targetPosition = position
 	b.targetRotation = rotation.Normalize()
@@ -351,6 +359,9 @@ func (w *World) addAtPoint(id BodyID, value, point vec, impulse bool) error {
 	l, a := add(*linear, value), add(*angular, cross(sub(point, b.state.Position), value))
 	if !finitePoint(l) || !finitePoint(a) {
 		return fmt.Errorf("force or torque overflow")
+	}
+	if length(value) > 0 {
+		w.wakeConnected(id, w.contacts)
 	}
 	*linear, *angular = l, a
 	return nil

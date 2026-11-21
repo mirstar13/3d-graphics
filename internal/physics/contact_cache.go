@@ -10,6 +10,7 @@ type cachedImpulse struct {
 }
 
 func (w *World) invalidate(id BodyID) {
+	w.wakeConnected(id, w.contacts)
 	for key := range w.cache {
 		if key.a == id || key.b == id {
 			delete(w.cache, key)

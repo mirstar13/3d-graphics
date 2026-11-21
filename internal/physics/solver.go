@@ -15,8 +15,9 @@ type constraint struct {
 
 // SolverStats reports only physics work, excluding drawing and terminal output.
 type SolverStats struct {
-	Bodies, CandidatePairs, Contacts int
-	Duration                         time.Duration
+	Bodies, CandidatePairs, Contacts               int
+	AwakeBodies, SleepingBodies, SolvedConstraints int
+	Duration                                       time.Duration
 	// PairTests includes all enabled pairs visited across every detection pass.
 	PairTests, DetectionPasses                                                  int
 	IntegrationDuration, BroadPhaseDuration, NarrowPhaseDuration, SolveDuration time.Duration
@@ -48,6 +49,7 @@ func (w *World) stepBodies(dt float64) {
 	w.integrateBodies(dt)
 	w.solverStats.IntegrationDuration = time.Since(start)
 	contacts, candidates := w.detect()
+	w.wakeImpacts(contacts)
 	constraints := make([]constraint, 0, len(contacts))
 	for _, contact := range contacts {
 		if contact.Sensor {
@@ -55,7 +57,7 @@ func (w *World) stepBodies(dt float64) {
 		}
 		a, _ := w.lookup(contact.A)
 		b, _ := w.lookup(contact.B)
-		if a.inverseMass+b.inverseMass == 0 {
+		if a.inverseMass+b.inverseMass == 0 || sleepingContact(a, b) {
 			continue
 		}
 		c := constraint{contact: contact, a: a, b: b}
@@ -69,6 +71,7 @@ func (w *World) stepBodies(dt float64) {
 		}
 		constraints = append(constraints, c)
 	}
+	w.solverStats.SolvedConstraints = len(constraints)
 	for i := range constraints {
 		c := &constraints[i]
 		applyImpulse(c.a, c.b, contactPoint(c.contact), add(mul(c.contact.Normal, c.normalImpulse), c.tangentImpulse))
@@ -108,6 +111,13 @@ func (w *World) stepBodies(dt float64) {
 	for _, c := range constraints {
 		nextCache[contactKey{c.contact.A, c.contact.B, c.contact.Feature}] = cachedImpulse{normal: c.contact.Normal, tangent: c.tangentImpulse, point: contactPoint(c.contact), impulse: c.normalImpulse}
 	}
+	for key, impulse := range w.cache {
+		a, ea := w.lookup(key.a)
+		b, eb := w.lookup(key.b)
+		if ea == nil && eb == nil && sleepingContact(a, b) {
+			nextCache[key] = impulse
+		}
+	}
 	w.cache = nextCache
 	for iteration := 0; iteration < w.options.PositionIterations; iteration++ {
 		positions, _ := w.detect()
@@ -117,6 +127,9 @@ func (w *World) stepBodies(dt float64) {
 			}
 			a, _ := w.lookup(c.A)
 			b, _ := w.lookup(c.B)
+			if sleepingContact(a, b) {
+				continue
+			}
 			p := contactPoint(c)
 			mass := effectiveMass(a, b, p, c.Normal)
 			if mass < 1e-12 {
@@ -137,10 +150,18 @@ func (w *World) stepBodies(dt float64) {
 	}
 	w.contacts, _ = w.detect()
 	w.updateEvents()
+	w.updateSleep(dt)
 	active := 0
 	for _, slot := range w.bodies {
 		if slot.body != nil && slot.body.active && !slot.body.state.Disabled {
 			active++
+			if slot.body.state.Type == Dynamic {
+				if slot.body.state.Sleeping {
+					w.solverStats.SleepingBodies++
+				} else {
+					w.solverStats.AwakeBodies++
+				}
+			}
 		}
 	}
 	w.solverStats.Bodies = active

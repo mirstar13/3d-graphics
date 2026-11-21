@@ -2,6 +2,7 @@ package physics
 
 // These tolerances target metre-scale scenes, not arbitrary unit systems.
 const (
+	sleepPenetrationLimit      = .015  // Metres: do not sleep unresolved deep contacts.
 	faceAxisBias               = .0001 // Metres: prefer the first nearly equivalent reference face.
 	edgeAxisBias               = .001  // Metres: require a meaningful edge-axis improvement.
 	contactSlop                = .005  // Metres: narrow-phase contact margin.

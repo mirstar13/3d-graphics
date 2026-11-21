@@ -11,6 +11,7 @@ func TestStackStabilityEnvelope(t *testing.T) {
 	for _, ratio := range []float64{1, 10} {
 		t.Run(fmt.Sprint(ratio), func(t *testing.T) {
 			w := newTestWorld(t)
+			w.options.Sleeping = false
 			floor := NewBodyDesc(Static, Plane(vec{Y: 1}, 0))
 			floor.Collider.Restitution = 0
 			addTestBody(t, w, floor)

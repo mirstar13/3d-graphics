@@ -114,5 +114,5 @@ func (s *simulation) advance(elapsed time.Duration, batch engine.SimulationComma
 func (s *simulation) status() engine.SimulationStatus {
 	stats := s.world.Stats()
 	metrics := s.world.SolverStats()
-	return engine.SimulationStatus{Tick: stats.Tick, Hz: 1 / stats.FixedStep.Seconds(), Paused: stats.Paused, DroppedSeconds: stats.Discarded.Seconds(), DroppedCommands: s.droppedCommands, PhysicsBodies: metrics.Bodies, PhysicsPairs: metrics.CandidatePairs, PhysicsContacts: metrics.Contacts, PhysicsMilliseconds: float64(metrics.Duration) / float64(time.Millisecond), PhysicsOverlay: s.overlay}
+	return engine.SimulationStatus{Tick: stats.Tick, Hz: 1 / stats.FixedStep.Seconds(), Paused: stats.Paused, DroppedSeconds: stats.Discarded.Seconds(), DroppedCommands: s.droppedCommands, PhysicsBodies: metrics.Bodies, PhysicsAwake: metrics.AwakeBodies, PhysicsSleeping: metrics.SleepingBodies, PhysicsPairs: metrics.CandidatePairs, PhysicsContacts: metrics.Contacts, PhysicsMilliseconds: float64(metrics.Duration) / float64(time.Millisecond), PhysicsOverlay: s.overlay}
 }

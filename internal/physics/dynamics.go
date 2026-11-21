@@ -24,7 +24,7 @@ func (w *World) integrateBodies(dt float64) {
 		s := &b.state
 		s.PreviousPosition = s.Position
 		s.PreviousRotation = s.Rotation
-		if s.Disabled {
+		if s.Disabled || s.Sleeping {
 			b.force = vec{}
 			b.torque = vec{}
 			b.impulse = vec{}

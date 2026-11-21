@@ -655,7 +655,7 @@ func (r *TerminalRenderer) statusLine() string {
 			} else {
 				r.debugBuffer.WriteString(" | C:OFF")
 			}
-			fmt.Fprintf(&r.debugBuffer, " | Bodies:%d Pairs:%d Contacts:%d Phys:%.2fms", status.PhysicsBodies, status.PhysicsPairs, status.PhysicsContacts, status.PhysicsMilliseconds)
+			fmt.Fprintf(&r.debugBuffer, " | Bodies:%d Sleep:%d Pairs:%d Contacts:%d Phys:%.2fms", status.PhysicsBodies, status.PhysicsSleeping, status.PhysicsPairs, status.PhysicsContacts, status.PhysicsMilliseconds)
 		}
 		if r.Camera != nil {
 			pos := r.Camera.GetPosition()

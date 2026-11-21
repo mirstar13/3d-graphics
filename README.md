@@ -57,8 +57,11 @@ friction, restitution, and a warm-started sequential impulse solver. C displays
 colliders and contact normals over the image; debug status reports body, pair,
 contact counts, and physics tick cost. Pause and single-step also freeze and step bodies.
 
+Resting dynamic bodies sleep in connected groups, waking on forces, impacts, and
+changes to their support. Debug status includes the sleeping-body count.
+
 Collision detection is discrete, so fast bodies can tunnel. Dynamic triangle
-meshes, joints, sleeping, and continuous collision detection remain future work.
+meshes, joints, and continuous collision detection remain future work.
 Collision shapes are independent of render meshes, LOD, and anti-aliasing.
 
 ## Settings screen

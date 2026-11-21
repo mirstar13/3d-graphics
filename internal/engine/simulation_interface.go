@@ -28,6 +28,7 @@ type SimulationCommandInput interface{ DrainSimulationCommands() SimulationComma
 // SimulationStatus is a renderer-neutral snapshot for optional status displays.
 type SimulationStatus struct {
 	PhysicsBodies, PhysicsPairs, PhysicsContacts int
+	PhysicsAwake, PhysicsSleeping                int
 	PhysicsMilliseconds                          float64
 	PhysicsOverlay                               bool
 	Tick                                         uint64

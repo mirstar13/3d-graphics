@@ -11,16 +11,18 @@ import (
 // Options defines world-space gravity and the catch-up policy. One physics unit
 // is one metre. FixedStep is rounded to nanoseconds by time.Duration.
 type Options struct {
-	FixedStep                              time.Duration
-	MaxFrameDelta                          time.Duration
-	MaxSubsteps                            int
-	VelocityIterations, PositionIterations int
-	Gravity                                engine.Point
+	FixedStep                                               time.Duration
+	MaxFrameDelta                                           time.Duration
+	MaxSubsteps                                             int
+	VelocityIterations, PositionIterations                  int
+	Gravity                                                 engine.Point
+	Sleeping                                                bool
+	SleepLinearThreshold, SleepAngularThreshold, SleepDelay float64
 }
 
 // DefaultOptions supplies the initial 60 Hz simulation profile.
 func DefaultOptions() Options {
-	return Options{FixedStep: time.Second / 60, MaxFrameDelta: 250 * time.Millisecond, MaxSubsteps: 8, VelocityIterations: 20, PositionIterations: 8, Gravity: engine.Point{Y: -9.81}}
+	return Options{Sleeping: true, SleepLinearThreshold: .03, SleepAngularThreshold: .05, SleepDelay: .5, FixedStep: time.Second / 60, MaxFrameDelta: 250 * time.Millisecond, MaxSubsteps: 8, VelocityIterations: 20, PositionIterations: 8, Gravity: engine.Point{Y: -9.81}}
 }
 
 // World owns simulation timing on the application update goroutine. It has no
@@ -52,6 +54,9 @@ func NewWorld(options Options) (*World, error) {
 	}
 	if options.MaxFrameDelta > time.Duration(math.MaxInt64)-options.FixedStep {
 		return nil, fmt.Errorf("physics timing limits exceed duration capacity")
+	}
+	if options.Sleeping && (!finite(options.SleepLinearThreshold) || options.SleepLinearThreshold <= 0 || !finite(options.SleepAngularThreshold) || options.SleepAngularThreshold <= 0 || !finite(options.SleepDelay) || options.SleepDelay <= 0) {
+		return nil, fmt.Errorf("sleep thresholds and delay must be finite and positive")
 	}
 	if !finitePoint(options.Gravity) {
 		return nil, fmt.Errorf("physics gravity must be finite")
