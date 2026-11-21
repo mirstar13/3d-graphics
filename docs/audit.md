@@ -198,3 +198,23 @@ Broad-phase traversal, cache invalidation, and contact events now live in separa
 files. Solver metrics include all enabled pair visits across detection passes and
 phase timings; timings never influence simulation. Sparse/dense/settled benchmarks
 retain the brute-force baseline for later optimization comparisons.
+
+## Sleeping and sphere CCD
+
+Resting contact islands sleep after 0.5 quiet simulation seconds, with trial limits
+0.03 m/s and 0.05 rad/s and maximum 15 mm contact penetration. Static/kinematic
+supports do not bridge separate dynamic islands. Wake regressions cover forces,
+impulses, edits, removed support, new contacts, and moving platforms. Sleep state
+is public in body snapshots and terminal diagnostics; existing stack stability
+fixtures explicitly disable sleeping.
+
+Opt-in sphere CCD sweeps static planes, boxes, and mesh triangles with conservative
+closest-point advancement, including rounded corners and triangle edges. Bodies
+advance together within the fixed tick; forces, hooks, sleep timers, and history
+advance once. CCD solves deliberately skip warm starting instead of reapplying
+full-tick impulses at unequal subintervals. Transient Begin/End events are retained.
+The default eight-impact budget conservatively freezes CCD motion for the remaining
+interval on exhaustion, exposed through CCDClamps. The sweep convergence limit can
+also cause conservative early stops. Sensors and unsupported pairs remain discrete.
+Tests cover 600 m/s thin-wall crossings, bounce, rounded-corner misses, transient
+contacts, force lifetime, multiple triangles in one mesh, and budget exhaustion.

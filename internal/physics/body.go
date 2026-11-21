@@ -31,6 +31,8 @@ type BodyDesc struct {
 	Mass, LinearDamping, AngularDamping float64
 	Collider                            Collider
 	Disabled                            bool
+	// CCD enables sphere sweeps against static planes, boxes, and triangle meshes.
+	CCD bool
 }
 
 // NewBodyDesc supplies default mass, damping, and collision material.
@@ -48,6 +50,8 @@ type BodyState struct {
 	Sleeping         bool
 }
 type body struct {
+	targetActive                           bool
+	ccdStopped                             bool
 	state                                  BodyState
 	inverseMass                            float64
 	force, torque, impulse, angularImpulse vec
@@ -63,6 +67,10 @@ type bodySlot struct {
 }
 
 func validateBody(desc BodyDesc) error {
+	if desc.CCD && (desc.Type != Dynamic || desc.Collider.Shape.kind != SphereShape) {
+		return fmt.Errorf("CCD currently requires a dynamic sphere")
+	}
+
 	if desc.Type > Kinematic || !finitePoint(desc.Position) || !finitePoint(desc.Velocity) || !finitePoint(desc.AngularVelocity) || !validRotation(desc.Rotation) {
 		return fmt.Errorf("invalid body type, pose, or velocity")
 	}

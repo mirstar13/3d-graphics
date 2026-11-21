@@ -11,6 +11,7 @@ import (
 // Options defines world-space gravity and the catch-up policy. One physics unit
 // is one metre. FixedStep is rounded to nanoseconds by time.Duration.
 type Options struct {
+	CCDMaxImpacts                                           int
 	FixedStep                                               time.Duration
 	MaxFrameDelta                                           time.Duration
 	MaxSubsteps                                             int
@@ -22,7 +23,7 @@ type Options struct {
 
 // DefaultOptions supplies the initial 60 Hz simulation profile.
 func DefaultOptions() Options {
-	return Options{Sleeping: true, SleepLinearThreshold: .03, SleepAngularThreshold: .05, SleepDelay: .5, FixedStep: time.Second / 60, MaxFrameDelta: 250 * time.Millisecond, MaxSubsteps: 8, VelocityIterations: 20, PositionIterations: 8, Gravity: engine.Point{Y: -9.81}}
+	return Options{CCDMaxImpacts: 8, Sleeping: true, SleepLinearThreshold: .03, SleepAngularThreshold: .05, SleepDelay: .5, FixedStep: time.Second / 60, MaxFrameDelta: 250 * time.Millisecond, MaxSubsteps: 8, VelocityIterations: 20, PositionIterations: 8, Gravity: engine.Point{Y: -9.81}}
 }
 
 // World owns simulation timing on the application update goroutine. It has no
@@ -49,6 +50,9 @@ type World struct {
 
 // NewWorld validates options and creates a running world at tick zero.
 func NewWorld(options Options) (*World, error) {
+	if options.CCDMaxImpacts < 1 {
+		return nil, fmt.Errorf("CCD impact budget must be positive")
+	}
 	if options.FixedStep <= 0 || options.MaxFrameDelta < options.FixedStep || options.MaxSubsteps < 1 || options.VelocityIterations < 1 || options.PositionIterations < 1 {
 		return nil, fmt.Errorf("physics requires a positive timestep and substep limit, and frame limit >= timestep")
 	}

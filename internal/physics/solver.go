@@ -15,6 +15,7 @@ type constraint struct {
 
 // SolverStats reports only physics work, excluding drawing and terminal output.
 type SolverStats struct {
+	CCDImpacts, CCDClamps, CCDQueries              int
 	Bodies, CandidatePairs, Contacts               int
 	AwakeBodies, SleepingBodies, SolvedConstraints int
 	Duration                                       time.Duration
@@ -43,11 +44,7 @@ func applyImpulse(a, b *body, p, impulse vec) {
 		b.state.AngularVelocity = add(b.state.AngularVelocity, inverseInertia(b, cross(sub(p, b.state.Position), impulse)))
 	}
 }
-func (w *World) stepBodies(dt float64) {
-	start := time.Now()
-	w.solverStats = SolverStats{}
-	w.integrateBodies(dt)
-	w.solverStats.IntegrationDuration = time.Since(start)
+func (w *World) solveContacts(warm bool) {
 	contacts, candidates := w.detect()
 	w.wakeImpacts(contacts)
 	constraints := make([]constraint, 0, len(contacts))
@@ -65,13 +62,13 @@ func (w *World) stepBodies(dt float64) {
 		if speed < -restitutionSpeedThreshold {
 			c.bounce = -math.Max(a.state.Collider.Restitution, b.state.Collider.Restitution) * speed
 		}
-		if previous, ok := w.cache[contactKey{contact.A, contact.B, contact.Feature}]; ok && dot(previous.normal, contact.Normal) > cacheNormalAlignment && length(sub(previous.point, contactPoint(contact))) < cachePointDistance {
+		if previous, ok := w.cache[contactKey{contact.A, contact.B, contact.Feature}]; warm && ok && dot(previous.normal, contact.Normal) > cacheNormalAlignment && length(sub(previous.point, contactPoint(contact))) < cachePointDistance {
 			c.normalImpulse = previous.impulse
 			c.tangentImpulse = sub(previous.tangent, mul(contact.Normal, dot(previous.tangent, contact.Normal)))
 		}
 		constraints = append(constraints, c)
 	}
-	w.solverStats.SolvedConstraints = len(constraints)
+	w.solverStats.SolvedConstraints += len(constraints)
 	for i := range constraints {
 		c := &constraints[i]
 		applyImpulse(c.a, c.b, contactPoint(c.contact), add(mul(c.contact.Normal, c.normalImpulse), c.tangentImpulse))
@@ -149,7 +146,22 @@ func (w *World) stepBodies(dt float64) {
 		}
 	}
 	w.contacts, _ = w.detect()
-	w.updateEvents()
+
+	w.solverStats.CandidatePairs += candidates
+}
+func (w *World) stepBodies(dt float64) {
+	start := time.Now()
+	w.solverStats = SolverStats{}
+	w.prepareBodies(dt)
+	w.solverStats.IntegrationDuration = time.Since(start)
+	if w.hasCCD() {
+		w.advanceCCD(dt)
+	} else {
+		w.advanceBodies(dt)
+		w.solveContacts(true)
+		w.updateEvents()
+	}
+	w.finishTargets()
 	w.updateSleep(dt)
 	active := 0
 	for _, slot := range w.bodies {
@@ -165,7 +177,6 @@ func (w *World) stepBodies(dt float64) {
 		}
 	}
 	w.solverStats.Bodies = active
-	w.solverStats.CandidatePairs = candidates
 	w.solverStats.Contacts = len(w.contacts)
 	w.solverStats.Duration = time.Since(start)
 	w.solverStats.SolveDuration = w.solverStats.Duration - w.solverStats.IntegrationDuration - w.solverStats.BroadPhaseDuration - w.solverStats.NarrowPhaseDuration

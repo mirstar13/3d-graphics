@@ -15,12 +15,14 @@ func worldInertia(b *body, v vec) vec {
 	i := b.state.Inertia
 	return b.state.Rotation.RotateVector(vec{X: local.X * i.X, Y: local.Y * i.Y, Z: local.Z * i.Z})
 }
-func (w *World) integrateBodies(dt float64) {
+func (w *World) prepareBodies(dt float64) {
 	for _, slot := range w.bodies {
 		b := slot.body
 		if b == nil || !b.active {
 			continue
 		}
+		b.ccdStopped = false
+		b.targetActive = b.hasTarget
 		s := &b.state
 		s.PreviousPosition = s.Position
 		s.PreviousRotation = s.Rotation
@@ -41,16 +43,12 @@ func (w *World) integrateBodies(dt float64) {
 			s.AngularVelocity = add(s.AngularVelocity, mul(inverseInertia(b, sub(b.torque, gyro)), dt))
 			s.Velocity = mul(s.Velocity, math.Exp(-s.LinearDamping*dt))
 			s.AngularVelocity = mul(s.AngularVelocity, math.Exp(-s.AngularDamping*dt))
-			s.Position = add(s.Position, mul(s.Velocity, dt))
-			s.Rotation = rotateBy(s.Rotation, s.AngularVelocity, dt)
 		case Kinematic:
 			s.Velocity = vec{}
 			s.AngularVelocity = vec{}
 			if b.hasTarget {
 				s.Velocity = mul(sub(b.targetPosition, s.Position), 1/dt)
 				s.AngularVelocity = angularBetween(s.Rotation, b.targetRotation, dt)
-				s.Position = b.targetPosition
-				s.Rotation = b.targetRotation
 				b.hasTarget = false
 			}
 		}
@@ -58,5 +56,27 @@ func (w *World) integrateBodies(dt float64) {
 		b.torque = vec{}
 		b.impulse = vec{}
 		b.angularImpulse = vec{}
+	}
+}
+
+func (w *World) advanceBodies(dt float64) {
+	for _, slot := range w.bodies {
+		b := slot.body
+		if b == nil || !b.active || b.state.Disabled || b.state.Sleeping || b.ccdStopped || b.state.Type == Static {
+			continue
+		}
+		b.state.Position = add(b.state.Position, mul(b.state.Velocity, dt))
+		b.state.Rotation = rotateBy(b.state.Rotation, b.state.AngularVelocity, dt)
+	}
+}
+
+func (w *World) finishTargets() {
+	for _, slot := range w.bodies {
+		b := slot.body
+		if b != nil && b.active && !b.state.Disabled && b.state.Type == Kinematic && b.targetActive {
+			b.state.Position = b.targetPosition
+			b.state.Rotation = b.targetRotation
+			b.targetActive = false
+		}
 	}
 }

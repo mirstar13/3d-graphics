@@ -11,7 +11,8 @@
 //
 // The clock bounds catch-up work and never enlarges its integration step.
 // Resting contact islands sleep and wake on forces, impacts, and support changes.
-// Collision detection is discrete; fast bodies can tunnel. Joints,
-// continuous collision detection, and dynamic triangle meshes are not supported.
+// Dynamic spheres optionally sweep against static planes, boxes, and meshes.
+// Other pairs and sensors remain discrete; fast bodies can tunnel in those cases.
+// Joints and dynamic triangle meshes are not supported.
 // Diagnostic wall-clock timings do not influence simulation results.
 package physics

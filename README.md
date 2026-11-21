@@ -60,8 +60,11 @@ contact counts, and physics tick cost. Pause and single-step also freeze and ste
 Resting dynamic bodies sleep in connected groups, waking on forces, impacts, and
 changes to their support. Debug status includes the sleeping-body count.
 
-Collision detection is discrete, so fast bodies can tunnel. Dynamic triangle
-meshes, joints, and continuous collision detection remain future work.
+Dynamic spheres can opt into continuous collision detection (`BodyDesc.CCD`) against
+static planes, boxes, and triangle meshes. Other pairs and sensors remain discrete;
+fast bodies can tunnel in those cases. CCD has a bounded impact budget and stops
+CCD motion conservatively if exhausted. Dynamic triangle meshes and joints remain
+future work.
 Collision shapes are independent of render meshes, LOD, and anti-aliasing.
 
 ## Settings screen
