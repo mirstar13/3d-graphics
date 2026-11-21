@@ -5,8 +5,6 @@ import (
 	"sort"
 )
 
-const contactSlop = .005
-
 // Contact holds paired surface points. Normal points from A toward B; negative
 // separation means penetration. Feature identifies a stable manifold feature.
 type Contact struct {
@@ -203,8 +201,13 @@ func boxBox(a, b *body) []Contact {
 			return false
 		}
 		depth := -separation
-		// Prefer face contacts when axes tie; this produces useful resting manifolds.
-		if depth < bestDepth-1e-8 {
+		// Near-parallel edges must not replace a stable supporting face for a
+		// negligible depth improvement. Separation rejection above stays exact.
+		bias := faceAxisBias
+		if k == 2 {
+			bias = edgeAxisBias
+		}
+		if depth < bestDepth-bias {
 			bestDepth = depth
 			if dot(delta, n) < 0 {
 				n = mul(n, -1)

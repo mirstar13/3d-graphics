@@ -20,11 +20,12 @@ type Options struct {
 
 // DefaultOptions supplies the initial 60 Hz simulation profile.
 func DefaultOptions() Options {
-	return Options{FixedStep: time.Second / 60, MaxFrameDelta: 250 * time.Millisecond, MaxSubsteps: 8, VelocityIterations: 10, PositionIterations: 4, Gravity: engine.Point{Y: -9.81}}
+	return Options{FixedStep: time.Second / 60, MaxFrameDelta: 250 * time.Millisecond, MaxSubsteps: 8, VelocityIterations: 20, PositionIterations: 8, Gravity: engine.Point{Y: -9.81}}
 }
 
 // World owns simulation timing on the application update goroutine. It has no
-// render, input, scene-node, or wall-clock dependencies and is not thread-safe.
+// render, input, or scene-node dependencies and is not thread-safe. Wall-clock
+// measurements are diagnostic only and never influence simulation decisions.
 type World struct {
 	bodies       []bodySlot
 	pending      []func()

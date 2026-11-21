@@ -178,3 +178,23 @@ Initial physics-only benchmarks on Linux amd64, Intel Xeon Platinum 8573C:
 These fixtures exclude rendering and are not hardware-independent performance
 promises. Broadphase remains quadratic; reusable contact buffers and spatial
 partitioning are candidates if larger scenes justify them.
+
+## Physics stability baseline
+
+The five-box, 30-second stack regression exposed collapse with the original
+10 velocity / 4 position iterations. Defaults are now 20 / 8. Box SAT keeps a
+supporting face when another face improves depth by less than 0.1 mm, or an edge
+axis improves it by less than 1 mm; separation rejection is unchanged. This avoids
+unstable single-edge manifolds for nearly parallel supporting faces.
+
+Without sleeping, equal-mass boxes remain stacked with maximum final-window
+penetration 8.4 mm and speed below 0.001 m/s. A 10-times-heavier bottom box remains
+stacked with penetration below 7.2 mm and speed below 0.06 m/s. These are measured
+fixture bounds, not guarantees for arbitrary stacks or mass ratios. Initial sphere
+overlap recovery injects no velocity; an impossible kinematic crushing gap remains
+finite but cannot satisfy both surfaces.
+
+Broad-phase traversal, cache invalidation, and contact events now live in separate
+files. Solver metrics include all enabled pair visits across detection passes and
+phase timings; timings never influence simulation. Sparse/dense/settled benchmarks
+retain the brute-force baseline for later optimization comparisons.

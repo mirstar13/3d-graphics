@@ -5,14 +5,6 @@ import (
 	"time"
 )
 
-type contactKey struct {
-	a, b    BodyID
-	feature uint64
-}
-type cachedImpulse struct {
-	normal, tangent, point vec
-	impulse                float64
-}
 type constraint struct {
 	contact        Contact
 	a, b           *body
@@ -25,73 +17,11 @@ type constraint struct {
 type SolverStats struct {
 	Bodies, CandidatePairs, Contacts int
 	Duration                         time.Duration
+	// PairTests includes all enabled pairs visited across every detection pass.
+	PairTests, DetectionPasses                                                  int
+	IntegrationDuration, BroadPhaseDuration, NarrowPhaseDuration, SolveDuration time.Duration
 }
 
-// ContactPhase reports a pair beginning, maintaining, or ending contact.
-type ContactPhase uint8
-
-const (
-	ContactBegin ContactPhase = iota
-	ContactStay
-	ContactEnd
-)
-
-// ContactEvent is buffered once per pair per tick, including sensors.
-type ContactEvent struct {
-	A, B   BodyID
-	Phase  ContactPhase
-	Sensor bool
-}
-type bodyPair struct{ a, b BodyID }
-
-// Contacts returns a copy of the most recent fixed-step manifolds.
-func (w *World) Contacts() []Contact { return append([]Contact(nil), w.contacts...) }
-
-// ContactEvents returns the latest tick's events. Hooks may schedule removals safely.
-func (w *World) ContactEvents() []ContactEvent { return append([]ContactEvent(nil), w.events...) }
-func (w *World) SolverStats() SolverStats      { return w.solverStats }
-func (w *World) invalidate(id BodyID) {
-	for key := range w.cache {
-		if key.a == id || key.b == id {
-			delete(w.cache, key)
-		}
-	}
-}
-func (w *World) detect() ([]Contact, int) {
-	var contacts []Contact
-	candidates := 0
-	bs := make([]bounds, len(w.bodies))
-	for i, s := range w.bodies {
-		if s.body != nil && s.body.active && !s.body.state.Disabled {
-			bs[i] = bodyBounds(s.body).expanded(contactSlop)
-		}
-	}
-	for i, slot := range w.bodies {
-		a := slot.body
-		if a == nil || !a.active || a.state.Disabled {
-			continue
-		}
-		for j := i + 1; j < len(w.bodies); j++ {
-			b := w.bodies[j].body
-			if b == nil || !b.active || b.state.Disabled {
-				continue
-			}
-			ac, bc := a.state.Collider, b.state.Collider
-			if ac.Layer&bc.Mask == 0 || bc.Layer&ac.Mask == 0 {
-				continue
-			}
-			if a.state.Type != Dynamic && b.state.Type != Dynamic && !ac.Sensor && !bc.Sensor {
-				continue
-			}
-			if !bs[i].overlaps(bs[j]) {
-				continue
-			}
-			candidates++
-			contacts = append(contacts, collide(a, b)...)
-		}
-	}
-	return contacts, candidates
-}
 func contactPoint(c Contact) vec { return mul(add(c.PointA, c.PointB), .5) }
 func relativeVelocity(c *constraint) vec {
 	p := contactPoint(c.contact)
@@ -114,7 +44,9 @@ func applyImpulse(a, b *body, p, impulse vec) {
 }
 func (w *World) stepBodies(dt float64) {
 	start := time.Now()
+	w.solverStats = SolverStats{}
 	w.integrateBodies(dt)
+	w.solverStats.IntegrationDuration = time.Since(start)
 	contacts, candidates := w.detect()
 	constraints := make([]constraint, 0, len(contacts))
 	for _, contact := range contacts {
@@ -128,10 +60,10 @@ func (w *World) stepBodies(dt float64) {
 		}
 		c := constraint{contact: contact, a: a, b: b}
 		speed := dot(relativeVelocity(&c), contact.Normal)
-		if speed < -1 {
+		if speed < -restitutionSpeedThreshold {
 			c.bounce = -math.Max(a.state.Collider.Restitution, b.state.Collider.Restitution) * speed
 		}
-		if previous, ok := w.cache[contactKey{contact.A, contact.B, contact.Feature}]; ok && dot(previous.normal, contact.Normal) > .95 && length(sub(previous.point, contactPoint(contact))) < .1 {
+		if previous, ok := w.cache[contactKey{contact.A, contact.B, contact.Feature}]; ok && dot(previous.normal, contact.Normal) > cacheNormalAlignment && length(sub(previous.point, contactPoint(contact))) < cachePointDistance {
 			c.normalImpulse = previous.impulse
 			c.tangentImpulse = sub(previous.tangent, mul(contact.Normal, dot(previous.tangent, contact.Normal)))
 		}
@@ -180,7 +112,7 @@ func (w *World) stepBodies(dt float64) {
 	for iteration := 0; iteration < w.options.PositionIterations; iteration++ {
 		positions, _ := w.detect()
 		for _, c := range positions {
-			if c.Sensor || c.Separation >= -.002 {
+			if c.Sensor || c.Separation >= -penetrationSlop {
 				continue
 			}
 			a, _ := w.lookup(c.A)
@@ -190,7 +122,7 @@ func (w *World) stepBodies(dt float64) {
 			if mass < 1e-12 {
 				continue
 			}
-			magnitude := math.Min(.2, .4*(-c.Separation-.002)) / mass
+			magnitude := math.Min(maxPositionCorrection, positionCorrectionFraction*(-c.Separation-penetrationSlop)) / mass
 			impulse := mul(c.Normal, magnitude)
 			ra, rb := sub(p, a.state.Position), sub(p, b.state.Position)
 			if a.inverseMass > 0 {
@@ -211,29 +143,9 @@ func (w *World) stepBodies(dt float64) {
 			active++
 		}
 	}
-	w.solverStats = SolverStats{Bodies: active, CandidatePairs: candidates, Contacts: len(w.contacts), Duration: time.Since(start)}
-}
-func (w *World) updateEvents() {
-	current := make(map[bodyPair]bool)
-	var order []bodyPair
-	w.events = nil
-	for _, c := range w.contacts {
-		key := bodyPair{c.A, c.B}
-		if _, exists := current[key]; !exists {
-			current[key] = c.Sensor
-			order = append(order, key)
-			phase := ContactBegin
-			if _, exists := w.contactPairs[key]; exists {
-				phase = ContactStay
-			}
-			w.events = append(w.events, ContactEvent{A: c.A, B: c.B, Phase: phase, Sensor: c.Sensor})
-		}
-	}
-	for _, key := range w.pairOrder {
-		if _, exists := current[key]; !exists {
-			w.events = append(w.events, ContactEvent{A: key.a, B: key.b, Phase: ContactEnd, Sensor: w.contactPairs[key]})
-		}
-	}
-	w.contactPairs = current
-	w.pairOrder = order
+	w.solverStats.Bodies = active
+	w.solverStats.CandidatePairs = candidates
+	w.solverStats.Contacts = len(w.contacts)
+	w.solverStats.Duration = time.Since(start)
+	w.solverStats.SolveDuration = w.solverStats.Duration - w.solverStats.IntegrationDuration - w.solverStats.BroadPhaseDuration - w.solverStats.NarrowPhaseDuration
 }
