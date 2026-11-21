@@ -1,7 +1,29 @@
 # Rigid bodies and colliders: implementation plan
 
-Status: proposed; the fixed-step world is implemented, but bodies and colliders
-are not. This plan builds on `physics-world-plan.md`.
+Status: implemented, including static triangle meshes. The sections below record
+the original design. This builds on `physics-world-plan.md`.
+
+## Implementation notes
+
+- `internal/physics` owns body handles, integration, collision detection, mesh BVHs,
+  contact events, and the impulse solver. Application bindings synchronize poses.
+- `AdvanceWithHooks` and `StepOnceWithHooks` expose pre/post phases; the original
+  callback methods remain compatible wrappers around the pre-step hook.
+- Static meshes keep an immutable local-space BVH. Queries transform into local
+  space, so relocating a static body does not require rebuilding its BVH.
+- Previous and current poses are retained; rendering uses the latest completed
+  pose. Interpolation remains deferred.
+- Tolerances target metre-sized scenes: contact margin is 5 mm and position
+  correction allows 2 mm penetration. Arbitrary scene scales need further tuning.
+- The seventh preset is Physics playground. C toggles an overlay after AA resolve.
+  The six existing presets retain their scripted animation.
+
+Validation covers primitive pairs, stacks, restitution, friction, moving platforms,
+angular momentum, lifecycle changes, sensors/masks, mesh seams and rotated ramps,
+BVH queries against brute force, and matching simulation at 30/60/144 render FPS.
+The playground also runs for 1,200 ticks and through Linux PTY pause/step/overlay
+controls. Dynamic concave meshes, CCD, joints, sleeping, and interpolation remain
+outside this milestone.
 
 ## Intended result
 

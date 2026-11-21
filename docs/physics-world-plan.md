@@ -7,7 +7,8 @@ optional engine input/status interfaces. Defaults are centralized in
 `physics.DefaultOptions`; the two command queues each hold 64 requests.
 The fixed duration is `time.Second / 60` (16,666,666 ns). Scene animations now
 use simulation time while cameras remain at frame cadence. Gravity integration
-is tested with probes; rigid bodies and automatic scene gravity are not included.
+is tested with probes. Rigid bodies were subsequently added in the
+[collider milestone](rigid-bodies-colliders-plan.md); only opted-in scenes use them.
 
 Validation includes deterministic clock/integration tests, pause and command
 ordering, concurrent input draining, scene/light freezing, rendering independence,

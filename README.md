@@ -20,7 +20,7 @@ YAML reports an error. Unknown keys and invalid values are rejected.
 ## Start menu
 
 `go run .` opens New scene, Settings, and Exit. Use Up/Down and Enter.
-New scene opens six curated terminal scenes, with descriptions and the configured scene selected.
+New scene opens seven curated terminal scenes, with descriptions and the configured scene selected.
 Enter starts that scene. Escape returns from the picker to the start menu.
 Leaving a running scene with X, Escape, or Ctrl+C returns to the start menu.
 Choose Exit, or press Escape or Ctrl+C in the start menu, to close the application.
@@ -32,6 +32,7 @@ Choose Exit, or press Escape or Ctrl+C in the start menu, to close the applicati
 | Space | Pause scene simulation. |
 | Enter | Resume simulation. |
 | N | Advance one simulation tick while paused. |
+| C | Toggle collider outlines and contact markers. |
 | P | Open settings, ending the current scene session. |
 
 Camera controls continue working while paused. Animation, lights, node updates,
@@ -50,7 +51,15 @@ Resume cancels pending steps. There is no pose interpolation yet.
 `internal/physics` also provides tested semi-implicit Euler integration with
 default gravity `(0, -9.81, 0)` in metres/second squared. Gravity is available to
 simulation clients; it does not automatically make existing demo objects fall.
-Rigid bodies, colliders, and collision response are the next milestones.
+The Physics playground opts into rigid-body simulation: dynamic spheres and boxes,
+static planes and triangle meshes, and a moving kinematic platform. Contacts use
+friction, restitution, and a warm-started sequential impulse solver. C displays
+colliders and contact normals over the image; debug status reports body, pair,
+contact counts, and physics tick cost. Pause and single-step also freeze and step bodies.
+
+Collision detection is discrete, so fast bodies can tunnel. Dynamic triangle
+meshes, joints, sleeping, and continuous collision detection remain future work.
+Collision shapes are independent of render meshes, LOD, and anti-aliasing.
 
 ## Settings screen
 
@@ -122,11 +131,11 @@ The root entry point calls `internal/app.Run`, preserving `go run .`.
 | `internal/terminal` | Terminal rasterization, keyboard input, console capabilities, anti-aliasing, and CPU rendering wrappers |
 | `internal/demo` | Example scenes, lighting presets, animation, and demo camera setup |
 | `internal/app` | CLI, settings TUI, backend registration, simulation scheduling, and application lifecycle |
-| `internal/physics` | Fixed-step world clock and gravity integration primitives |
+| `internal/physics` | Fixed-step rigid bodies, primitive/static-mesh collisions, and contact solving |
 | `internal/config` | YAML loading, defaults, validation, and saving |
 
 The application imports settings, the engine, terminal adapter, and demos. The terminal
-and demo packages depend on the engine. The engine has no terminal, keyboard,
+package depends on the engine; demos also describe physics bodies. The engine has no terminal, keyboard,
 or application dependencies.
 
 Anti-aliasing and CPU rendering wrappers live with the terminal adapter because
@@ -189,6 +198,7 @@ repeatable PTY test and native Windows/macOS test procedure.
 | 4 | Lantern courtyard | A moving overhead light and visible cast shadows. |
 | 5 | Detail runway | Spheres approach and recede through three complete meshes with timed LOD fades. |
 | 6 | Wave field | 81 instanced columns animate as a wave; useful for comparing CPU modes and AA. |
+| 7 | Physics playground | Falling spheres, stacked crates, a moving platform, and a triangle-mesh ramp. |
 
 These replace the former 13 technical examples. Geometry/material examples were
 combined into the gallery; hierarchy, textures, shadows, LOD, and performance
@@ -197,7 +207,7 @@ advanced-feature demos were removed because they did not clearly demonstrate
 their advertised behavior in the terminal.
 
 Scene numbers now refer to this catalog. Existing `demo: 1` remains the default;
-values 2–6 select the new scenes, and 7–13 must be changed to a valid number before
+values 2–7 select the new scenes, and 8–13 must be changed to a valid number before
 startup. Use New scene to choose again. All scenes work without auto orbit and
 in monochrome. Only Lantern courtyard generates shadow maps. Builders use no
 external assets or randomness, and each preset stays below 5,000 triangles,

@@ -152,3 +152,29 @@ commands are observable. Resume clears pending steps and skips paused elapsed
 time; rendering and AA passes cannot advance the world. Paused help is shown
 even with debug statistics disabled. See physics-world-plan.md for ownership,
 API contracts, test coverage, and remaining rigid-body/collider milestones.
+
+## Rigid-body milestone
+
+Quaternion vector rotation used normalized quaternion multiplication, losing vector
+magnitude. The corrected cross-product formula matches rotation matrices and
+preserves zero vectors, collider dimensions, and inertia calculations.
+
+Physics coverage includes primitive contacts, resting stacks, moving platforms,
+angular integration, deterministic render-rate independence, sensors and handles,
+static-mesh BVH queries, rotated terrain, and coplanar triangle seams. Seam handling
+groups coplanar contacts to avoid sideways impulses from internal triangle edges.
+The seventh preset adds a physics playground; Linux PTY checks exercise C, pause,
+single-step, and clean exit. Race tests, vet, staticcheck, and Windows/macOS cross-
+builds pass; native Windows/macOS interaction still needs validation.
+
+Initial physics-only benchmarks on Linux amd64, Intel Xeon Platinum 8573C:
+
+| Spheres | Time per tick | Allocated bytes per tick | Allocations per tick |
+| --- | --- | --- | --- |
+| 16 | 0.075 ms | 53,552 | 154 |
+| 64 | 0.367 ms | 214,641 | 462 |
+| 128 | 0.957 ms | 431,122 | 856 |
+
+These fixtures exclude rendering and are not hardware-independent performance
+promises. Broadphase remains quadratic; reusable contact buffers and spatial
+partitioning are candidates if larger scenes justify them.
