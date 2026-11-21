@@ -9,6 +9,10 @@
 // Editor changes take effect when applied; saving writes the complete current
 // configuration. Re-entering a scene resets its animation and camera state.
 //
+// Each scene session owns a fixed-step physics world. Scene animation, lighting,
+// and node updates run on simulation ticks; camera and rendering use frame time.
+// Simulation commands are consumed before updates, independently of movement keys.
+//
 // BackendAdapter is the application-side factory result that joins a renderer,
 // an input factory, and camera conventions. Factories are registered during
 // startup; registration must finish before rendering begins.

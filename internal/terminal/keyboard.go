@@ -9,14 +9,16 @@ import (
 
 // SilentInputManager - Input system that reads keyboard without interfering with rendering
 type SilentInputManager struct {
-	keys      map[rune]bool
-	mutex     sync.RWMutex
-	running   bool
-	stopChan  chan struct{}
-	done      chan struct{}
-	quit      bool
-	settings  bool
-	lifecycle sync.Mutex
+	commands        []engine.SimulationCommand
+	droppedCommands uint64
+	keys            map[rune]bool
+	mutex           sync.RWMutex
+	running         bool
+	stopChan        chan struct{}
+	done            chan struct{}
+	quit            bool
+	settings        bool
+	lifecycle       sync.Mutex
 }
 
 // NewSilentInputManager creates a new silent input manager
@@ -42,6 +44,8 @@ func (sim *SilentInputManager) Start() error {
 	sim.keys = make(map[rune]bool)
 	sim.quit = false
 	sim.settings = false
+	sim.commands = nil
+	sim.droppedCommands = 0
 	sim.mutex.Unlock()
 	sim.stopChan = make(chan struct{})
 	sim.done = make(chan struct{})
@@ -63,6 +67,7 @@ func (sim *SilentInputManager) readEvents(events <-chan keyboard.KeyEvent) {
 				sim.mutex.Unlock()
 				return
 			}
+			sim.enqueueSimulationEventLocked(event)
 			sim.keys[event.Rune] = true
 			switch event.Key {
 			case keyboard.KeyEsc, keyboard.KeyCtrlC:
@@ -136,4 +141,35 @@ func (sim *SilentInputManager) ClearKeys() {
 	sim.mutex.Lock()
 	defer sim.mutex.Unlock()
 	sim.keys = make(map[rune]bool)
+}
+
+// enqueueSimulationEventLocked records one terminal event. Caller holds mutex.
+func (sim *SilentInputManager) enqueueSimulationEventLocked(event keyboard.KeyEvent) {
+	var command engine.SimulationCommand
+	switch {
+	case event.Key == keyboard.KeySpace || event.Rune == ' ':
+		command = engine.PauseSimulation
+	case event.Key == keyboard.KeyEnter || event.Rune == '\r' || event.Rune == '\n':
+		command = engine.ResumeSimulation
+	case event.Rune == 'n' || event.Rune == 'N':
+		command = engine.StepSimulation
+	default:
+		return
+	}
+	if len(sim.commands) >= engine.SimulationCommandCapacity {
+		sim.droppedCommands++
+		return
+	}
+	sim.commands = append(sim.commands, command)
+}
+
+// DrainSimulationCommands atomically consumes queued commands. Events arriving
+// after the drain belong to the next batch, even if ClearKeys runs in between.
+func (sim *SilentInputManager) DrainSimulationCommands() engine.SimulationCommands {
+	sim.mutex.Lock()
+	defer sim.mutex.Unlock()
+	batch := engine.SimulationCommands{Commands: sim.commands, Dropped: sim.droppedCommands}
+	sim.commands = nil
+	sim.droppedCommands = 0
+	return batch
 }

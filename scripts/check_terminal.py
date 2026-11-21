@@ -1,7 +1,7 @@
 """Linux/macOS PTY smoke test. Run after go build -race -o /tmp/graphics .
 Usage: python3 scripts/check_terminal.py /tmp/graphics
 """
-import os,pty,fcntl,termios,struct,select,time,signal,sys
+import os,pty,fcntl,termios,struct,select,time,signal,sys,re
 BINARY=os.path.abspath(sys.argv[1] if len(sys.argv)>1 else "/tmp/graphics")
 
 class Session:
@@ -53,14 +53,22 @@ s.output=b"";s.send(b"\r")
 s.wait(b"3D Graphics")
 # Return to New scene, open and cancel the picker.
 s.output=b"";s.send(b"\x1b[A\r")
-s.wait(b"Basic geometry")
+s.wait(b"Kinetic gallery")
 s.output=b"";s.send(b"\x1b")
 s.wait(b"3D Graphics")
 # Launch the default scene with the settings applied above.
 s.output=b"";s.send(b"\r")
-s.wait(b"Basic geometry")
+s.wait(b"Kinetic gallery")
 s.output=b"";s.send(b"\r")
 s.wait(b"FPS:")
+# Paused time remains fixed, N advances exactly once, Enter resumes.
+s.output=b"";s.send(b" ");s.wait(b"PAUSED")
+match=re.search(rb"PAUSED 60Hz Tick:(\d+)",s.output)
+assert match,s.output[-1000:]
+paused_tick=int(match.group(1))
+time.sleep(.15)
+s.output=b"";s.send(b"n");s.wait(f"PAUSED 60Hz Tick:{paused_tick+1} |".encode())
+s.output=b"";s.send(b"\r");s.wait(b"RUNNING")
 # Resize while workers and filters are active, then verify the new status row.
 for rows,columns in [(18,65),(40,120)]:
     s.output=b""
@@ -70,7 +78,7 @@ s.output=b"";s.send(b"x")
 s.wait(b"3D Graphics")
 # A second rendering session, then return via P and settings Escape.
 s.output=b"";s.send(b"\r")
-s.wait(b"Basic geometry")
+s.wait(b"Kinetic gallery")
 s.output=b"";s.send(b"\r")
 s.wait(b"FPS:")
 s.output=b"";s.send(b"p")
@@ -92,8 +100,21 @@ print("-settings shortcut/back/exit PASS",flush=True)
 for color,key in [("none",b"\x1b"),("16",b"\x03"),("256",b"x"),("truecolor",b"x")]:
     s=Session(["-color",color,"-aa","msaa4","-mode","tiles"])
     s.wait(b"3D Graphics")
-    s.output=b"";s.send(b"\r");s.wait(b"Basic geometry")
+    s.output=b"";s.send(b"\r");s.wait(b"Kinetic gallery")
     s.output=b"";s.send(b"\r");s.wait(b"FPS:")
     s.output=b"";s.send(key);s.wait(b"3D Graphics")
     s.send(b"\x1b");s.exit()
 print("Color modes, Escape/Ctrl+C/X, console restoration PASS",flush=True)
+
+# Pause help must remain available when ordinary debug display is hidden.
+s=Session(["-debug=false"])
+s.wait(b"3D Graphics")
+s.output=b"";s.send(b"\r");s.wait(b"Kinetic gallery")
+s.output=b"";s.send(b"\r");s.wait(b"\x1b[?25l")
+# Wait briefly for scene input startup after Bubble Tea shuts down.
+time.sleep(.25)
+s.output=b"";s.send(b" ");s.wait(b"Enter resume")
+s.output=b"";s.send(b"p");s.wait(b"Renderer settings")
+s.output=b"";s.send(b"\x1b");s.wait(b"3D Graphics")
+s.send(b"\x1b");s.exit()
+print("Simulation pause/step/resume and hidden-debug help PASS",flush=True)

@@ -71,10 +71,11 @@ Static analysis for this pass uses Staticcheck 2025.1.1:
     staticcheck ./...
 
 The race suite includes all 20 CPU-mode/AA combinations, a framebuffer comparison
-across single, tile, job, and batched rendering, and all 13 presets rendered
-through single-threaded and tiled strategies. The preset checks disable shadow
-generation to isolate geometry rendering. Interactive checks exercise normal
-application startup and frame preparation.
+across single, tile, job, and batched rendering, and all six curated presets rendered
+through single-threaded and tiled strategies. Preset checks now use their actual
+lighting and shadow policy, several animation times, manual and orbit cameras,
+and monochrome output. Interactive checks exercise normal application startup
+and frame preparation.
 
 ## Timing, resizing, and normals follow-up
 
@@ -122,3 +123,32 @@ One Linux x86-64 run on an Intel Xeon Platinum 8573C measured approximately
 and 434 µs for SSAA in this microbenchmark. SSAA scratch-buffer reuse reduced
 steady-state allocation count to the same three small geometry allocations as
 the unfiltered path. These figures vary with hardware, geometry, and lighting.
+
+## Curated scene revision
+
+The 13 overlapping technical examples were replaced by six focused scenes;
+README documents the lineup and changed numeric selection. A shared catalog
+owns camera framing, descriptions, lighting policy, construction, and animation.
+Animation poses are evaluated from absolute time. Geometry budgets, visible
+coverage, CPU parity, monochrome output, courtyard shadows, and runway LOD
+changes have regression coverage. Framebuffer previews are exportable for review.
+
+Visual review exposed two additional defects: sphere triangle winding pointed
+inward, and TexturedMaterial inherited a solid-color SampleDiffuse method.
+Sphere faces now point outward and enabled texture maps are actually sampled.
+Dedicated tests verify both corrections.
+
+## Fixed-step simulation foundation
+
+A session-owned physics world now drives animation, lights, node updates, and
+LOD transitions at 60 Hz. Cameras and rendering retain frame cadence. Catch-up
+is bounded by 250 ms accepted elapsed time and eight ticks per frame, with
+explicit discarded-time diagnostics. Gravity integration is available and
+unit-tested; demo objects are not yet rigid bodies.
+
+Space pauses, Enter resumes, and N single-steps while paused. Ordered command
+queues drain independently of movement-key clearing. Queue limits and dropped
+commands are observable. Resume clears pending steps and skips paused elapsed
+time; rendering and AA passes cannot advance the world. Paused help is shown
+even with debug statistics disabled. See physics-world-plan.md for ownership,
+API contracts, test coverage, and remaining rigid-body/collider milestones.

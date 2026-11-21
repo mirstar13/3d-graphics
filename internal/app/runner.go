@@ -56,6 +56,9 @@ func runEngine(demoType int, config engine.EngineConfig) bool {
 	// Setup lighting
 	lightingSystem := demo.SetupLighting(scene.Camera, demoType)
 	finalRenderer.SetLightingSystem(lightingSystem)
+	if tr, ok := baseRenderer.(*terminal.TerminalRenderer); ok && !demo.PresetAt(demoType).Shadows {
+		tr.ShadowRenderer = nil
+	}
 
 	demo.BuildScene(scene, demoType)
 
@@ -69,7 +72,11 @@ func runEngine(demoType int, config engine.EngineConfig) bool {
 	}
 
 	fps := config.FPS
-	startTime := time.Now()
+	simulation, err := newSimulation(scene, lightingSystem, demoType)
+	if err != nil {
+		fmt.Printf("Failed to initialize simulation: %v\n", err)
+		return false
+	}
 	lastStatsTime := time.Now()
 
 	// Main render loop
@@ -93,7 +100,8 @@ func runEngine(demoType int, config engine.EngineConfig) bool {
 		}
 
 		now := time.Now()
-		dt := now.Sub(lastFrame).Seconds()
+		elapsed := now.Sub(lastFrame)
+		dt := elapsed.Seconds()
 		lastFrame = now
 		if tr, ok := baseRenderer.(*terminal.TerminalRenderer); ok {
 			tr.SyncSize()
@@ -115,18 +123,17 @@ func runEngine(demoType int, config engine.EngineConfig) bool {
 		}
 
 		cameraController.Update(input, orientation, dt)
-		elapsedTime := time.Since(startTime).Seconds()
-		demo.AnimateSceneDemo(scene, demoType, elapsedTime, dt)
-
-		// Animate lights
-		if lightingSystem != nil {
-			for _, light := range lightingSystem.Lights {
-				light.Rotate('y', 0.6*dt)
-			}
+		var commands engine.SimulationCommands
+		if source, ok := inputManager.(engine.SimulationCommandInput); ok {
+			commands = source.DrainSimulationCommands()
 		}
-
-		// Update scene
-		scene.Update(dt)
+		if err := simulation.advance(elapsed, commands); err != nil {
+			fmt.Printf("Simulation error: %v\n", err)
+			return false
+		}
+		if display, ok := baseRenderer.(engine.SimulationStatusRenderer); ok {
+			display.SetSimulationStatus(simulation.status())
+		}
 
 		if profiler != nil {
 			profiler.EndUpdate()

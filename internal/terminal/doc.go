@@ -13,7 +13,9 @@
 //
 // Keyboard input has an explicit cancellation channel. Quit and settings
 // requests persist across ClearKeys so a frame cannot lose a navigation event.
-// The application must stop keyboard input before handing the console to a TUI.
+// Simulation commands use a separate bounded queue, drained atomically without
+// ClearKeys erasing events. The application must stop keyboard input before
+// handing the console to a TUI. Paused help is visible without debug statistics.
 //
 // FXAA filters detected color edges. MSAA stores independent subpixel coverage
 // and depth, shading once per visible triangle/cell. Points and wireframe lines

@@ -20,10 +20,37 @@ YAML reports an error. Unknown keys and invalid values are rejected.
 ## Start menu
 
 `go run .` opens New scene, Settings, and Exit. Use Up/Down and Enter.
-New scene opens the existing scene presets, with the configured demo selected.
+New scene opens six curated terminal scenes, with descriptions and the configured scene selected.
 Enter starts that scene. Escape returns from the picker to the start menu.
 Leaving a running scene with X, Escape, or Ctrl+C returns to the start menu.
 Choose Exit, or press Escape or Ctrl+C in the start menu, to close the application.
+
+## Simulation controls
+
+| Key | Action while rendering |
+| --- | --- |
+| Space | Pause scene simulation. |
+| Enter | Resume simulation. |
+| N | Advance one simulation tick while paused. |
+| P | Open settings, ending the current scene session. |
+
+Camera controls continue working while paused. Animation, lights, node updates,
+and LOD transitions advance at a fixed 60 Hz, independently of rendering FPS.
+Pause help remains visible when debug output is disabled. Restarting a scene
+resets simulation time; resuming never catches up the time spent paused.
+
+The clock accepts at most 250 ms of elapsed time and executes at most eight
+simulation ticks per rendered frame. Excess time is discarded to keep the
+application responsive; sustained low frame rates can therefore slow simulation.
+Debug status shows discarded seconds and dropped input commands. Each input and
+pending-step queue holds at most 64 requests; further requests are ignored and
+counted. Holding N may repeat steps according to terminal key-repeat settings.
+Resume cancels pending steps. There is no pose interpolation yet.
+
+`internal/physics` also provides tested semi-implicit Euler integration with
+default gravity `(0, -9.81, 0)` in metres/second squared. Gravity is available to
+simulation clients; it does not automatically make existing demo objects fall.
+Rigid bodies, colliders, and collision response are the next milestones.
 
 ## Settings screen
 
@@ -61,8 +88,8 @@ CLI overrides include `-demo`, `-mode`, `-aa`, `-workers`, `-tile-size`,
 ## Terminal compatibility
 
 The viewport fits the terminal size at startup, reserving space for the status
-line and avoiding the last column's automatic wrapping. Restart after resizing
-the window. When size detection is unavailable, the fallback is 80 by 24.
+line and avoiding the last column's automatic wrapping. Buffers follow window
+resizing between completed frames. When size detection is unavailable, the fallback is 80 by 24.
 
 Color detection uses COLORTERM and TERM. NO_COLOR disables automatic colors.
 Override detection with `-color none`, `-color 16`, `-color 256`, or
@@ -94,7 +121,8 @@ The root entry point calls `internal/app.Run`, preserving `go run .`.
 | `internal/engine` | Geometry, transforms, scene graph, lighting, assets, camera control, and renderer/input contracts |
 | `internal/terminal` | Terminal rasterization, keyboard input, console capabilities, anti-aliasing, and CPU rendering wrappers |
 | `internal/demo` | Example scenes, lighting presets, animation, and demo camera setup |
-| `internal/app` | CLI, settings TUI, backend registration, and application lifecycle |
+| `internal/app` | CLI, settings TUI, backend registration, simulation scheduling, and application lifecycle |
+| `internal/physics` | Fixed-step world clock and gravity integration primitives |
 | `internal/config` | YAML loading, defaults, validation, and saving |
 
 The application imports settings, the engine, terminal adapter, and demos. The terminal
@@ -144,9 +172,39 @@ before the first material directive. Missing libraries or material names are
 reported as errors. MTL diffuse/specular properties are supported; texture-map
 loading and material-preserving OBJ export are not yet implemented.
 
-The LOD demo uses timed, dithered cross-fades. Morph mode interpolates meshes
+Detail runway uses timed, dithered cross-fades. Morph mode interpolates meshes
 with matching vertex/index topology and falls back to a cross-fade otherwise.
 Shadow maps select one of the transitioning meshes at the midpoint.
 
 See [terminal compatibility checks](docs/terminal-compatibility.md) for the
 repeatable PTY test and native Windows/macOS test procedure.
+
+## Scene catalog
+
+| Number | Scene | What to look for |
+| --- | --- | --- |
+| 1 | Kinetic gallery | A colored prism, floating sphere, and tumbling ring on plinths. |
+| 2 | Orbital clock | Three nested orbits and a moon; a transform animation, not a gravity simulation. |
+| 3 | Texture workshop | Broad checker patterns, UV seams, and a gradient ring. |
+| 4 | Lantern courtyard | A moving overhead light and visible cast shadows. |
+| 5 | Detail runway | Spheres approach and recede through three complete meshes with timed LOD fades. |
+| 6 | Wave field | 81 instanced columns animate as a wave; useful for comparing CPU modes and AA. |
+
+These replace the former 13 technical examples. Geometry/material examples were
+combined into the gallery; hierarchy, textures, shadows, LOD, and performance
+examples were rebuilt. Spatial partitioning, collision/physics, and the broad
+advanced-feature demos were removed because they did not clearly demonstrate
+their advertised behavior in the terminal.
+
+Scene numbers now refer to this catalog. Existing `demo: 1` remains the default;
+values 2–6 select the new scenes, and 7–13 must be changed to a valid number before
+startup. Use New scene to choose again. All scenes work without auto orbit and
+in monochrome. Only Lantern courtyard generates shadow maps. Builders use no
+external assets or randomness, and each preset stays below 5,000 triangles,
+counting all LOD meshes and rendered instances.
+
+To export a framebuffer contact sheet for review:
+
+    DEMO_PREVIEW=/tmp/demo-preview.png go test ./internal/demo -run TestScenePreview -count=1
+
+Panels follow the picker order from left to right, top to bottom.

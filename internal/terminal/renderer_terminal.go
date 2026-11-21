@@ -12,9 +12,11 @@ import (
 
 // TerminalRenderer renders to a terminal using ANSI escape codes
 type TerminalRenderer struct {
-	sampleCount int
-	sampleDepth []float64
-	sampleColor []engine.Color
+	simulationStatus    engine.SimulationStatus
+	hasSimulationStatus bool
+	sampleCount         int
+	sampleDepth         []float64
+	sampleColor         []engine.Color
 	// LOD masks partition screen cells between outgoing and incoming geometry.
 	lodMask     bool
 	lodIncoming bool
@@ -208,9 +210,7 @@ func (r *TerminalRenderer) Present() {
 		r.measuredFPS = 1 / now.Sub(r.lastPresent).Seconds()
 	}
 	r.lastPresent = now
-	if r.ShowDebugInfo && r.Camera != nil {
-		r.showDebugLine()
-	}
+	r.showDebugLine()
 }
 
 // prepareScene builds frame state on the caller's goroutine before workers read it.
@@ -607,32 +607,55 @@ func (r *TerminalRenderer) simpleLighting(normal engine.Point, material engine.I
 	}
 }
 
+// SetSimulationStatus updates the status snapshot before presenting a frame.
+func (r *TerminalRenderer) SetSimulationStatus(status engine.SimulationStatus) {
+	r.simulationStatus = status
+	r.hasSimulationStatus = true
+}
+
 func (r *TerminalRenderer) showDebugLine() {
-	if r.Camera == nil {
-		return
+	line := r.statusLine()
+	if len(line) > r.Width {
+		line = line[:r.Width]
 	}
-	pos := r.Camera.GetPosition()
-	pitch, yaw, roll := r.Camera.GetRotation()
-	r.debugBuffer.Reset()
-	r.debugBuffer.WriteString(fmt.Sprintf("FPS: %.1f", r.measuredFPS))
-	camInfo := fmt.Sprintf("Pos:(%.1f,%.1f,%.1f) Rot:(P:%.2f Y:%.2f R:%.2f)", pos.X, pos.Y, pos.Z, pitch*180/3.14159, yaw*180/3.14159, roll*180/3.14159)
-	totalLen := r.debugBuffer.Len() + len(camInfo)
-	padding := r.Width - totalLen
-	if padding < 1 {
-		padding = 1
-	}
-	for i := 0; i < padding; i++ {
-		r.debugBuffer.WriteByte(' ')
-	}
-	r.debugBuffer.WriteString(camInfo)
-	debugLine := r.debugBuffer.String()
-	if len(debugLine) > r.Width {
-		debugLine = debugLine[:r.Width]
-	}
-	if debugLine != r.lastDebugLine {
-		fmt.Fprintf(r.Writer, "\033[%d;1H", r.Height+1)
-		fmt.Fprintf(r.Writer, "\033[K%s", debugLine)
+	if line != r.lastDebugLine {
+		fmt.Fprintf(r.Writer, "\033[%d;1H\033[K%s", r.Height+1, line)
 		r.Writer.Flush()
-		r.lastDebugLine = debugLine
+		r.lastDebugLine = line
 	}
+}
+
+func (r *TerminalRenderer) statusLine() string {
+	status := r.simulationStatus
+	if !r.ShowDebugInfo && (!r.hasSimulationStatus || !status.Paused) {
+		return ""
+	}
+	r.debugBuffer.Reset()
+	if r.hasSimulationStatus {
+		state := "RUNNING"
+		if status.Paused {
+			state = "PAUSED"
+		}
+		fmt.Fprintf(&r.debugBuffer, "%s %.0fHz Tick:%d", state, status.Hz, status.Tick)
+		if status.Paused {
+			r.debugBuffer.WriteString(" | N step | Enter resume")
+		}
+	}
+	if r.ShowDebugInfo {
+		if r.debugBuffer.Len() > 0 {
+			r.debugBuffer.WriteString(" | ")
+		}
+		fmt.Fprintf(&r.debugBuffer, "FPS: %.1f", r.measuredFPS)
+		if status.DroppedSeconds > 0 || status.DroppedCommands > 0 {
+			fmt.Fprintf(&r.debugBuffer, " | Drop:%.3fs Cmd:%d", status.DroppedSeconds, status.DroppedCommands)
+		}
+		if r.Camera != nil {
+			pos := r.Camera.GetPosition()
+			fmt.Fprintf(&r.debugBuffer, " | Pos:(%.1f,%.1f,%.1f)", pos.X, pos.Y, pos.Z)
+		}
+		if r.hasSimulationStatus && !status.Paused {
+			r.debugBuffer.WriteString(" | Space pause")
+		}
+	}
+	return r.debugBuffer.String()
 }
