@@ -11,6 +11,7 @@ import (
 // Options defines world-space gravity and the catch-up policy. One physics unit
 // is one metre. FixedStep is rounded to nanoseconds by time.Duration.
 type Options struct {
+	BroadPhase                                              BroadPhaseMode
 	CCDMaxImpacts                                           int
 	FixedStep                                               time.Duration
 	MaxFrameDelta                                           time.Duration
@@ -30,14 +31,20 @@ func DefaultOptions() Options {
 // render, input, or scene-node dependencies and is not thread-safe. Wall-clock
 // measurements are diagnostic only and never influence simulation decisions.
 type World struct {
-	bodies       []bodySlot
-	pending      []func()
-	contacts     []Contact
-	events       []ContactEvent
-	cache        map[contactKey]cachedImpulse
-	contactPairs map[bodyPair]bool
-	pairOrder    []bodyPair
-	solverStats  SolverStats
+	boundsScratch              []bounds
+	orderScratch, planeScratch []int
+	pairScratch                []bodyPair
+	contactScratch             []Contact
+	constraintScratch          []constraint
+	nextCache                  map[contactKey]cachedImpulse
+	bodies                     []bodySlot
+	pending                    []func()
+	contacts                   []Contact
+	events                     []ContactEvent
+	cache                      map[contactKey]cachedImpulse
+	contactPairs               map[bodyPair]bool
+	pairOrder                  []bodyPair
+	solverStats                SolverStats
 
 	options   Options
 	ticks     uint64
@@ -50,6 +57,9 @@ type World struct {
 
 // NewWorld validates options and creates a running world at tick zero.
 func NewWorld(options Options) (*World, error) {
+	if options.BroadPhase > BruteForce {
+		return nil, fmt.Errorf("invalid broad phase")
+	}
 	if options.CCDMaxImpacts < 1 {
 		return nil, fmt.Errorf("CCD impact budget must be positive")
 	}

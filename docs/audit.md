@@ -218,3 +218,20 @@ interval on exhaustion, exposed through CCDClamps. The sweep convergence limit c
 also cause conservative early stops. Sensors and unsupported pairs remain discrete.
 Tests cover 600 m/s thin-wall crossings, bounce, rounded-corner misses, transient
 contacts, force lifetime, multiple triangles in one mesh, and budget exhaustion.
+
+## Broad-phase and buffer reuse
+
+Sweep-and-prune is now the default; the brute-force mode remains available through
+physics options as a test oracle. Randomized candidate tests include rotated boxes,
+filters, sensors, removals, slot reuse, and teleports. Identical CCD simulations
+produce matching body/contact/event snapshots with both implementations. Published
+snapshots remain independent of reused world scratch buffers.
+
+With 20 benchmark ticks on the reference machine, 128 sparse bodies took about
+0.18 ms/tick and 1,152 pair visits; 128 settled bodies took 0.31 ms/tick and the same
+pair visits. The original milestone-1 baseline visited 82,560 pairs and took about
+0.91/1.74 ms respectively. Those comparisons include the added sleeping behavior
+and skipping empty position solves, not only the broad-phase change. Settled
+allocations fell from roughly 735 KB to 86 KB per tick. Dense overlapping 128-body
+fixtures still cost about 4.7 ms/tick; contact generation/island work remains a
+cost, and broad-phase acceleration is not a guarantee for dense scenes.

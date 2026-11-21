@@ -47,7 +47,7 @@ func applyImpulse(a, b *body, p, impulse vec) {
 func (w *World) solveContacts(warm bool) {
 	contacts, candidates := w.detect()
 	w.wakeImpacts(contacts)
-	constraints := make([]constraint, 0, len(contacts))
+	constraints := w.constraintScratch[:0]
 	for _, contact := range contacts {
 		if contact.Sensor {
 			continue
@@ -68,6 +68,7 @@ func (w *World) solveContacts(warm bool) {
 		}
 		constraints = append(constraints, c)
 	}
+	w.constraintScratch = constraints
 	w.solverStats.SolvedConstraints += len(constraints)
 	for i := range constraints {
 		c := &constraints[i]
@@ -104,7 +105,12 @@ func (w *World) solveContacts(warm bool) {
 			c.tangentImpulse = impulse
 		}
 	}
-	nextCache := make(map[contactKey]cachedImpulse, len(constraints))
+	nextCache := w.nextCache
+	if nextCache == nil {
+		nextCache = make(map[contactKey]cachedImpulse, len(constraints))
+	} else {
+		clear(nextCache)
+	}
 	for _, c := range constraints {
 		nextCache[contactKey{c.contact.A, c.contact.B, c.contact.Feature}] = cachedImpulse{normal: c.contact.Normal, tangent: c.tangentImpulse, point: contactPoint(c.contact), impulse: c.normalImpulse}
 	}
@@ -115,8 +121,9 @@ func (w *World) solveContacts(warm bool) {
 			nextCache[key] = impulse
 		}
 	}
+	w.nextCache = w.cache
 	w.cache = nextCache
-	for iteration := 0; iteration < w.options.PositionIterations; iteration++ {
+	for iteration := 0; iteration < w.options.PositionIterations && len(constraints) > 0; iteration++ {
 		positions, _ := w.detect()
 		for _, c := range positions {
 			if c.Sensor || c.Separation >= -penetrationSlop {
@@ -145,7 +152,8 @@ func (w *World) solveContacts(warm bool) {
 			}
 		}
 	}
-	w.contacts, _ = w.detect()
+	final, _ := w.detect()
+	w.contacts = append(w.contacts[:0], final...)
 
 	w.solverStats.CandidatePairs += candidates
 }

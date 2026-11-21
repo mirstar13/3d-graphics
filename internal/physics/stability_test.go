@@ -89,6 +89,7 @@ func TestKinematicCrushingRemainsFinite(t *testing.T) {
 
 func TestDetectionWorkCountsAndSnapshotOwnership(t *testing.T) {
 	w := noGravity(t)
+	w.options.BroadPhase = BruteForce
 	for i := 0; i < 4; i++ {
 		d := NewBodyDesc(Dynamic, Sphere(.5))
 		d.Position.X = float64(i) * 3
@@ -96,7 +97,7 @@ func TestDetectionWorkCountsAndSnapshotOwnership(t *testing.T) {
 	}
 	stepN(t, w, 1)
 	s := w.SolverStats()
-	if s.PairTests != 6*s.DetectionPasses || s.DetectionPasses != 2+w.options.PositionIterations || s.CandidatePairs != 0 {
+	if s.PairTests != 6*s.DetectionPasses || s.DetectionPasses != 2 || s.CandidatePairs != 0 {
 		t.Fatal(s)
 	}
 	snapshot := w.Bodies()
