@@ -124,7 +124,11 @@ func (m menuModel) View() string {
 	}
 	var out strings.Builder
 	out.WriteString(title + "\n\n")
-	visible := max(1, m.height-5)
+	reserved := 5
+	if m.page == scenePage && m.height >= 9 {
+		reserved = 7
+	}
+	visible := max(1, m.height-reserved)
 	first := max(0, selected-visible+1)
 	for index := first; index < min(len(items), first+visible); index++ {
 		prefix := "  "
@@ -132,6 +136,9 @@ func (m menuModel) View() string {
 			prefix = "> "
 		}
 		fmt.Fprintf(&out, "%s%s\n", prefix, items[index])
+	}
+	if m.page == scenePage && m.height >= 9 {
+		out.WriteString("\n" + demo.PresetAt(selected).Description + "\n")
 	}
 	out.WriteString("\n" + help)
 	return fitView(out.String(), m.width, m.height)

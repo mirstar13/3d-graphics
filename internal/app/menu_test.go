@@ -23,6 +23,9 @@ func TestStartMenuSceneSelection(t *testing.T) {
 		t.Fatal("launcher missing default selection")
 	}
 	m, _ = pressMenu(m, tea.KeyEnter)
+	if !strings.Contains(m.View(), demo.PresetAt(2).Description) {
+		t.Fatal("scene description missing")
+	}
 	if m.page != scenePage || m.scene != 2 {
 		t.Fatal("scene picker lost configured demo")
 	}
@@ -68,7 +71,7 @@ func TestStartMenuExitAndSmallScenePicker(t *testing.T) {
 	m.scene = len(demo.Names) - 1
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 32, Height: 10})
 	m = updated.(menuModel)
-	if !strings.Contains(m.View(), "> Shadow mapping") {
+	if !strings.Contains(m.View(), "> "+demo.Names[len(demo.Names)-1]) {
 		t.Fatal("selected scene hidden in small terminal")
 	}
 	m, cmd = pressMenu(m, tea.KeyEsc)

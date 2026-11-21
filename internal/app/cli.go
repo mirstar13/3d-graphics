@@ -9,6 +9,7 @@ import (
 	"runtime/pprof"
 
 	"github.com/mirstar13/go-3d-graphics/internal/config"
+	"github.com/mirstar13/go-3d-graphics/internal/demo"
 	"github.com/mirstar13/go-3d-graphics/internal/terminal"
 )
 
@@ -29,7 +30,7 @@ func readCommand(args []string, output io.Writer) (config.Settings, commandOptio
 	flags.StringVar(&options.cpuProfile, "cpuprofile", "", "write CPU profile to file")
 	flags.StringVar(&options.memoryProfile, "memprofile", "", "write memory profile to file")
 	flags.StringVar(&settings.Renderer, "renderer", settings.Renderer, "registered rendering backend")
-	flags.IntVar(&settings.Demo, "demo", settings.Demo, "demo number (1-13)")
+	flags.IntVar(&settings.Demo, "demo", settings.Demo, fmt.Sprintf("scene number (1-%d)", len(demo.Presets)))
 	flags.StringVar(&settings.RenderMode, "mode", settings.RenderMode, "single, tiles, jobs, or batched")
 	flags.StringVar(&settings.AntiAliasing, "aa", settings.AntiAliasing, "none, fxaa, msaa2, msaa4, or ssaa")
 	flags.IntVar(&settings.Width, "width", settings.Width, "viewport columns (0 fits terminal)")

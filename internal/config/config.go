@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"slices"
 
+	"github.com/mirstar13/go-3d-graphics/internal/demo"
 	"github.com/mirstar13/go-3d-graphics/internal/engine"
 	"gopkg.in/yaml.v3"
 )
@@ -78,8 +79,8 @@ func Load(path string) (Settings, error) {
 // Validate checks every setting used to size buffers or select a renderer strategy.
 func (s Settings) Validate() error {
 	switch {
-	case s.Demo < 1 || s.Demo > 13:
-		return fmt.Errorf("demo must be between 1 and 13")
+	case s.Demo < 1 || s.Demo > len(demo.Presets):
+		return fmt.Errorf("demo must be between 1 and %d; select a scene from New scene", len(demo.Presets))
 	case s.Renderer == "":
 		return fmt.Errorf("renderer must have a name")
 	case !slices.Contains(RenderModes, s.RenderMode):

@@ -1,11 +1,7 @@
-// Package demo provides the scene presets shown in the application's picker.
-//
-// Names and the Demo constants use the same ordering. BuildScene populates a
-// scene, ConfigureCamera and ConfigureCameraController set its initial view,
-// and AnimateSceneDemo advances its example animation. Application FOV and
-// orbit settings are applied after these preset defaults.
-//
-// Demo functions are examples of the engine API and may print a short scene
-// description during startup. They do not own terminal input or renderer
-// lifecycle.
+// Package demo provides a curated catalog of deterministic procedural scenes.
+// Presets owns names, descriptions, camera framing, shadow policy, builders, and
+// animation. BuildScene initializes time zero; AnimateSceneDemo evaluates pose
+// from elapsed simulation seconds. Scene.Update advances LOD transitions. The application
+// applies user FOV and orbit settings after preset defaults and owns input and
+// renderer lifecycle. Builders do not print into the terminal framebuffer.
 package demo

@@ -1,256 +1,73 @@
 package demo
 
-import (
-	"fmt"
+import "github.com/mirstar13/go-3d-graphics/internal/engine"
 
-	"github.com/mirstar13/go-3d-graphics/internal/engine"
-)
-
-const (
-	DemoBasicGeometry = iota
-	DemoMeshGenerators
-	DemoLightingShowcase
-	DemoMaterialShowcase
-	DemoTransformHierarchy
-	DemoLODSystem
-	DemoSpatialPartitioning
-	DemoCollisionPhysics
-	DemoAdvancedRendering
-	DemoPerformanceTest
-	DemoAdvancedFeatures
-	DemoTextureShowcase
-	DemoShadowMapping
-)
-
-// Names lists scene presets in the same order as the demo identifiers.
-var Names = []string{
-	"Basic geometry", "Mesh generators", "Lighting showcase", "Material showcase",
-	"Transform hierarchy", "LOD system", "Spatial partitioning", "Collision and physics",
-	"Advanced rendering", "Performance test", "Advanced features", "Texture showcase", "Shadow mapping",
+// Preset defines one curated terminal scene and its initial viewing conditions.
+// Geometry is procedural and deterministic, so no external assets are required.
+type Preset struct {
+	Name, Description string
+	Shadows           bool
+	radius, height    float64
+	build             func(*engine.Scene)
+	animate           func(*engine.Scene, float64)
 }
 
-func ConfigureCamera(camera *engine.Camera, demoType int, orientation engine.OrientationType) {
-	camera.DZ = 0.0
-	camera.Near = 0.5
-	camera.FOV = engine.Point{X: 60.0, Y: 30.0, Z: 0}
-
-	switch demoType {
-	case DemoBasicGeometry:
-		camera.Transform.SetPosition(0, 5, -40*float64(orientation))
-		camera.Transform.SetRotation(0, 0, 0)
-		camera.Far = 200.0
-
-	case DemoMeshGenerators:
-		camera.Transform.SetPosition(0, 10, -60*float64(orientation))
-		camera.Transform.SetRotation(0, 0, 0)
-		camera.Far = 200.0
-
-	case DemoLightingShowcase:
-		camera.Transform.SetPosition(0, 15, -80*float64(orientation))
-		camera.Transform.SetRotation(0, 0, 0)
-		camera.Far = 300.0
-
-	case DemoMaterialShowcase:
-		camera.Transform.SetPosition(0, 12, -60*float64(orientation))
-		camera.Transform.SetRotation(0, 0, 0)
-		camera.Far = 250.0
-
-	case DemoTransformHierarchy:
-		camera.Transform.SetPosition(0, 25, -70*float64(orientation))
-		camera.Transform.SetRotation(0, 0, 0)
-		camera.Far = 300.0
-
-	case DemoLODSystem:
-		camera.Transform.SetPosition(0, 50, -150*float64(orientation))
-		camera.Transform.SetRotation(0, 0, 0)
-		camera.Far = 500.0
-
-	case DemoSpatialPartitioning:
-		camera.Transform.SetPosition(0, 40, -100*float64(orientation))
-		camera.Transform.SetRotation(0, 0, 0)
-		camera.Far = 400.0
-
-	case DemoCollisionPhysics:
-		camera.Transform.SetPosition(0, 30, -70*float64(orientation))
-		camera.Transform.SetRotation(0, 0, 0)
-		camera.Far = 300.0
-
-	case DemoAdvancedRendering:
-		camera.Transform.SetPosition(0, 20, -50*float64(orientation))
-		camera.Transform.SetRotation(0, 0, 0)
-		camera.Far = 400.0
-
-	case DemoPerformanceTest:
-		camera.Transform.SetPosition(0, 50, -130*float64(orientation))
-		camera.Transform.SetRotation(0, 0, 0)
-		camera.Far = 500.0
-
-	case DemoAdvancedFeatures:
-		camera.Transform.SetPosition(0, 20, -80*float64(orientation))
-		camera.Transform.SetRotation(0, 0, 0)
-		camera.Far = 400.0
-
-	case DemoTextureShowcase:
-		camera.Transform.SetPosition(0, 0, 60*float64(orientation))
-		camera.Transform.SetRotation(0, 0, 0)
-		camera.Far = 200.0
-
-	case DemoShadowMapping:
-		camera.Transform.SetPosition(0, 15, 40*float64(orientation))
-		camera.Transform.SetRotation(0, 0, 0)
-		camera.Far = 200.0
-
-	default:
-		camera.Transform.SetPosition(0, 10, -60)
-		camera.Transform.SetRotation(0, 0, 0)
-		camera.Far = 300.0
-	}
+// Presets is the ordered scene catalog. YAML and CLI numbers are one-based.
+var Presets = []Preset{
+	{"Kinetic gallery", "Three moving sculptures: shape, shading, and per-face color.", false, 40, 9, buildGallery, animateGallery},
+	{"Orbital clock", "Nested orbits and a moon demonstrate parent-child transforms.", false, 48, 23, buildOrbits, animateOrbits},
+	{"Texture workshop", "Bold procedural textures on a sphere, cube, and tilted ring.", false, 40, 12, buildTextures, animateTextures},
+	{"Lantern courtyard", "A moving lantern casts shadows across a small colonnade.", true, 55, 28, buildCourtyard, animateCourtyard},
+	{"Detail runway", "Three moving spheres cross detail thresholds with dithered fades.", false, 60, 18, buildRunway, animateRunway},
+	{"Wave field", "81 instanced columns form a traveling wave; compare CPU modes.", false, 58, 30, buildWaves, animateWaves},
 }
 
-func ConfigureCameraController(controller *engine.CameraController, demoType int) {
-	switch demoType {
-	case DemoBasicGeometry:
-		controller.SetOrbitRadius(50.0)
-		controller.SetOrbitCenter(0, 0, 0)
-		controller.SetOrbitHeight(10.0)
-
-	case DemoMeshGenerators:
-		controller.SetOrbitRadius(70.0)
-		controller.SetOrbitCenter(0, 0, 0)
-		controller.SetOrbitHeight(15.0)
-
-	case DemoLightingShowcase:
-		controller.SetOrbitRadius(90.0)
-		controller.SetOrbitCenter(0, 0, 0)
-		controller.SetOrbitHeight(20.0)
-
-	case DemoMaterialShowcase:
-		controller.SetOrbitRadius(70.0)
-		controller.SetOrbitCenter(0, 0, 0)
-		controller.SetOrbitHeight(15.0)
-
-	case DemoTransformHierarchy:
-		controller.SetOrbitRadius(80.0)
-		controller.SetOrbitCenter(0, 0, 0)
-		controller.SetOrbitHeight(30.0)
-
-	case DemoLODSystem:
-		controller.SetOrbitRadius(180.0)
-		controller.SetOrbitCenter(0, 0, -40)
-		controller.SetOrbitHeight(50.0)
-
-	case DemoSpatialPartitioning:
-		controller.SetOrbitRadius(120.0)
-		controller.SetOrbitCenter(0, 0, 0)
-		controller.SetOrbitHeight(40.0)
-
-	case DemoCollisionPhysics:
-		controller.SetOrbitRadius(90.0)
-		controller.SetOrbitCenter(0, 0, 0)
-		controller.SetOrbitHeight(30.0)
-
-	case DemoAdvancedRendering:
-		controller.SetOrbitRadius(100.0)
-		controller.SetOrbitCenter(0, 0, -50)
-		controller.SetOrbitHeight(25.0)
-
-	case DemoPerformanceTest:
-		controller.SetOrbitRadius(150.0)
-		controller.SetOrbitCenter(0, 0, 0)
-		controller.SetOrbitHeight(50.0)
-
-	case DemoAdvancedFeatures:
-		controller.SetOrbitRadius(100.0)
-		controller.SetOrbitCenter(0, 0, 0)
-		controller.SetOrbitHeight(25.0)
-
-	case DemoTextureShowcase:
-		controller.SetOrbitRadius(70.0)
-		controller.SetOrbitCenter(0, 0, 0)
-		controller.SetOrbitHeight(15.0)
-
-	case DemoShadowMapping:
-		controller.SetOrbitRadius(60.0)
-		controller.SetOrbitCenter(0, 0, 0)
-		controller.SetOrbitHeight(20.0)
-
-	default:
-		controller.SetOrbitRadius(80.0)
-		controller.SetOrbitCenter(0, 0, 0)
-		controller.SetOrbitHeight(20.0)
+// Names supplies labels for the scene picker, derived from the catalog.
+var Names = func() []string {
+	names := make([]string, len(Presets))
+	for i, preset := range Presets {
+		names[i] = preset.Name
 	}
+	return names
+}()
 
+// PresetAt returns a preset, falling back to the gallery for an invalid index.
+func PresetAt(index int) Preset {
+	if index < 0 || index >= len(Presets) {
+		index = 0
+	}
+	return Presets[index]
+}
+
+// ConfigureCamera frames the whole scene before either manual input or auto orbit.
+func ConfigureCamera(camera *engine.Camera, index int, _ engine.OrientationType) {
+	preset := PresetAt(index)
+	camera.Near, camera.Far = .5, 250
+	camera.SetFOV(60, 30)
+	camera.SetPosition(0, preset.height, -preset.radius)
+	camera.LookAt(engine.Point{})
+}
+
+// ConfigureCameraController matches the initial camera, avoiding an orbit-start jump.
+func ConfigureCameraController(controller *engine.CameraController, index int) {
+	preset := PresetAt(index)
+	controller.SetOrbitCenter(0, 0, 0)
+	controller.SetOrbitRadius(preset.radius)
+	controller.SetOrbitHeight(preset.height)
+	controller.OrbitSpeed = .0025
 	controller.EnableAutoOrbit(true)
 }
 
-func SetupLighting(camera *engine.Camera, demoType int) *engine.LightingSystem {
-	lighting := GetLightingScenario(demoType, camera)
-	scenarioName := GetLightingScenarioName(demoType)
-	fmt.Printf("Lighting: %s\n", scenarioName)
-	return lighting
+// BuildScene replaces scene contents and initializes animation at time zero.
+func BuildScene(scene *engine.Scene, index int) {
+	scene.Clear()
+	preset := PresetAt(index)
+	preset.build(scene)
+	preset.animate(scene, 0)
 }
 
-func BuildScene(scene *engine.Scene, demoType int) {
-	switch demoType {
-	case DemoBasicGeometry:
-		BasicGeometryDemo(scene)
-	case DemoMeshGenerators:
-		MeshGeneratorsDemo(scene)
-	case DemoLightingShowcase:
-		LightingShowcaseDemo(scene)
-	case DemoMaterialShowcase:
-		MaterialShowcaseDemo(scene)
-	case DemoTransformHierarchy:
-		TransformHierarchyDemo(scene)
-	case DemoLODSystem:
-		LODSystemDemo(scene)
-	case DemoSpatialPartitioning:
-		SpatialPartitioningDemo(scene)
-	case DemoCollisionPhysics:
-		CollisionPhysicsDemo(scene)
-	case DemoAdvancedRendering:
-		AdvancedRenderingDemo(scene)
-	case DemoPerformanceTest:
-		PerformanceTestDemo(scene)
-	case DemoAdvancedFeatures:
-		AdvancedFeaturesDemo(scene)
-	case DemoTextureShowcase:
-		TextureShowcaseDemo(scene)
-	case DemoShadowMapping:
-		ShadowMappingDemo(scene)
-	default:
-		BasicGeometryDemo(scene)
-	}
-}
-
-func AnimateSceneDemo(scene *engine.Scene, demoType int, time, dt float64) {
-	switch demoType {
-	case DemoBasicGeometry:
-		AnimateBasicGeometry(scene, dt)
-	case DemoMeshGenerators:
-		AnimateMeshGenerators(scene, dt)
-	case DemoLightingShowcase:
-		AnimateLightingShowcase(scene, time, dt)
-	case DemoMaterialShowcase:
-		AnimateMaterialShowcase(scene, dt)
-	case DemoTransformHierarchy:
-		AnimateTransformHierarchy(scene, time, dt)
-	case DemoLODSystem:
-		AnimateLODSystem(scene, dt)
-	case DemoSpatialPartitioning:
-		AnimateSpatialPartitioning(scene, time, dt)
-	case DemoCollisionPhysics:
-		AnimateCollisionPhysics(scene, time, dt)
-	case DemoAdvancedRendering:
-		AnimateAdvancedRendering(scene, dt)
-	case DemoPerformanceTest:
-		AnimatePerformanceTest(scene, dt)
-	case DemoAdvancedFeatures:
-		AnimateAdvancedFeatures(scene, time, dt)
-	case DemoTextureShowcase:
-		AnimateAdvancedFeatures(scene, time, dt) // Reuse advanced features animation
-	case DemoShadowMapping:
-		AnimateAdvancedFeatures(scene, time, dt) // Reuse animation for shadow casters
-	}
-
+// AnimateSceneDemo evaluates animation from elapsed seconds, avoiding drift and
+// frame-rate-dependent compound rotations. Scene.Update advances LOD fades.
+func AnimateSceneDemo(scene *engine.Scene, index int, elapsed, _ float64) {
+	PresetAt(index).animate(scene, elapsed)
 }

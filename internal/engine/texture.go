@@ -457,3 +457,19 @@ func (mc *MipmapChain) Sample(u, v, mipLevel float64, filter TextureFilter, wrap
 
 	return lerpColor(c0, c1, frac)
 }
+
+// GetType identifies the material as textured even when no map is assigned.
+func (m *TexturedMaterial) GetType() MaterialType { return MaterialTypeTextured }
+
+// HasDiffuseTexture reports whether the diffuse map is enabled and available.
+func (m *TexturedMaterial) HasDiffuseTexture() bool {
+	return m.UseTextures && m.DiffuseTexture != nil
+}
+
+// SampleDiffuse samples the enabled texture, falling back to the base color.
+func (m *TexturedMaterial) SampleDiffuse(u, v float64) Color {
+	if m.HasDiffuseTexture() {
+		return m.DiffuseTexture.Sample(u, v, m.TextureFilter, m.TextureWrap)
+	}
+	return m.DiffuseColor
+}

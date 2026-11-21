@@ -56,15 +56,15 @@ func GenerateSphere(radius float64, rings, sectors int) *Mesh {
 			bottom := (r+1)*stride + s           // Bottom-Left
 			bottomNext := (r+1)*stride + (s + 1) // Bottom-Right
 
-			// First Triangle (Top-Left, Top-Right, Bottom-Left)
+			// Wind the sphere outward so backface culling keeps its exterior.
 			mesh.AddIndex(curr)
-			mesh.AddIndex(next)
 			mesh.AddIndex(bottom)
+			mesh.AddIndex(next)
 
-			// Second Triangle (Top-Right, Bottom-Right, Bottom-Left)
+			// Complete the outward-facing quad.
 			mesh.AddIndex(next)
-			mesh.AddIndex(bottomNext)
 			mesh.AddIndex(bottom)
+			mesh.AddIndex(bottomNext)
 		}
 	}
 

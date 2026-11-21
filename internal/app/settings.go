@@ -37,7 +37,7 @@ func newSettingsModel(settings config.Settings, path string) settingsModel {
 	return settingsModel{
 		settings: settings, path: path, height: 24, width: 80,
 		fields: []settingField{
-			{"Demo (1-13)", strconv.Itoa(settings.Demo), nil, "Select one of the 13 example scenes."},
+			{fmt.Sprintf("Demo (1-%d)", len(demo.Presets)), strconv.Itoa(settings.Demo), nil, "Select a curated scene; New scene shows descriptions."},
 			{"CPU mode", settings.RenderMode, config.RenderModes, "single, tiles, jobs, or batched"},
 			{"Anti-aliasing", settings.AntiAliasing, config.AAModes, "MSAA samples triangle edges at 2 or 4 positions; SSAA renders 2x each dimension."},
 			{"Workers", strconv.Itoa(settings.Workers), nil, "Worker count for parallel CPU modes."},
