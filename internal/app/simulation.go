@@ -13,7 +13,10 @@ import (
 type simulation struct {
 	world           *physics.World
 	stepBudget      int
-	update          func(physics.Tick)
+	hooks           physics.StepHooks
+	bindings        *physicsBindings
+	failure         error
+	overlay         bool
 	pendingSteps    int
 	droppedCommands uint64
 }
@@ -24,11 +27,27 @@ func newSimulation(scene *engine.Scene, lighting *engine.LightingSystem, preset 
 	if err != nil {
 		return nil, err
 	}
-	return &simulation{world: world, stepBudget: options.MaxSubsteps, update: func(tick physics.Tick) {
-		demo.AnimateSceneDemo(scene, preset, tick.Time, tick.Delta)
-		demo.AnimateLighting(lighting, preset, tick.Time)
-		scene.Update(tick.Delta)
-	}}, nil
+	specs, err := demo.PhysicsSpecs(scene, preset)
+	if err != nil {
+		return nil, err
+	}
+	bindings, err := newPhysicsBindings(world, scene, specs)
+	if err != nil {
+		return nil, err
+	}
+	sim := &simulation{world: world, stepBudget: options.MaxSubsteps, bindings: bindings}
+	sim.hooks = physics.StepHooks{
+		BeforeStep: func(tick physics.Tick) {
+			demo.AnimateSceneDemo(scene, preset, tick.Time, tick.Delta)
+			demo.AnimateLighting(lighting, preset, tick.Time)
+			scene.UpdateCallbacks(tick.Delta)
+			if err := bindings.before(tick); err != nil {
+				sim.failure = err
+			}
+		},
+		AfterStep: func(tick physics.Tick) { bindings.synchronize(); scene.UpdateVisuals(tick.Delta) },
+	}
+	return sim, nil
 }
 
 // advance preserves command order. Steps execute up to the per-frame budget;
@@ -41,7 +60,7 @@ func (s *simulation) advance(elapsed time.Duration, batch engine.SimulationComma
 	stepped := 0
 	resumed := false
 	step := func() error {
-		if err := s.world.StepOnce(s.update); err != nil {
+		if err := s.world.StepOnceWithHooks(s.hooks); err != nil {
 			return err
 		}
 		stepped++
@@ -49,6 +68,8 @@ func (s *simulation) advance(elapsed time.Duration, batch engine.SimulationComma
 	}
 	for _, command := range batch.Commands {
 		switch command {
+		case engine.TogglePhysicsDebug:
+			s.overlay = !s.overlay
 		case engine.PauseSimulation:
 			s.world.SetPaused(true)
 		case engine.ResumeSimulation:
@@ -79,15 +100,19 @@ func (s *simulation) advance(elapsed time.Duration, batch engine.SimulationComma
 			}
 			s.pendingSteps--
 		}
-		return nil
+		return s.failure
 	}
 	if resumed {
 		return nil
 	}
-	return s.world.Advance(elapsed, s.update)
+	if err := s.world.AdvanceWithHooks(elapsed, s.hooks); err != nil {
+		return err
+	}
+	return s.failure
 }
 
 func (s *simulation) status() engine.SimulationStatus {
 	stats := s.world.Stats()
-	return engine.SimulationStatus{Tick: stats.Tick, Hz: 1 / stats.FixedStep.Seconds(), Paused: stats.Paused, DroppedSeconds: stats.Discarded.Seconds(), DroppedCommands: s.droppedCommands}
+	metrics := s.world.SolverStats()
+	return engine.SimulationStatus{Tick: stats.Tick, Hz: 1 / stats.FixedStep.Seconds(), Paused: stats.Paused, DroppedSeconds: stats.Discarded.Seconds(), DroppedCommands: s.droppedCommands, PhysicsBodies: metrics.Bodies, PhysicsPairs: metrics.CandidatePairs, PhysicsContacts: metrics.Contacts, PhysicsMilliseconds: float64(metrics.Duration) / float64(time.Millisecond), PhysicsOverlay: s.overlay}
 }

@@ -151,6 +151,8 @@ func (sim *SilentInputManager) enqueueSimulationEventLocked(event keyboard.KeyEv
 		command = engine.PauseSimulation
 	case event.Key == keyboard.KeyEnter || event.Rune == '\r' || event.Rune == '\n':
 		command = engine.ResumeSimulation
+	case event.Rune == 'c' || event.Rune == 'C':
+		command = engine.TogglePhysicsDebug
 	case event.Rune == 'n' || event.Rune == 'N':
 		command = engine.StepSimulation
 	default:

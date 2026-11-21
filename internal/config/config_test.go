@@ -51,11 +51,11 @@ func TestInvalidSettings(t *testing.T) {
 
 func TestSceneCatalogValidation(t *testing.T) {
 	settings := Default()
-	settings.Demo = 6
+	settings.Demo = 7
 	if err := settings.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	settings.Demo = 7
+	settings.Demo = 8
 	if settings.Validate() == nil {
 		t.Fatal("retired scene ID accepted")
 	}

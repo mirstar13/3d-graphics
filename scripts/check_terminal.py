@@ -118,3 +118,18 @@ s.output=b"";s.send(b"p");s.wait(b"Renderer settings")
 s.output=b"";s.send(b"\x1b");s.wait(b"3D Graphics")
 s.send(b"\x1b");s.exit()
 print("Simulation pause/step/resume and hidden-debug help PASS",flush=True)
+
+# Run the new body/collider scene with post-AA overlays and fixed stepping.
+s=Session(["-demo","7","-auto-orbit=false","-aa","msaa4","-mode","tiles"])
+s.wait(b"3D Graphics")
+s.output=b"";s.send(b"\r");s.wait(b"Physics playground")
+s.output=b"";s.send(b"\r");s.wait(b"Bodies:")
+s.output=b"";s.send(b"c");s.wait(b"C:ON")
+s.output=b"";s.send(b" ");s.wait(b"PAUSED")
+match=re.search(rb"PAUSED 60Hz Tick:(\d+)",s.output)
+assert match,s.output[-1000:]
+s.output=b"";s.send(b"n");s.wait(f"PAUSED 60Hz Tick:{int(match.group(1))+1} |".encode())
+s.output=b"";s.send(b"c");s.wait(b"C:OFF")
+s.output=b"";s.send(b"x");s.wait(b"3D Graphics")
+s.send(b"\x1b");s.exit()
+print("Physics playground, collider overlays, pause/step/exit PASS",flush=True)

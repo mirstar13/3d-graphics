@@ -122,7 +122,7 @@ func TestScenePreview(t *testing.T) {
 		t.Skip("set DEMO_PREVIEW to export a contact sheet")
 	}
 	const width, height = 240, 160
-	sheet := image.NewRGBA(image.Rect(0, 0, width*3, height*2))
+	sheet := image.NewRGBA(image.Rect(0, 0, width*3, height*((len(demo.Names)+2)/3)))
 	draw.Draw(sheet, sheet.Bounds(), &image.Uniform{C: color.Black}, image.Point{}, draw.Src)
 	for index, name := range demo.Names {
 		scene, lighting := presetScene(index, 0, false)

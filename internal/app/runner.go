@@ -147,6 +147,11 @@ func runEngine(demoType int, config engine.EngineConfig) bool {
 		}
 
 		finalRenderer.RenderScene(scene)
+		if simulation.overlay {
+			if display, ok := baseRenderer.(engine.PhysicsDebugRenderer); ok {
+				display.RenderPhysicsDebug(simulation.world.DebugLines(), scene.Camera)
+			}
+		}
 
 		if profiler != nil {
 			profiler.EndRender()

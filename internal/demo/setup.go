@@ -20,6 +20,7 @@ var Presets = []Preset{
 	{"Lantern courtyard", "A moving lantern casts shadows across a small colonnade.", true, 55, 28, buildCourtyard, animateCourtyard},
 	{"Detail runway", "Three moving spheres cross detail thresholds with dithered fades.", false, 60, 18, buildRunway, animateRunway},
 	{"Wave field", "81 instanced columns form a traveling wave; compare CPU modes.", false, 58, 30, buildWaves, animateWaves},
+	{"Physics playground", "Falling spheres, crates, a moving platform, and a collision ramp. C shows contacts.", false, 55, 22, buildPlayground, func(*engine.Scene, float64) {}},
 }
 
 // Names supplies labels for the scene picker, derived from the catalog.

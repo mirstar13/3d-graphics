@@ -124,7 +124,7 @@ func (s *Scene) collectRenderables(node *SceneNode, renderables *[]*SceneNode) {
 
 // Update updates all nodes
 func (s *Scene) Update(dt float64) {
-	s.updateNodeRecursive(s.Root, dt)
+	s.updateNodeRecursive(s.Root, dt, true, true)
 }
 
 // ComputeNodeBounds returns the object's world bounds, excluding child nodes.
@@ -132,20 +132,26 @@ func (s *Scene) ComputeNodeBounds(node *SceneNode) *AABB {
 	return ComputeNodeBounds(node)
 }
 
-func (s *Scene) updateNodeRecursive(node *SceneNode, dt float64) {
+// UpdateCallbacks runs application logic before physics pose synchronization.
+func (s *Scene) UpdateCallbacks(dt float64) { s.updateNodeRecursive(s.Root, dt, true, false) }
+
+// UpdateVisuals advances LOD state after authoritative physics poses are copied.
+func (s *Scene) UpdateVisuals(dt float64) { s.updateNodeRecursive(s.Root, dt, false, true) }
+
+func (s *Scene) updateNodeRecursive(node *SceneNode, dt float64, callbacks, visuals bool) {
 	if !node.IsEnabled() {
 		return
 	}
 
-	if node.OnUpdate != nil {
+	if callbacks && node.OnUpdate != nil {
 		node.OnUpdate(node, dt)
 	}
 
-	if lod, ok := node.Object.(*LODGroupWithTransitions); ok {
+	if lod, ok := node.Object.(*LODGroupWithTransitions); ok && visuals {
 		lod.UpdateWithTransition(node.Transform.GetWorldPosition(), s.Camera, dt)
 	}
 	for _, child := range node.Children {
-		s.updateNodeRecursive(child, dt)
+		s.updateNodeRecursive(child, dt, callbacks, visuals)
 	}
 }
 

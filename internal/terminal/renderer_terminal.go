@@ -649,6 +649,14 @@ func (r *TerminalRenderer) statusLine() string {
 		if status.DroppedSeconds > 0 || status.DroppedCommands > 0 {
 			fmt.Fprintf(&r.debugBuffer, " | Drop:%.3fs Cmd:%d", status.DroppedSeconds, status.DroppedCommands)
 		}
+		if status.PhysicsBodies > 0 {
+			if status.PhysicsOverlay {
+				r.debugBuffer.WriteString(" | C:ON")
+			} else {
+				r.debugBuffer.WriteString(" | C:OFF")
+			}
+			fmt.Fprintf(&r.debugBuffer, " | Bodies:%d Pairs:%d Contacts:%d Phys:%.2fms", status.PhysicsBodies, status.PhysicsPairs, status.PhysicsContacts, status.PhysicsMilliseconds)
+		}
 		if r.Camera != nil {
 			pos := r.Camera.GetPosition()
 			fmt.Fprintf(&r.debugBuffer, " | Pos:(%.1f,%.1f,%.1f)", pos.X, pos.Y, pos.Z)
