@@ -146,6 +146,7 @@ func runEngine(demoType int, config engine.EngineConfig) bool {
 			profiler.BeginRender()
 		}
 
+		simulation.prepareRender()
 		finalRenderer.RenderScene(scene)
 		if simulation.overlay {
 			if display, ok := baseRenderer.(engine.PhysicsDebugRenderer); ok {
@@ -164,6 +165,7 @@ func runEngine(demoType int, config engine.EngineConfig) bool {
 
 		finalRenderer.EndFrame()
 		finalRenderer.Present()
+		simulation.bindings.synchronize()
 
 		if profiler != nil {
 			profiler.EndPresent()

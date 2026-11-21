@@ -88,3 +88,19 @@ func (b *physicsBindings) setEnabled(id physics.BodyID, enabled bool) error {
 	b.synchronize()
 	return nil
 }
+
+// present changes visual poses only. synchronize restores authoritative state
+// before simulation callbacks; renderer workers never mutate the physics world.
+func (b *physicsBindings) present(alpha float64) {
+	for _, binding := range b.items {
+		state, err := b.world.Body(binding.id)
+		if err != nil {
+			continue
+		}
+		a, z := state.PreviousPosition, state.Position
+		p := engine.Point{X: a.X + (z.X-a.X)*alpha, Y: a.Y + (z.Y-a.Y)*alpha, Z: a.Z + (z.Z-a.Z)*alpha}
+		q := state.PreviousRotation.Slerp(state.Rotation, alpha)
+		binding.node.Transform.SetPosition(p.X, p.Y, p.Z)
+		binding.node.Transform.SetRotationQuaternion(q)
+	}
+}

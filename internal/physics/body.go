@@ -229,7 +229,11 @@ func (w *World) SetVelocity(id BodyID, linear, angular vec) error {
 
 // SetEnabled controls participation in integration and collision detection.
 func (w *World) SetEnabled(id BodyID, enabled bool) error {
-	return w.mutate(id, func(b *body) { b.state.Disabled = !enabled })
+	return w.mutate(id, func(b *body) {
+		b.state.Disabled = !enabled
+		b.state.PreviousPosition = b.state.Position
+		b.state.PreviousRotation = b.state.Rotation
+	})
 }
 
 // SetCollider replaces collision geometry and material, recalculating inertia.

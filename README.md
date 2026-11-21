@@ -46,7 +46,9 @@ application responsive; sustained low frame rates can therefore slow simulation.
 Debug status shows discarded seconds and dropped input commands. Each input and
 pending-step queue holds at most 64 requests; further requests are ignored and
 counted. Holding N may repeat steps according to terminal key-repeat settings.
-Resume cancels pending steps. There is no pose interpolation yet.
+Resume cancels pending steps. Running physics bodies interpolate their previous and
+current poses for presentation, adding up to one tick of visual latency. Paused,
+single-stepped, and collider-overlay views show the latest authoritative pose.
 
 `internal/physics` also provides tested semi-implicit Euler integration with
 default gravity `(0, -9.81, 0)` in metres/second squared. Gravity is available to
