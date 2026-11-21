@@ -12,11 +12,19 @@ type Tick struct {
 	Time, Delta float64
 }
 
-// Advance accepts elapsed render time and invokes update synchronously for each
+// StepHooks separate commands/kinematic targets from post-solve scene synchronization.
+type StepHooks struct{ BeforeStep, AfterStep func(Tick) }
+
+// Advance is a compatibility entry point whose callback runs before body integration.
+func (w *World) Advance(elapsed time.Duration, update func(Tick)) error {
+	return w.AdvanceWithHooks(elapsed, StepHooks{BeforeStep: update})
+}
+
+// AdvanceWithHooks accepts elapsed render time and invokes hooks synchronously for each
 // fixed tick. Excess elapsed time is discarded, leaving a fractional remainder.
 // Negative elapsed and recursive advancement fail without changing world state.
-// Zero elapsed is a no-op. A nil callback advances only the clock.
-func (w *World) Advance(elapsed time.Duration, update func(Tick)) error {
+// Zero elapsed is a no-op. Empty hooks still integrate bodies and solve contacts.
+func (w *World) AdvanceWithHooks(elapsed time.Duration, hooks StepHooks) error {
 	if elapsed < 0 {
 		return fmt.Errorf("physics elapsed time must not be negative")
 	}
@@ -39,7 +47,7 @@ func (w *World) Advance(elapsed time.Duration, update func(Tick)) error {
 	defer func() { w.advancing = false }()
 	for w.remainder >= w.options.FixedStep && w.substeps < w.options.MaxSubsteps {
 		w.remainder -= w.options.FixedStep
-		w.tick(update)
+		w.tick(hooks)
 	}
 	backlog := w.remainder / w.options.FixedStep * w.options.FixedStep
 	w.discard(backlog)
@@ -47,9 +55,14 @@ func (w *World) Advance(elapsed time.Duration, update func(Tick)) error {
 	return nil
 }
 
-// StepOnce executes exactly one tick while paused, leaving the accumulator and
-// pause state unchanged. Calls while running are ignored.
+// StepOnce is a compatibility entry point for a pre-integration callback.
 func (w *World) StepOnce(update func(Tick)) error {
+	return w.StepOnceWithHooks(StepHooks{BeforeStep: update})
+}
+
+// StepOnceWithHooks executes exactly one tick while paused, leaving the accumulator and
+// pause state unchanged. Calls while running are ignored.
+func (w *World) StepOnceWithHooks(hooks StepHooks) error {
 	if w.advancing {
 		return fmt.Errorf("physics callback cannot step recursively")
 	}
@@ -59,14 +72,24 @@ func (w *World) StepOnce(update func(Tick)) error {
 	w.substeps = 0
 	w.advancing = true
 	defer func() { w.advancing = false }()
-	w.tick(update)
+	w.tick(hooks)
 	return nil
 }
-func (w *World) tick(update func(Tick)) {
+func (w *World) tick(hooks StepHooks) {
+	pending := w.pending
+	w.pending = nil
+	for _, apply := range pending {
+		apply()
+	}
 	w.ticks++
 	w.substeps++
-	if update != nil {
-		update(Tick{Index: w.ticks, Time: float64(w.ticks) * w.options.FixedStep.Seconds(), Delta: w.options.FixedStep.Seconds()})
+	tick := Tick{Index: w.ticks, Time: float64(w.ticks) * w.options.FixedStep.Seconds(), Delta: w.options.FixedStep.Seconds()}
+	if hooks.BeforeStep != nil {
+		hooks.BeforeStep(tick)
+	}
+	w.stepBodies(tick.Delta)
+	if hooks.AfterStep != nil {
+		hooks.AfterStep(tick)
 	}
 }
 func (w *World) discard(duration time.Duration) {

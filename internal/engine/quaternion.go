@@ -129,14 +129,15 @@ func (q Quaternion) ToMatrix() Matrix4x4 {
 
 // RotateVector rotates a vector by this quaternion
 func (q Quaternion) RotateVector(v Point) Point {
-	// Convert vector to quaternion
-	vecQuat := Quaternion{W: 0, X: v.X, Y: v.Y, Z: v.Z}
-
-	// Compute q * v * q^-1
-	qConj := Quaternion{W: q.W, X: -q.X, Y: -q.Y, Z: -q.Z}
-	result := q.Multiply(vecQuat).Multiply(qConj)
-
-	return Point{X: result.X, Y: result.Y, Z: result.Z}
+	// Quaternion.Multiply normalizes rotations, so it cannot multiply a pure
+	// vector quaternion without losing vector length. Use the cross-product form.
+	q = q.Normalize()
+	tx := 2 * (q.Y*v.Z - q.Z*v.Y)
+	ty := 2 * (q.Z*v.X - q.X*v.Z)
+	tz := 2 * (q.X*v.Y - q.Y*v.X)
+	return Point{X: v.X + q.W*tx + q.Y*tz - q.Z*ty,
+		Y: v.Y + q.W*ty + q.Z*tx - q.X*tz,
+		Z: v.Z + q.W*tz + q.X*ty - q.Y*tx}
 }
 
 // QuaternionFromAxisAngle creates a quaternion from axis-angle representation

@@ -1,11 +1,16 @@
-// Package physics provides a fixed-step clock and gravity integration primitives.
-// The application owns a world per scene session, supplies elapsed durations,
-// and runs updates synchronously before rendering. Overload drops whole elapsed
-// ticks after the catch-up budget; physics never increases its integration step.
-// No rigid bodies, collision detection, or contact solver are implemented yet.
+// Package physics implements fixed-step rigid-body simulation with +Y up.
+// Positions use metres, time uses seconds, and angular velocity uses radians
+// per second. Dynamic spheres and oriented boxes collide with each other,
+// static planes, and immutable static triangle meshes. Kinematic bodies supply
+// target poses. Contacts support friction, restitution, sensors, and layer masks.
 //
-// Gravity is in metres/second squared, with +Y up. Future dynamic-body poses must
-// be owned by physics and copied to unparented scene transforms before render
-// cache preparation. Demo animation must not also write those dynamic poses.
-// Previous/current pose interpolation is deferred until bodies are available.
+// Worlds and their mutations belong to one simulation goroutine. Generation-
+// checked handles identify bodies; snapshots never expose mutable world state.
+// BeforeStep prepares forces and targets; AfterStep copies authoritative poses
+// to scene nodes. Lifecycle changes inside hooks take effect next tick.
+//
+// The clock bounds catch-up work and never enlarges its integration step.
+// Collision detection is discrete; fast bodies can tunnel. Sleeping, joints,
+// continuous collision detection, and dynamic triangle meshes are not supported.
+// Diagnostic wall-clock timings do not influence simulation results.
 package physics

@@ -11,20 +11,30 @@ import (
 // Options defines world-space gravity and the catch-up policy. One physics unit
 // is one metre. FixedStep is rounded to nanoseconds by time.Duration.
 type Options struct {
-	FixedStep     time.Duration
-	MaxFrameDelta time.Duration
-	MaxSubsteps   int
-	Gravity       engine.Point
+	FixedStep                              time.Duration
+	MaxFrameDelta                          time.Duration
+	MaxSubsteps                            int
+	VelocityIterations, PositionIterations int
+	Gravity                                engine.Point
 }
 
 // DefaultOptions supplies the initial 60 Hz simulation profile.
 func DefaultOptions() Options {
-	return Options{FixedStep: time.Second / 60, MaxFrameDelta: 250 * time.Millisecond, MaxSubsteps: 8, Gravity: engine.Point{Y: -9.81}}
+	return Options{FixedStep: time.Second / 60, MaxFrameDelta: 250 * time.Millisecond, MaxSubsteps: 8, VelocityIterations: 10, PositionIterations: 4, Gravity: engine.Point{Y: -9.81}}
 }
 
 // World owns simulation timing on the application update goroutine. It has no
 // render, input, scene-node, or wall-clock dependencies and is not thread-safe.
 type World struct {
+	bodies       []bodySlot
+	pending      []func()
+	contacts     []Contact
+	events       []ContactEvent
+	cache        map[contactKey]cachedImpulse
+	contactPairs map[bodyPair]bool
+	pairOrder    []bodyPair
+	solverStats  SolverStats
+
 	options   Options
 	ticks     uint64
 	remainder time.Duration
@@ -36,7 +46,7 @@ type World struct {
 
 // NewWorld validates options and creates a running world at tick zero.
 func NewWorld(options Options) (*World, error) {
-	if options.FixedStep <= 0 || options.MaxFrameDelta < options.FixedStep || options.MaxSubsteps < 1 {
+	if options.FixedStep <= 0 || options.MaxFrameDelta < options.FixedStep || options.MaxSubsteps < 1 || options.VelocityIterations < 1 || options.PositionIterations < 1 {
 		return nil, fmt.Errorf("physics requires a positive timestep and substep limit, and frame limit >= timestep")
 	}
 	if options.MaxFrameDelta > time.Duration(math.MaxInt64)-options.FixedStep {
@@ -70,7 +80,12 @@ func (w *World) Reset() {
 	if w.advancing {
 		panic("physics: reset during callback")
 	}
-	*w = World{options: w.options}
+	slots := w.bodies
+	for i := range slots {
+		slots[i].body = nil
+		slots[i].generation++
+	}
+	*w = World{options: w.options, bodies: slots}
 }
 
 // Stats is a read-only timing snapshot. SimulationTime is in seconds; Substeps

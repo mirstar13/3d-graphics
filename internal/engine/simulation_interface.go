@@ -7,6 +7,7 @@ const (
 	PauseSimulation SimulationCommand = iota
 	ResumeSimulation
 	StepSimulation
+	TogglePhysicsDebug
 )
 
 // SimulationCommandCapacity bounds both input and pending single-step queues.
@@ -26,12 +27,24 @@ type SimulationCommandInput interface{ DrainSimulationCommands() SimulationComma
 
 // SimulationStatus is a renderer-neutral snapshot for optional status displays.
 type SimulationStatus struct {
-	Tick            uint64
-	Hz              float64
-	Paused          bool
-	DroppedSeconds  float64
-	DroppedCommands uint64
+	PhysicsBodies, PhysicsPairs, PhysicsContacts int
+	PhysicsMilliseconds                          float64
+	PhysicsOverlay                               bool
+	Tick                                         uint64
+	Hz                                           float64
+	Paused                                       bool
+	DroppedSeconds                               float64
+	DroppedCommands                              uint64
 }
 
 // SimulationStatusRenderer optionally displays simulation state outside geometry.
 type SimulationStatusRenderer interface{ SetSimulationStatus(SimulationStatus) }
+
+// DebugLine describes a transient world-space diagnostic overlay, never a scene node.
+type DebugLine struct {
+	Start, End Point
+	Color      Color
+}
+
+// PhysicsDebugRenderer optionally draws diagnostics after ordinary geometry and AA.
+type PhysicsDebugRenderer interface{ RenderPhysicsDebug([]DebugLine, *Camera) }
