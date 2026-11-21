@@ -3,6 +3,8 @@
 Status: implemented, including static triangle meshes. The sections below record
 the original design. This builds on `physics-world-plan.md`.
 
+Remaining work is ordered in the [physics follow-up plan](physics-follow-up-plan.md).
+
 ## Implementation notes
 
 - `internal/physics` owns body handles, integration, collision detection, mesh BVHs,
