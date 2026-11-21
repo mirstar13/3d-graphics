@@ -21,9 +21,19 @@ type BodyID struct {
 	generation uint64
 }
 
+// CCDPolicy overrides the world's sphere CCD default for a body.
+type CCDPolicy uint8
+
+const (
+	InheritCCD CCDPolicy = iota
+	EnableCCD
+	DisableCCD
+)
+
 // BodyDesc supplies initial state. Use NewBodyDesc for identity rotation,
 // collision masks, and material defaults. Poses have no scale.
 type BodyDesc struct {
+	CCDPolicy                           CCDPolicy
 	Type                                BodyType
 	Position                            vec
 	Rotation                            quat
@@ -67,6 +77,9 @@ type bodySlot struct {
 }
 
 func validateBody(desc BodyDesc) error {
+	if desc.CCDPolicy > DisableCCD {
+		return fmt.Errorf("invalid CCD policy")
+	}
 	if desc.CCD && (desc.Type != Dynamic || desc.Collider.Shape.kind != SphereShape) {
 		return fmt.Errorf("CCD currently requires a dynamic sphere")
 	}
@@ -91,6 +104,15 @@ func validateBody(desc BodyDesc) error {
 
 // AddBody reserves an ID immediately; creation inside a hook activates next tick.
 func (w *World) AddBody(desc BodyDesc) (BodyID, error) {
+	switch desc.CCDPolicy {
+	case EnableCCD:
+		desc.CCD = true
+	case DisableCCD:
+		desc.CCD = false
+	case InheritCCD:
+		desc.CCD = desc.CCD || (w.options.DefaultCCD && desc.Type == Dynamic && desc.Collider.Shape.kind == SphereShape)
+	}
+
 	if err := validateBody(desc); err != nil {
 		return BodyID{}, err
 	}

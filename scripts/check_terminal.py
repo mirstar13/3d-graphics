@@ -133,3 +133,19 @@ s.output=b"";s.send(b"c");s.wait(b"C:OFF")
 s.output=b"";s.send(b"x");s.wait(b"3D Graphics")
 s.send(b"\x1b");s.exit()
 print("Physics playground, collider overlays, pause/step/exit PASS",flush=True)
+
+# Physics settings remain editable and persist through the scrolling TUI.
+import tempfile
+with tempfile.TemporaryDirectory() as directory:
+    path=os.path.join(directory,"renderer.yaml")
+    with open(path,"w") as file: file.write("demo: 7\n")
+    s=Session(["-settings","-config",path])
+    s.wait(b"Renderer settings")
+    s.output=b"";s.send(b"\x1b[B"*20);s.wait(b"Sphere CCD")
+    s.output=b"";s.send(b"\x1b[C");time.sleep(.1)
+    s.send(b"s");time.sleep(.2)
+    with open(path) as file: saved=file.read()
+    assert "ccd: true" in saved,saved
+    s.output=b"";s.send(b"\r");s.wait(b"3D Graphics")
+    s.send(b"\x1b");s.exit()
+print("Physics settings scroll/edit/save/apply PASS",flush=True)

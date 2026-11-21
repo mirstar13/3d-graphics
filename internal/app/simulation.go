@@ -3,6 +3,7 @@ package app
 import (
 	"time"
 
+	"github.com/mirstar13/go-3d-graphics/internal/config"
 	"github.com/mirstar13/go-3d-graphics/internal/demo"
 	"github.com/mirstar13/go-3d-graphics/internal/engine"
 	"github.com/mirstar13/go-3d-graphics/internal/physics"
@@ -24,7 +25,10 @@ type simulation struct {
 }
 
 func newSimulation(scene *engine.Scene, lighting *engine.LightingSystem, preset int) (*simulation, error) {
-	options := physics.DefaultOptions()
+	return newConfiguredSimulation(scene, lighting, preset, config.Default().Physics)
+}
+func newConfiguredSimulation(scene *engine.Scene, lighting *engine.LightingSystem, preset int, settings config.PhysicsSettings) (*simulation, error) {
+	options := settings.WorldOptions()
 	world, err := physics.NewWorld(options)
 	if err != nil {
 		return nil, err
@@ -37,7 +41,7 @@ func newSimulation(scene *engine.Scene, lighting *engine.LightingSystem, preset 
 	if err != nil {
 		return nil, err
 	}
-	sim := &simulation{interpolate: true, world: world, stepBudget: options.MaxSubsteps, bindings: bindings}
+	sim := &simulation{interpolate: settings.Interpolation, world: world, stepBudget: options.MaxSubsteps, bindings: bindings}
 	sim.hooks = physics.StepHooks{
 		BeforeStep: func(tick physics.Tick) {
 			demo.AnimateSceneDemo(scene, preset, tick.Time, tick.Delta)

@@ -6,12 +6,13 @@ import (
 	"os/signal"
 	"time"
 
+	settingsconfig "github.com/mirstar13/go-3d-graphics/internal/config"
 	"github.com/mirstar13/go-3d-graphics/internal/demo"
 	"github.com/mirstar13/go-3d-graphics/internal/engine"
 	"github.com/mirstar13/go-3d-graphics/internal/terminal"
 )
 
-func runEngine(demoType int, config engine.EngineConfig) bool {
+func runEngine(demoType int, config engine.EngineConfig, physicsSettings settingsconfig.PhysicsSettings) bool {
 	adapter, err := createBackend(config)
 	if err != nil {
 		fmt.Println(err)
@@ -72,7 +73,7 @@ func runEngine(demoType int, config engine.EngineConfig) bool {
 	}
 
 	fps := config.FPS
-	simulation, err := newSimulation(scene, lightingSystem, demoType)
+	simulation, err := newConfiguredSimulation(scene, lightingSystem, demoType, physicsSettings)
 	if err != nil {
 		fmt.Printf("Failed to initialize simulation: %v\n", err)
 		return false

@@ -133,7 +133,7 @@ func Run() {
 					return
 				}
 			}
-			if !runEngine(settings.Demo-1, runtimeConfig) {
+			if !runEngine(settings.Demo-1, runtimeConfig, settings.Physics) {
 				break
 			}
 			updated, restart, err := editSettings(settings, options.path)

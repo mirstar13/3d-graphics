@@ -142,3 +142,27 @@ func TestCCDMeshCanLeaveFloorAndHitAnotherTriangle(t *testing.T) {
 		t.Fatal("mesh wall crossed", s)
 	}
 }
+
+func TestCCDDefaultAndBodyOverrides(t *testing.T) {
+	o := DefaultOptions()
+	o.DefaultCCD = true
+	w, err := NewWorld(o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := NewBodyDesc(Dynamic, Sphere(1))
+	id := addTestBody(t, w, d)
+	if !stateOf(t, w, id).CCD {
+		t.Fatal("sphere did not inherit CCD")
+	}
+	d.CCDPolicy = DisableCCD
+	id = addTestBody(t, w, d)
+	if stateOf(t, w, id).CCD {
+		t.Fatal("explicit discrete override ignored")
+	}
+	d = NewBodyDesc(Dynamic, Box(vec{X: 1, Y: 1, Z: 1}))
+	id = addTestBody(t, w, d)
+	if stateOf(t, w, id).CCD {
+		t.Fatal("unsupported box inherited CCD")
+	}
+}

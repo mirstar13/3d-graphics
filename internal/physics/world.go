@@ -11,6 +11,7 @@ import (
 // Options defines world-space gravity and the catch-up policy. One physics unit
 // is one metre. FixedStep is rounded to nanoseconds by time.Duration.
 type Options struct {
+	DefaultCCD                                              bool
 	BroadPhase                                              BroadPhaseMode
 	CCDMaxImpacts                                           int
 	FixedStep                                               time.Duration

@@ -81,7 +81,13 @@ its camera and animation state.
 
 The editor exposes the demo, CPU mode, anti-aliasing, worker count, tile size,
 FPS, viewport size, color depth, horizontal and vertical FOV, auto orbit,
-debug display, and profiling.
+debug display, profiling, and physics controls. Physics settings expose gravity,
+solver iterations, sleeping, sphere CCD, and interpolation. Applying changes
+restarts the scene. The nested `physics` YAML group also accepts sleep thresholds,
+sleep delay, and `ccd_max_impacts` (distinct from clock catch-up steps). Old YAML
+files retain defaults. Fixed simulation stays at 60 Hz. Sphere CCD defaults apply
+only to dynamic spheres; `BodyDesc.CCDPolicy` can explicitly enable/disable it per
+body. Unsupported pairs remain discrete.
 
 The checked-in `renderer.yaml` supplies the default profile. CPU modes are
 `single`, `tiles`, `jobs`, and `batched`. Anti-aliasing options are `none`,

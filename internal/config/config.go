@@ -26,26 +26,27 @@ var ColorModes = []string{"auto", "none", "16", "256", "truecolor"}
 
 // Settings is the persisted configuration. Zero viewport dimensions mean automatic sizing.
 type Settings struct {
-	Demo         int     `yaml:"demo"`
-	Renderer     string  `yaml:"renderer"`
-	RenderMode   string  `yaml:"render_mode"`
-	AntiAliasing string  `yaml:"anti_aliasing"`
-	Workers      int     `yaml:"workers"`
-	TileSize     int     `yaml:"tile_size"`
-	Width        int     `yaml:"width"`
-	Height       int     `yaml:"height"`
-	FPS          float64 `yaml:"fps"`
-	Color        string  `yaml:"color"`
-	ShowDebug    bool    `yaml:"show_debug"`
-	Profiling    bool    `yaml:"profiling"`
-	FOVX         float64 `yaml:"fov_x"`
-	FOVY         float64 `yaml:"fov_y"`
-	AutoOrbit    bool    `yaml:"auto_orbit"`
+	Physics      PhysicsSettings `yaml:"physics"`
+	Demo         int             `yaml:"demo"`
+	Renderer     string          `yaml:"renderer"`
+	RenderMode   string          `yaml:"render_mode"`
+	AntiAliasing string          `yaml:"anti_aliasing"`
+	Workers      int             `yaml:"workers"`
+	TileSize     int             `yaml:"tile_size"`
+	Width        int             `yaml:"width"`
+	Height       int             `yaml:"height"`
+	FPS          float64         `yaml:"fps"`
+	Color        string          `yaml:"color"`
+	ShowDebug    bool            `yaml:"show_debug"`
+	Profiling    bool            `yaml:"profiling"`
+	FOVX         float64         `yaml:"fov_x"`
+	FOVY         float64         `yaml:"fov_y"`
+	AutoOrbit    bool            `yaml:"auto_orbit"`
 }
 
 // Default returns a complete configuration using the available CPU parallelism.
 func Default() Settings {
-	return Settings{
+	return Settings{Physics: defaultPhysics(),
 		Demo: 1, Renderer: "terminal", RenderMode: "single", AntiAliasing: "none",
 		Workers: runtime.GOMAXPROCS(0), TileSize: 32, FPS: 30, Color: "auto",
 		ShowDebug: true, Profiling: true, FOVX: 60, FOVY: 30, AutoOrbit: true,
@@ -100,7 +101,7 @@ func (s Settings) Validate() error {
 	case !finiteRange(s.FOVX, 1, 179) || !finiteRange(s.FOVY, 1, 179):
 		return fmt.Errorf("fov_x and fov_y must be between 1 and 179")
 	}
-	return nil
+	return s.Physics.validate()
 }
 
 func finiteRange(value, min, max float64) bool {

@@ -13,3 +13,14 @@ profiling: true
 fov_x: 60
 fov_y: 30
 auto_orbit: true
+physics:
+  gravity: {x: 0, y: -9.81, z: 0}
+  velocity_iterations: 20
+  position_iterations: 8
+  sleeping: true
+  ccd: false
+  interpolation: true
+  sleep_linear_threshold: 0.03
+  sleep_angular_threshold: 0.05
+  sleep_delay: 0.5
+  ccd_max_impacts: 8

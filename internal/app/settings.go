@@ -51,6 +51,14 @@ func newSettingsModel(settings config.Settings, path string) settingsModel {
 			{"Auto orbit", strconv.FormatBool(settings.AutoOrbit), toggle, "Orbit the scene automatically until movement input."},
 			{"Debug display", strconv.FormatBool(settings.ShowDebug), toggle, "Show the FPS and camera status line."},
 			{"Profiling", strconv.FormatBool(settings.Profiling), toggle, "Collect internal frame timing statistics."},
+			{"Gravity X (m/s²)", number(settings.Physics.Gravity.X), nil, "Physics changes restart the scene. Fixed simulation remains 60 Hz."},
+			{"Gravity Y (m/s²)", number(settings.Physics.Gravity.Y), nil, "Default -9.81; +Y is up."},
+			{"Gravity Z (m/s²)", number(settings.Physics.Gravity.Z), nil, "Gravity acceleration along Z."},
+			{"Velocity iterations", strconv.Itoa(settings.Physics.VelocityIterations), nil, "1-100 solver iterations; more cost more CPU time."},
+			{"Position iterations", strconv.Itoa(settings.Physics.PositionIterations), nil, "1-100 penetration correction iterations."},
+			{"Sleeping", strconv.FormatBool(settings.Physics.Sleeping), toggle, "Let settled contact islands sleep; impacts and support changes wake them."},
+			{"Sphere CCD", strconv.FormatBool(settings.Physics.CCD), toggle, "Default sphere sweeps against static planes, boxes, and meshes. Other pairs remain discrete."},
+			{"Interpolation", strconv.FormatBool(settings.Physics.Interpolation), toggle, "Smooth running body poses with up to one tick of visual latency; debug views stay exact."},
 		},
 	}
 }
@@ -63,7 +71,7 @@ func (m settingsModel) values() (config.Settings, error) {
 		index  int
 		target *int
 	}{
-		{0, &s.Demo}, {3, &s.Workers}, {4, &s.TileSize}, {6, &s.Width}, {7, &s.Height},
+		{0, &s.Demo}, {3, &s.Workers}, {4, &s.TileSize}, {6, &s.Width}, {7, &s.Height}, {17, &s.Physics.VelocityIterations}, {18, &s.Physics.PositionIterations},
 	}
 	for _, field := range ints {
 		value, err := strconv.Atoi(m.fields[field.index].value)
@@ -75,7 +83,7 @@ func (m settingsModel) values() (config.Settings, error) {
 	floats := []struct {
 		index  int
 		target *float64
-	}{{5, &s.FPS}, {9, &s.FOVX}, {10, &s.FOVY}}
+	}{{5, &s.FPS}, {9, &s.FOVX}, {10, &s.FOVY}, {14, &s.Physics.Gravity.X}, {15, &s.Physics.Gravity.Y}, {16, &s.Physics.Gravity.Z}}
 	for _, field := range floats {
 		value, err := strconv.ParseFloat(m.fields[field.index].value, 64)
 		if err != nil {
@@ -87,6 +95,9 @@ func (m settingsModel) values() (config.Settings, error) {
 	s.AutoOrbit = m.fields[11].value == "true"
 	s.ShowDebug = m.fields[12].value == "true"
 	s.Profiling = m.fields[13].value == "true"
+	s.Physics.Sleeping = m.fields[19].value == "true"
+	s.Physics.CCD = m.fields[20].value == "true"
+	s.Physics.Interpolation = m.fields[21].value == "true"
 	return s, s.Validate()
 }
 

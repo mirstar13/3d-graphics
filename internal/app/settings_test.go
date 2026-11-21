@@ -68,3 +68,18 @@ func TestSettingsEditorCancelAndResize(t *testing.T) {
 		t.Fatal("cancel started rendering")
 	}
 }
+
+func TestPhysicsSettingsEditor(t *testing.T) {
+	m := newSettingsModel(config.Default(), filepath.Join(t.TempDir(), "renderer.yaml"))
+	m.fields[15].value = "-3.5"
+	m.fields[17].value = "32"
+	m.fields[18].value = "12"
+	m.fields[19].value = "false"
+	m.fields[20].value = "true"
+	m.fields[21].value = "false"
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = result.(settingsModel)
+	if cmd == nil || !m.start || m.settings.Physics.Gravity.Y != -3.5 || m.settings.Physics.VelocityIterations != 32 || m.settings.Physics.PositionIterations != 12 || m.settings.Physics.Sleeping || !m.settings.Physics.CCD || m.settings.Physics.Interpolation {
+		t.Fatal(m.settings, m.message)
+	}
+}
