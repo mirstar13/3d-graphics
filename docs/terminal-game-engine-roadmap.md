@@ -1,14 +1,16 @@
 # Terminal game engine: implementation roadmap
 
-Status: the first editor vertical slice and hierarchy authoring are implemented.
+Status: the first editor vertical slice, hierarchy authoring, and basic linked
+scene resources are implemented. See the [resource milestone](editor-resources-plan.md).
 See the [hierarchy milestone](editor-hierarchy-plan.md). See the
 [editor guide](editor-first-milestone.md) for delivered scope and tests. Remaining
 stages below are planned. Builds on the completed [physics follow-up work](physics-follow-up-plan.md).
 This is a staged product and architecture plan. The initial slice provides
 primitive documents with nested visual hierarchies and root-level physics bodies,
-project creation/opening, undoable property and subtree edits,
+project creation/opening, undoable property and subtree edits, resource extraction,
+instantiation, source editing, refresh, explicit overrides, and unpacking,
 a monochrome viewport, and in-process isolated-state Play/Stop. It does not complete
-all stages 0–2 or provide the later scripting, resource, export, and public APIs.
+all stages 0–2 or provide nested linked scenes, scripting, export, and public APIs.
 
 ## Product vision: an integrated terminal-game authoring environment
 
@@ -442,9 +444,9 @@ loads, undo/redo, instance identity, failed builds, crashed play sessions, and c
 shutdown. Native terminal checks remain distinct from PTY and compilation tests.
 Keep stress tests and long benchmarks separate from fast unit suites.
 
-The next implementation milestone is reusable linked scene resources: resource
-identity, project-local storage/browser, subtree extraction/instantiation, and
-explicit instance overrides. Write its detailed implementation plan before coding.
-Hierarchy authoring is complete, but the remaining stage 1–2 requirements and
-creator alpha are not yet complete. Keep physics expansion and custom scripting
-behind the creator workflow priorities.
+The next implementation milestone is the remaining stage-1 input and selection
+foundation: semantic actions/configurable bindings, read-only world queries, and
+keyboard reticle selection. Write its detailed implementation plan before coding.
+Basic linked resources are complete; nested links/inherited variants, fuller
+components, gameplay attachment, and export remain outstanding. The creator alpha
+is not yet complete. Keep physics expansion behind creator workflow priorities.

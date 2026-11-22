@@ -23,7 +23,9 @@ Run `go run . -editor`, select **Project editor** (or press **E**) in the start 
 with `go run . -project /path/to/MyGame`. Create a project, add boxes/spheres, edit
 properties, save, and Play/Stop without changing the authored scene. The workspace
 includes nested visual hierarchies, reparenting, subtree duplication/deletion,
-selection outlines, undo/redo, and pause/step. Physics bodies remain root-level.
+linked scene resources, property overrides, selection outlines, undo/redo, and
+pause/step. Press **R** to extract a subtree and **A** to browse resources.
+Physics bodies remain root-level. See the [resource workflow](docs/editor-scene-resources.md).
 
 See the [editor guide](docs/editor-first-milestone.md) for controls, project files,
 validation, and the current scope. Nested scenes, scripts, full asset tooling,

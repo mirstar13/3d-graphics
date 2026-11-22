@@ -44,6 +44,11 @@ Save during Play saves the authored document, never the simulated body positions
 | Workspace | Tab, Up/Down | Switch panel focus, select object/property. |
 | Edit | E / Enter | Edit selected property. |
 | Edit | B / G | Add box / sphere. |
+| Edit | A | Browse resources; Enter instantiate/open, E edit source. |
+| Edit | R | Extract selection as a new resource. |
+| Edit | Ctrl+R | Refresh links from disk, preserving overrides. |
+| Edit | Ctrl+T | Reset selected property's override from source. |
+| Edit | Ctrl+U | Unpack selected member's entire instance. |
 | Edit | H | Choose a parent (Up/Down, Enter apply, Escape cancel). |
 | Edit | Delete / Ctrl+D | Delete / duplicate the selected subtree. |
 | Edit | Ctrl+Z / Ctrl+Y | Undo / redo (up to 64 authored changes). |
@@ -82,7 +87,8 @@ Older root-only files load without migration; `parent` is optional in version 1.
 Older engine binaries reject files containing the new field instead of discarding it.
 
 See the [hierarchy implementation plan](editor-hierarchy-plan.md) for acceptance
-criteria and the boundaries of this milestone. Linked reusable scenes follow next.
+criteria and the boundaries of that milestone. Linked reusable scenes are described
+in the [resource guide](editor-scene-resources.md).
 
 ## Files and schema
 
@@ -96,7 +102,10 @@ MyGame/
 ```
 
 `project.yaml` contains `version: 1`, project `name`, and a project-relative
-`entry_scene`. The scene contains `version: 1`, scene `name`, and `entities`.
+`entry_scene`. The scene contains `version: 1`, scene `name`, and ordinary `entities`.
+Scenes with reusable content also store `instances` and `root_order`; expanded
+instance members are reconstructed from project-local resources, not duplicated
+in the saved scene. See the [resource schema](editor-scene-resources.md).
 Each entity has a persistent `id`, optional `parent` ID, display `name`, `shape`, `body`, `position`,
 Euler-degree `rotation`, `size`, `mass`, and RGB `color`.
 
@@ -166,7 +175,7 @@ needs verification on those systems.
 
 Not implemented yet: empty grouping nodes, world-pose-preserving reparenting,
 arbitrary component attachment, full asset browsing/import, authored joints/compound/hull resources,
-scene instancing/prefabs, behavior scripts, a supervised external Play process,
+nested linked scenes/inherited variants, behavior scripts, a supervised external Play process,
 project export, mouse picking/manipulation, and a public SDK. Play currently runs
 in-process; there is no process isolation for future user-authored code. The next
 step is extending the document/editor model, not claiming engine/editor parity
