@@ -161,3 +161,21 @@ func TestJointKinematicAttachment(t *testing.T) {
 		t.Fatal(s)
 	}
 }
+
+func TestWorldAnchorsDoNotConnectSleepingIslands(t *testing.T) {
+	w := noGravity(t)
+	d := NewBodyDesc(Dynamic, Sphere(.2))
+	a := addTestBody(t, w, d)
+	d.Position.X = 10
+	b := addTestBody(t, w, d)
+	ja := addTestJoint(t, w, JointDesc{Kind: BallJoint, BodyA: a})
+	addTestJoint(t, w, JointDesc{Kind: BallJoint, BodyA: b, AnchorB: d.Position})
+	stepN(t, w, 120)
+	if !stateOf(t, w, a).Sleeping || !stateOf(t, w, b).Sleeping {
+		t.Fatal("anchored bodies did not sleep")
+	}
+	w.RemoveJoint(ja)
+	if !stateOf(t, w, b).Sleeping {
+		t.Fatal("world anchor bridged independent islands")
+	}
+}

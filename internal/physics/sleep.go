@@ -3,6 +3,9 @@ package physics
 // wakeConnected wakes dynamics linked by physical contacts. Static/kinematic
 // supports seed their touching dynamics but never join otherwise separate islands.
 func (w *World) wakeConnected(id BodyID, contacts []Contact) {
+	if id == (BodyID{}) {
+		return
+	} // A world anchor is not a shared dynamic island.
 	seen := map[BodyID]bool{id: true}
 	queue := []BodyID{id}
 	for len(queue) > 0 {
