@@ -19,10 +19,11 @@ YAML reports an error. Unknown keys and invalid values are rejected.
 
 ## Project editor (prototype)
 
-Run `go run . -editor`, use **E** in the start menu, or open an existing project
+Run `go run . -editor`, select **Project editor** (or press **E**) in the start menu, or open an existing project
 with `go run . -project /path/to/MyGame`. Create a project, add boxes/spheres, edit
 properties, save, and Play/Stop without changing the authored scene. The workspace
-includes hierarchy/inspector focus, selection outlines, undo/redo, and pause/step.
+includes nested visual hierarchies, reparenting, subtree duplication/deletion,
+selection outlines, undo/redo, and pause/step. Physics bodies remain root-level.
 
 See the [editor guide](docs/editor-first-milestone.md) for controls, project files,
 validation, and the current scope. Nested scenes, scripts, full asset tooling,

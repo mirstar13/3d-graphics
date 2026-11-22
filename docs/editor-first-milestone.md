@@ -1,6 +1,6 @@
-# Project editor: first usable milestone
+# Project editor: authoring guide
 
-The initial editor implements **create/open → add/edit → save → Play → Stop → reopen**.
+The editor implements **create/open → add/edit → save → Play → Stop → reopen**.
 It is an early authoring tool, not the complete editor described in the
 [engine roadmap](terminal-game-engine-roadmap.md).
 
@@ -13,7 +13,8 @@ go run . -editor
 go run . -project /path/to/MyGame
 ```
 
-The regular `go run .` launcher also offers **E project editor**. Existing demo
+The regular `go run .` launcher offers a selectable **Project editor** row
+and the **E** shortcut. Existing demo
 and renderer-settings workflows remain available.
 
 1. Press N in the project manager, enter a new directory path, and press Enter.
@@ -43,7 +44,8 @@ Save during Play saves the authored document, never the simulated body positions
 | Workspace | Tab, Up/Down | Switch panel focus, select object/property. |
 | Edit | E / Enter | Edit selected property. |
 | Edit | B / G | Add box / sphere. |
-| Edit | Delete / Ctrl+D | Delete / duplicate selection. |
+| Edit | H | Choose a parent (Up/Down, Enter apply, Escape cancel). |
+| Edit | Delete / Ctrl+D | Delete / duplicate the selected subtree. |
 | Edit | Ctrl+Z / Ctrl+Y | Undo / redo (up to 64 authored changes). |
 | Workspace | Ctrl+S | Save authored scene. |
 | Workspace | 1 / 2 / 3, + / - | Front / side / perspective view, zoom. |
@@ -58,6 +60,30 @@ Text entry consumes keys until applied/cancelled. Gameplay commands cannot fire
 through a property/path dialog. In narrow terminals, the focused hierarchy or
 inspector replaces the viewport to keep selected properties accessible.
 
+## Hierarchy authoring
+
+Set an object's **Body** to **none**, then press **H** to choose a parent by name
+and persistent ID. Choose **Scene root** to detach. Physics bodies must remain
+roots; a dynamic body may have visual children. The picker excludes the selected
+object and its descendants, preventing cycles. Names may be duplicated.
+
+The hierarchy displays children indented beneath their parent. Position and
+rotation in the inspector are **local** to the parent. Reparenting keeps those
+local values, so the object's world pose may change. Children inherit translation
+and rotation during editing and Play. Primitive size changes geometry only;
+children do not inherit size as scale. Selection bounds follow world poses.
+
+Delete removes the whole selected subtree. Ctrl+D duplicates the subtree with
+fresh IDs and remapped internal parent links, keeping any external parent and
+moving the copied root +1 along local X. Each operation, including reparenting,
+is one undoable edit. Undo/redo preserves selected identity when it still exists.
+Saving/reopening preserves the tree even if children precede parents in YAML.
+Older root-only files load without migration; `parent` is optional in version 1.
+Older engine binaries reject files containing the new field instead of discarding it.
+
+See the [hierarchy implementation plan](editor-hierarchy-plan.md) for acceptance
+criteria and the boundaries of this milestone. Linked reusable scenes follow next.
+
 ## Files and schema
 
 A new project contains:
@@ -71,7 +97,7 @@ MyGame/
 
 `project.yaml` contains `version: 1`, project `name`, and a project-relative
 `entry_scene`. The scene contains `version: 1`, scene `name`, and `entities`.
-Each entity has a persistent `id`, display `name`, `shape`, `body`, `position`,
+Each entity has a persistent `id`, optional `parent` ID, display `name`, `shape`, `body`, `position`,
 Euler-degree `rotation`, `size`, `mass`, and RGB `color`.
 
 - Shapes: `box` and `sphere`.
@@ -80,7 +106,8 @@ Euler-degree `rotation`, `size`, `mass`, and RGB `color`.
   switching shapes and must remain valid positive dimensions.
 - Position/size use metres, mass uses kilograms, and rotations use degrees.
 - Names need not be unique; IDs must be. Duplicate creates a new persistent ID.
-- Version 1 supports root-level objects, at most 128 entities, and files up to
+- Version 1 supports nested visual objects, root-level physics bodies, at most
+  128 entities, and files up to
   1 MiB. Unknown fields/versions, invalid values, and duplicate IDs are rejected.
 - Scene paths must remain inside the project, including existing symlink targets.
 
@@ -100,7 +127,7 @@ fields and validation rules; changes never mutate a live World directly.
 `internal/game` owns a headless scene/physics session, session-local generation
 handles, persistent-ID lookup, and bounded tick-boundary commands. Visual-only
 entities do not need physics. Session creation copies authored values. Destroying
-an entity removes its body (and attached physics joints) and visual; stale handles
+an entity removes its entire subtree, bodies (and attached physics joints), and visuals; stale handles
 cannot refer to a replacement or another Play session. Commands remain pending
 while paused. A single step consumes each queued command once.
 
@@ -137,8 +164,8 @@ process. It also verifies input-mode restoration and narrow-window operation.
 Windows/macOS cross-builds check compilation; native editor interaction still
 needs verification on those systems.
 
-Not implemented yet: reparenting/nested authored hierarchies, arbitrary component
-attachment, full asset browsing/import, authored joints/compound/hull resources,
+Not implemented yet: empty grouping nodes, world-pose-preserving reparenting,
+arbitrary component attachment, full asset browsing/import, authored joints/compound/hull resources,
 scene instancing/prefabs, behavior scripts, a supervised external Play process,
 project export, mouse picking/manipulation, and a public SDK. Play currently runs
 in-process; there is no process isolation for future user-authored code. The next

@@ -1,10 +1,12 @@
 # Terminal game engine: implementation roadmap
 
-Status: the first editor vertical slice is implemented. See the
+Status: the first editor vertical slice and hierarchy authoring are implemented.
+See the [hierarchy milestone](editor-hierarchy-plan.md). See the
 [editor guide](editor-first-milestone.md) for delivered scope and tests. Remaining
 stages below are planned. Builds on the completed [physics follow-up work](physics-follow-up-plan.md).
 This is a staged product and architecture plan. The initial slice provides
-root-level primitive documents, project creation/opening, undoable property edits,
+primitive documents with nested visual hierarchies and root-level physics bodies,
+project creation/opening, undoable property and subtree edits,
 a monochrome viewport, and in-process isolated-state Play/Stop. It does not complete
 all stages 0–2 or provide the later scripting, resource, export, and public APIs.
 
@@ -63,8 +65,9 @@ Keep this roadmap updated with measured results and deliberate scope changes.
 
 Current constraints:
 
-- `internal/app/physics_bindings.go` accepts `demo.BodySpec` and `demo.JointSpec`.
-  Bindings are currently an application/demo integration mechanism.
+- `internal/app/physics_bindings.go` accepts runtime-owned `game.BodySpec` and
+  `game.JointSpec`; demos alias these descriptions. The demo runner still uses
+  application bindings, while authored projects use `game.Session`.
 - `internal/app/simulation.go` constructs a preset and schedules its callbacks.
 - Renderer/input contracts live in `internal/engine`; Go prevents external projects
   from importing these packages directly.
@@ -439,6 +442,9 @@ loads, undo/redo, instance identity, failed builds, crashed play sessions, and c
 shutdown. Native terminal checks remain distinct from PTY and compilation tests.
 Keep stress tests and long benchmarks separate from fast unit suites.
 
-The next implementation is the runtime/document boundary and a minimal project
-editor vertical slice. Do not expand physics or create a custom scripting language
-before creators can complete that basic authoring loop.
+The next implementation milestone is reusable linked scene resources: resource
+identity, project-local storage/browser, subtree extraction/instantiation, and
+explicit instance overrides. Write its detailed implementation plan before coding.
+Hierarchy authoring is complete, but the remaining stage 1–2 requirements and
+creator alpha are not yet complete. Keep physics expansion and custom scripting
+behind the creator workflow priorities.
