@@ -55,8 +55,8 @@ func NewSession(d project.Document, options physics.Options) (*Session, error) {
 	s.Lighting = engine.NewLightingSystem(scene.Camera)
 	s.Lighting.AmbientIntensity = .5
 	s.Lighting.AddLight(engine.NewLight(-5, 12, -8, engine.ColorWhite, 1))
-	for _, e := range d.Entities {
-		if _, err = s.spawn(e); err != nil {
+	for _, entry := range d.Hierarchy() {
+		if _, err = s.spawn(entry.Entity); err != nil {
 			return nil, err
 		}
 	}
@@ -68,13 +68,22 @@ func (s *Session) spawn(d project.Entity) (EntityID, error) {
 			return EntityID{}, fmt.Errorf("duplicate authored identity")
 		}
 	}
+	var parent *engine.SceneNode
+	if d.Parent != "" {
+		id, ok := s.Find(d.Parent)
+		if !ok {
+			return EntityID{}, fmt.Errorf("missing parent %s", d.Parent)
+		}
+		entry, _ := s.lookup(id)
+		parent = entry.node
+	}
 	m := engine.NewMaterial()
 	m.DiffuseColor = d.Color
 	m.AmbientStrength = .6
 	m.SpecularStrength = .2
 	var node *engine.SceneNode
 	if d.Shape == "box" {
-		node = s.Scene.CreateCube(d.Name, 1, &m)
+		node = s.Scene.CreateCube("entity:"+d.ID, 1, &m)
 		mesh := node.Object.(*engine.Mesh)
 		for i, v := range mesh.Vertices {
 			mesh.Vertices[i] = engine.Point{X: v.X * d.Size.X, Y: v.Y * d.Size.Y, Z: v.Z * d.Size.Z}
@@ -82,8 +91,11 @@ func (s *Session) spawn(d project.Entity) (EntityID, error) {
 	} else {
 		mesh := engine.GenerateSphere(d.Size.X, 8, 12)
 		mesh.Material = &m
-		node = engine.NewSceneNodeWithObject(d.Name, mesh)
+		node = engine.NewSceneNodeWithObject("entity:"+d.ID, mesh)
 		s.Scene.AddNode(node)
+	}
+	if parent != nil {
+		parent.AddChild(node)
 	}
 	q := engine.QuaternionFromEuler(d.Rotation.X*math.Pi/180, d.Rotation.Y*math.Pi/180, d.Rotation.Z*math.Pi/180)
 	node.Transform.SetPosition(d.Position.X, d.Position.Y, d.Position.Z)
@@ -145,14 +157,17 @@ func (s *Session) Find(fileID string) (EntityID, bool) {
 	return EntityID{}, false
 }
 
-// State returns an authored description updated with the current live position.
+// State returns a description with live world position and Euler rotation (degrees).
+// Parent remains the persistent hierarchy link; this snapshot is not a scene file.
 func (s *Session) State(id EntityID) (project.Entity, error) {
 	e, err := s.lookup(id)
 	if err != nil {
 		return project.Entity{}, err
 	}
 	d := e.description
-	d.Position = e.node.Transform.Position
+	d.Position = e.node.Transform.GetWorldPosition()
+	r := e.node.Transform.GetWorldRotation()
+	d.Rotation = engine.Point{X: r.X * 180 / math.Pi, Y: r.Y * 180 / math.Pi, Z: r.Z * 180 / math.Pi}
 	return d, nil
 }
 
@@ -188,18 +203,12 @@ func (s *Session) enqueue(command func() error) error {
 
 // QueueSpawn creates a validated primitive at the next tick; Find resolves it afterward.
 func (s *Session) QueueSpawn(d project.Entity) error {
-	if err := (project.Document{Version: project.Version, Name: "Spawn", Entities: []project.Entity{d}}).Validate(); err != nil {
+	if err := s.validateSpawn(d); err != nil {
 		return err
 	}
 	return s.enqueue(func() error {
-		count := 0
-		for _, e := range s.entities {
-			if e.active {
-				count++
-			}
-		}
-		if count >= project.MaxEntities {
-			return fmt.Errorf("entity limit reached")
+		if err := s.validateSpawn(d); err != nil {
+			return err
 		}
 		_, err := s.spawn(d)
 		return err
@@ -216,14 +225,21 @@ func (s *Session) QueueDestroy(id EntityID) error {
 		if err != nil {
 			return err
 		}
-		if e.description.Body != "none" {
-			if err = s.World.RemoveBody(e.body); err != nil {
-				return err
+		document := s.document()
+		ids := document.SubtreeIDs(e.description.ID)
+		// Remove leaves first, clearing scene registry entries and all handles.
+		for i := len(ids) - 1; i >= 0; i-- {
+			childID, _ := s.Find(ids[i])
+			child, _ := s.lookup(childID)
+			if child.description.Body != "none" {
+				if err := s.World.RemoveBody(child.body); err != nil {
+					return err
+				}
 			}
+			s.Scene.RemoveNode(child.node)
+			child.active = false
+			child.generation++
 		}
-		s.Scene.RemoveNode(e.node)
-		e.active = false
-		e.generation++
 		return nil
 	})
 }
@@ -301,9 +317,7 @@ func (s *Session) SelectionLines(id EntityID) []engine.DebugLine {
 		if i&4 != 0 {
 			p.Z = half.Z
 		}
-		v := e.node.Transform.Rotation.RotateVector(p)
-		o := e.node.Transform.Position
-		vertices[i] = engine.Point{X: o.X + v.X, Y: o.Y + v.Y, Z: o.Z + v.Z}
+		vertices[i] = e.node.Transform.TransformPoint(p)
 	}
 	var lines []engine.DebugLine
 	for i := 0; i < 8; i++ {
@@ -315,4 +329,20 @@ func (s *Session) SelectionLines(id EntityID) []engine.DebugLine {
 		}
 	}
 	return lines
+}
+
+// document collects authored descriptions for hierarchy validation, not live poses.
+func (s *Session) document() project.Document {
+	d := project.Document{Version: project.Version, Name: "Runtime"}
+	for _, e := range s.entities {
+		if e.active {
+			d.Entities = append(d.Entities, e.description)
+		}
+	}
+	return d
+}
+func (s *Session) validateSpawn(e project.Entity) error {
+	d := s.document()
+	d.Entities = append(d.Entities, e)
+	return d.Validate()
 }
