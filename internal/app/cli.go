@@ -14,6 +14,8 @@ import (
 )
 
 type commandOptions struct {
+	projectEditor  bool
+	projectPath    string
 	path           string
 	settingsScreen bool
 	cpuProfile     string
@@ -25,6 +27,8 @@ func readCommand(args []string, output io.Writer) (config.Settings, commandOptio
 	options := commandOptions{}
 	flags := flag.NewFlagSet("3d-graphics", flag.ContinueOnError)
 	flags.SetOutput(output)
+	flags.BoolVar(&options.projectEditor, "editor", false, "open the project editor")
+	flags.StringVar(&options.projectPath, "project", "", "open a project directory in the editor")
 	flags.StringVar(&options.path, "config", "renderer.yaml", "YAML settings file")
 	flags.BoolVar(&options.settingsScreen, "settings", false, "open the settings editor")
 	flags.StringVar(&options.cpuProfile, "cpuprofile", "", "write CPU profile to file")
@@ -105,6 +109,17 @@ func Run() {
 			}
 		}()
 	}
+	if options.projectEditor || options.projectPath != "" {
+		runtimeConfig := settings.EngineConfig()
+		if err := terminal.ConfigureTerminal(&runtimeConfig, settings.Color); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return
+		}
+		if err := runProjectEditor(settings, options.projectPath); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+		}
+		return
+	}
 	openSettings := options.settingsScreen
 	for {
 		// Validate terminal access before starting the launcher.
@@ -115,13 +130,19 @@ func Run() {
 				return
 			}
 		}
-		updated, start, err := showStartMenu(settings, options.path, openSettings)
+		updated, start, openProject, err := showStartMenu(settings, options.path, openSettings)
 		openSettings = false
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return
 		}
 		settings = updated
+		if openProject {
+			if err := runProjectEditor(settings, ""); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+			}
+			continue
+		}
 		if !start {
 			return
 		}

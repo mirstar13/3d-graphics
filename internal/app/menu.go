@@ -26,6 +26,7 @@ type menuModel struct {
 	width, height int
 	editor        settingsModel
 	start         bool
+	projectEditor bool
 }
 
 func newMenuModel(settings config.Settings, path string, openSettings bool) menuModel {
@@ -92,6 +93,9 @@ func (m menuModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch key.String() {
+	case "e":
+		m.projectEditor = true
+		return m, tea.Quit
 	case "esc", "q":
 		return m, tea.Quit
 	case "up", "k":
@@ -115,7 +119,7 @@ func (m menuModel) View() string {
 	if m.page == settingsPage {
 		return m.editor.View()
 	}
-	title, help := "3D Graphics", "Up/Down select | Enter open | Esc exit"
+	title, help := "3D Graphics", "Up/Down select | Enter open | E project editor | Esc exit"
 	items := []string{"New scene", "Settings", "Exit"}
 	selected := m.selected
 	if m.page == scenePage {
@@ -144,11 +148,11 @@ func (m menuModel) View() string {
 	return fitView(out.String(), m.width, m.height)
 }
 
-func showStartMenu(settings config.Settings, path string, openSettings bool) (config.Settings, bool, error) {
+func showStartMenu(settings config.Settings, path string, openSettings bool) (config.Settings, bool, bool, error) {
 	result, err := tea.NewProgram(newMenuModel(settings, path, openSettings), tea.WithAltScreen()).Run()
 	if err != nil {
-		return settings, false, err
+		return settings, false, false, err
 	}
 	model := result.(menuModel)
-	return model.settings, model.start, nil
+	return model.settings, model.start, model.projectEditor, nil
 }
