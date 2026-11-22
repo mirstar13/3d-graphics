@@ -79,6 +79,16 @@ with tempfile.TemporaryDirectory() as parent:
         s.send(b"\x1b"); s.wait(b"Stopped; authored scene preserved")
         with open(scene_path, "rb") as file:
             assert file.read() == authored, "Play changed saved scene"
+        # Parent a visual child through the inspector and keyboard picker.
+        s.send(b"\x1b[B\x1b[B"); s.wait(b"> Body")
+        s.send(b"e"); s.wait(b"Edit Body")
+        s.send(b"\x7f" * len("dynamic") + b"none\r"); s.wait(b"Property updated")
+        s.send(b"h"); s.wait(b"Parent picker")
+        s.send(b"\x1b[B\x1b[B"); s.wait(b"> Box [box]")
+        s.send(b"\r"); s.wait(b"Parent updated")
+        s.send(b"\x13"); s.wait(b"Saved scenes/main.yaml")
+        with open(scene_path, "rb") as file:
+            assert b"parent: box" in file.read()
         s.send(b"b"); s.wait(b"Added box")
         s.send(b"q"); s.wait(b"Unsaved edits")
         s.send(b"d"); s.close()
@@ -99,7 +109,8 @@ print("Project create/edit/save/play/pause/impulse/step/stop/discard/reopen/resi
 s=Session([])
 try:
     s.wait(b"3D Graphics")
-    s.send(b"e");s.wait(b"Project editor")
+    s.send(b"\x1b[B\x1b[B");s.wait(b"> Project editor")
+    s.send(b"\r");s.wait(b"N New project")
     s.send(b"q");s.wait(b"3D Graphics")
     s.send(b"\x1b");s.close()
 finally:

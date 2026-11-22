@@ -62,7 +62,7 @@ func TestStartMenuSettingsApplyAndBack(t *testing.T) {
 
 func TestStartMenuExitAndSmallScenePicker(t *testing.T) {
 	m := newMenuModel(config.Default(), "unused.yaml", false)
-	m.selected = 2
+	m.selected = 3
 	m, cmd := pressMenu(m, tea.KeyEnter)
 	if cmd == nil || m.start {
 		t.Fatal("exit should quit without rendering")

@@ -32,6 +32,7 @@ type projectEditorModel struct {
 	frame                                          []string
 	lastTick                                       time.Time
 	timerScheduled                                 bool
+	parentChoice                                   int
 }
 
 func newProjectEditor(settings config.Settings) projectEditorModel {
@@ -62,12 +63,12 @@ func (m *projectEditorModel) selectedEntity() (project.Entity, bool) {
 	if m.document == nil {
 		return project.Entity{}, false
 	}
-	entities := m.document.Document().Entities
+	entities := m.document.Document().Hierarchy()
 	if len(entities) == 0 {
 		return project.Entity{}, false
 	}
 	m.selected = max(0, min(m.selected, len(entities)-1))
-	return entities[m.selected], true
+	return entities[m.selected].Entity, true
 }
 func (m *projectEditorModel) refresh() {
 	m.selectedEntity()
@@ -188,6 +189,10 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		if m.modal != "" {
 			if key == "esc" || key == "ctrl+c" {
 				m.modal = ""
+				return m, nil
+			}
+			if m.modal == "parent" {
+				m.updateParentPicker(key)
 				return m, nil
 			}
 			if m.modal == "discard" {
@@ -357,6 +362,20 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			switch key {
+			case "h":
+				if e, ok := m.selectedEntity(); ok {
+					m.modal = "parent"
+					m.message = "Choose a parent; local pose stays unchanged"
+					if e.Body != "none" {
+						m.message = "Physics roots: set Body to none before parenting"
+					}
+					m.parentChoice = 0
+					for i, p := range m.document.Document().ParentChoices(e.ID) {
+						if p.ID == e.Parent {
+							m.parentChoice = i + 1
+						}
+					}
+				}
 			case "enter", "e":
 				if e, ok := m.selectedEntity(); ok {
 					m.focus = 1
@@ -368,10 +387,10 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				if key == "g" {
 					shape = "sphere"
 				}
-				if _, err := m.document.Add(shape); err != nil {
+				if id, err := m.document.Add(shape); err != nil {
 					m.message = err.Error()
 				} else {
-					m.selected = len(m.document.Document().Entities) - 1
+					m.selectID(id)
 					m.refresh()
 					m.message = "Added " + shape
 				}
@@ -381,25 +400,29 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 						m.message = err.Error()
 					} else {
 						m.refresh()
-						m.message = "Deleted object; Ctrl+Z undoes"
+						m.message = "Deleted subtree; Ctrl+Z undoes"
 					}
 				}
 			case "ctrl+d":
 				if e, ok := m.selectedEntity(); ok {
-					if _, err := m.document.Duplicate(e.ID); err != nil {
+					if id, err := m.document.Duplicate(e.ID); err != nil {
 						m.message = err.Error()
 					} else {
-						m.selected = len(m.document.Document().Entities) - 1
+						m.selectID(id)
 						m.refresh()
 					}
 				}
 			case "ctrl+z":
+				e, _ := m.selectedEntity()
 				if m.document.Undo() {
+					m.selectID(e.ID)
 					m.refresh()
 					m.message = "Undo"
 				}
 			case "ctrl+y":
+				e, _ := m.selectedEntity()
 				if m.document.Redo() {
+					m.selectID(e.ID)
 					m.refresh()
 					m.message = "Redo"
 				}
@@ -430,14 +453,14 @@ func (m projectEditorModel) View() string {
 		}
 		fmt.Fprintf(&out, "Project editor - %s%s [%s]%s\nResource: %s\n", m.project.Manifest.Name, dirty, mode, runtimeStatus, m.project.Manifest.EntryScene)
 		side := []string{"Hierarchy (Tab switches focus)"}
-		entities := m.document.Document().Entities
+		entities := m.document.Document().Hierarchy()
 		first := max(0, m.selected-2)
 		for i := first; i < min(len(entities), first+4); i++ {
 			prefix := "  "
 			if i == m.selected {
 				prefix = "> "
 			}
-			side = append(side, prefix+entities[i].Name)
+			side = append(side, prefix+strings.Repeat("  ", min(entities[i].Depth, 8))+entities[i].Name)
 		}
 		if len(entities) == 0 {
 			side = append(side, "(empty: B box / G sphere)")
@@ -446,7 +469,7 @@ func (m projectEditorModel) View() string {
 		if m.focus == 1 {
 			focus = "Inspector"
 		}
-		side = append(side, "", "Inspector - focus: "+focus)
+		side = append(side, "", "Inspector (local) - focus: "+focus)
 		if e, ok := m.selectedEntity(); ok {
 			first = max(0, m.property-1)
 			visible := max(2, len(m.frame)-len(side))
@@ -477,10 +500,10 @@ func (m projectEditorModel) View() string {
 					if i == m.selected {
 						prefix = "> "
 					}
-					side = append(side, prefix+entities[i].Name)
+					side = append(side, prefix+strings.Repeat("  ", min(entities[i].Depth, 8))+entities[i].Name)
 				}
 			} else if e, ok := m.selectedEntity(); ok {
-				side = append(side, "Inspector (Tab: Hierarchy)")
+				side = append(side, "Inspector (local; Tab: Hierarchy)")
 				first := max(0, m.property-contentHeight+2)
 				for i := first; i < min(len(project.Properties), first+contentHeight-1); i++ {
 					p := project.Properties[i]
@@ -509,11 +532,30 @@ func (m projectEditorModel) View() string {
 				out.WriteString(line + "\n")
 			}
 		}
-		out.WriteString("B box / G sphere | E edit | Del delete | Ctrl+D duplicate\nCtrl+S save | Ctrl+Z/Y undo/redo | Ctrl+N/O new/open\nP/F5 Play | Space pause | N step | I impulse | F8/Esc Stop\n1/2/3 camera | +/- zoom | Q exit editor\n")
+		out.WriteString("B box / G sphere | E edit | Del delete | Ctrl+D duplicate\nCtrl+S save | Ctrl+Z/Y undo/redo | Ctrl+N/O new/open\nP/F5 Play | Space pause | N step | I impulse | F8/Esc Stop\nH parent | 1/2/3 camera | +/- zoom | Q exit editor\n")
 	}
 	if m.modal != "" {
 		if m.modal == "discard" {
 			out.WriteString("\nUnsaved edits: D discard | Esc cancel\n")
+		} else if m.modal == "parent" {
+			e, ok := m.selectedEntity()
+			if ok {
+				choices := m.document.Document().ParentChoices(e.ID)
+				out.WriteString("\nParent picker (keeps LOCAL pose)\n")
+				first := max(0, m.parentChoice-1)
+				for i := first; i < min(len(choices)+1, first+3); i++ {
+					label := "Scene root"
+					if i > 0 {
+						label = choices[i-1].Name + " [" + choices[i-1].ID + "]"
+					}
+					prefix := "  "
+					if i == m.parentChoice {
+						prefix = "> "
+					}
+					out.WriteString(prefix + label + "\n")
+				}
+				out.WriteString("Up/Down choose | Enter apply | Esc cancel\n")
+			}
 		} else if m.modal == "property" {
 			p := project.Properties[m.property]
 			fmt.Fprintf(&out, "\nEdit %s %s %v: %s_\nEnter apply | Esc cancel\n", p.Label, p.Units, p.Choices, m.draft)
@@ -545,4 +587,42 @@ func runProjectEditor(settings config.Settings, path string) error {
 	}
 	_, err := tea.NewProgram(m, tea.WithAltScreen()).Run()
 	return err
+}
+
+// selectID preserves identity when tree order changes after a document command.
+func (m *projectEditorModel) selectID(id string) {
+	for i, e := range m.document.Document().Hierarchy() {
+		if e.ID == id {
+			m.selected = i
+			return
+		}
+	}
+}
+func (m *projectEditorModel) updateParentPicker(key string) {
+	e, ok := m.selectedEntity()
+	if !ok {
+		m.modal = ""
+		return
+	}
+	choices := m.document.Document().ParentChoices(e.ID)
+	count := len(choices) + 1
+	switch key {
+	case "up":
+		m.parentChoice = (m.parentChoice + count - 1) % count
+	case "down", "tab":
+		m.parentChoice = (m.parentChoice + 1) % count
+	case "enter":
+		parent := ""
+		if m.parentChoice > 0 {
+			parent = choices[m.parentChoice-1].ID
+		}
+		if err := m.document.Reparent(e.ID, parent); err != nil {
+			m.message = err.Error()
+			return
+		}
+		m.modal = ""
+		m.selectID(e.ID)
+		m.refresh()
+		m.message = "Parent updated; local pose preserved"
+	}
 }

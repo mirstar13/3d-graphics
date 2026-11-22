@@ -99,9 +99,9 @@ func (m menuModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	case "esc", "q":
 		return m, tea.Quit
 	case "up", "k":
-		m.selected = (m.selected + 2) % 3
+		m.selected = (m.selected + 3) % 4
 	case "down", "j", "tab":
-		m.selected = (m.selected + 1) % 3
+		m.selected = (m.selected + 1) % 4
 	case "enter":
 		switch m.selected {
 		case 0:
@@ -109,6 +109,9 @@ func (m menuModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case 1:
 			m.openSettings()
 		case 2:
+			m.projectEditor = true
+			return m, tea.Quit
+		case 3:
 			return m, tea.Quit
 		}
 	}
@@ -120,7 +123,7 @@ func (m menuModel) View() string {
 		return m.editor.View()
 	}
 	title, help := "3D Graphics", "Up/Down select | Enter open | E project editor | Esc exit"
-	items := []string{"New scene", "Settings", "Exit"}
+	items := []string{"New scene", "Settings", "Project editor", "Exit"}
 	selected := m.selected
 	if m.page == scenePage {
 		title, help = "New scene", "Up/Down select | Enter start | Esc back"

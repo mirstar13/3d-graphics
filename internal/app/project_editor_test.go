@@ -117,3 +117,91 @@ func TestEditorUnicodeLayout(t *testing.T) {
 		t.Fatal("wide characters overflow viewport", view)
 	}
 }
+
+func TestSelectableEditorMenuAndWrap(t *testing.T) {
+	m := newMenuModel(config.Default(), "unused", false)
+	m, _ = pressMenu(m, tea.KeyDown)
+	m, _ = pressMenu(m, tea.KeyDown)
+	if !strings.Contains(m.View(), "> Project editor") {
+		t.Fatal(m.View())
+	}
+	opened, cmd := pressMenu(m, tea.KeyEnter)
+	if cmd == nil || !opened.projectEditor || opened.start {
+		t.Fatal("menu did not open editor")
+	}
+	m, _ = pressMenu(m, tea.KeyDown)
+	if !strings.Contains(m.View(), "> Exit") {
+		t.Fatal(m.View())
+	}
+	m, _ = pressMenu(m, tea.KeyDown)
+	if m.selected != 0 {
+		t.Fatal("down wrap")
+	}
+	m, _ = pressMenu(m, tea.KeyUp)
+	if m.selected != 3 {
+		t.Fatal("up wrap")
+	}
+}
+func TestEditorHierarchyPickerAndSelection(t *testing.T) {
+	p, err := project.Create(filepath.Join(t.TempDir(), "Game"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := newProjectEditor(config.Default())
+	if err = m.install(p); err != nil {
+		t.Fatal(err)
+	}
+	m, _ = editorRune(m, "g")
+	e, _ := m.selectedEntity()
+	id := e.ID
+	if err = m.document.Set(id, "body", "none"); err != nil {
+		t.Fatal(err)
+	}
+	m.refresh()
+	m, _ = editorRune(m, "h")
+	if m.modal != "parent" || !strings.Contains(m.View(), "Scene root") {
+		t.Fatal(m.View())
+	}
+	m, _ = editorRune(m, "p")
+	if m.play != nil || m.modal != "parent" {
+		t.Fatal("picker leaked play")
+	}
+	// Root, Floor, Box: choose Box.
+	m, _ = editorKey(m, tea.KeyMsg{Type: tea.KeyDown})
+	m, _ = editorKey(m, tea.KeyMsg{Type: tea.KeyDown})
+	m, _ = editorKey(m, tea.KeyMsg{Type: tea.KeyEnter})
+	e, _ = m.selectedEntity()
+	if e.ID != id || e.Parent != "box" || m.modal != "" {
+		t.Fatal("parent/selection", e, m.modal)
+	}
+	m, _ = editorKey(m, tea.KeyMsg{Type: tea.KeyCtrlZ})
+	e, _ = m.selectedEntity()
+	if e.ID != id || e.Parent != "" {
+		t.Fatal("undo selection")
+	}
+	m, _ = editorKey(m, tea.KeyMsg{Type: tea.KeyCtrlY})
+	// Duplicating a selected subtree selects the copied root, not its last child.
+	m.selectID("box")
+	m, _ = editorKey(m, tea.KeyMsg{Type: tea.KeyCtrlD})
+	e, _ = m.selectedEntity()
+	if e.ID == "box" || e.Name != "Box copy" || len(m.document.Document().SubtreeIDs(e.ID)) != 2 {
+		t.Fatal("duplicate selection", e)
+	}
+	m, _ = editorKey(m, tea.KeyMsg{Type: tea.KeyDelete})
+	if len(m.document.Document().Entities) != 3 {
+		t.Fatal("delete did not remove subtree")
+	}
+	m.selectID(id)
+	m, _ = editorRune(m, "h")
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 40, Height: 14})
+	m = next.(projectEditorModel)
+	if !strings.Contains(m.View(), "Enter apply") {
+		t.Fatal("small picker", m.View())
+	}
+	m, _ = editorKey(m, tea.KeyMsg{Type: tea.KeyEsc})
+	m, _ = editorRune(m, "p")
+	m, _ = editorRune(m, "h")
+	if m.modal != "" {
+		t.Fatal("parenting allowed in play")
+	}
+}
