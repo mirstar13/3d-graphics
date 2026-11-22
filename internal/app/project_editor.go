@@ -33,6 +33,11 @@ type projectEditorModel struct {
 	lastTick                                       time.Time
 	timerScheduled                                 bool
 	parentChoice                                   int
+	activeResource                                 *project.Resource
+	resourcePath                                   string
+	assets                                         []project.ResourceInfo
+	assetSelected                                  int
+	assetTarget                                    string
 }
 
 func newProjectEditor(settings config.Settings) projectEditorModel {
@@ -48,11 +53,14 @@ func (m *projectEditorModel) install(p *project.Project) error {
 	if err != nil {
 		return err
 	}
+	m.activeResource = nil
+	m.resourcePath = ""
 	m.project = p
 	m.document = ed
 	m.preview = preview
 	m.play = nil
 	m.selected = 0
+	m.focus = 0
 	m.property = 0
 	m.modal = ""
 	m.message = "Opened " + p.Manifest.Name
@@ -89,7 +97,7 @@ func (m *projectEditorModel) renderPreview() {
 		m.frame = nil
 		return
 	}
-	w, h := max(12, min(70, (m.width-3)/2)), max(4, min(26, m.height-9))
+	w, h := max(12, min(70, (m.width-3)/2)), max(4, min(26, m.height-10))
 	if m.width < 65 {
 		w = max(12, m.width-2)
 		h = 4
@@ -122,11 +130,24 @@ func (m *projectEditorModel) save() {
 	if m.document == nil {
 		return
 	}
-	if err := m.project.Save(m.document.Document()); err != nil {
+	var err error
+	path := m.project.Manifest.EntryScene
+	if m.activeResource != nil {
+		resource := *m.activeResource
+		resource.Scene = m.document.Document()
+		err = m.project.SaveResource(m.resourcePath, resource)
+		path = m.resourcePath
+		if err == nil {
+			m.activeResource = &resource
+		}
+	} else {
+		err = m.project.Save(m.document.Document())
+	}
+	if err != nil {
 		m.message = err.Error()
 	} else {
 		m.document.MarkSaved()
-		m.message = "Saved " + m.project.Manifest.EntryScene
+		m.message = "Saved " + path
 	}
 }
 func (m *projectEditorModel) begin(action string) tea.Cmd {
@@ -139,12 +160,7 @@ func (m *projectEditorModel) begin(action string) tea.Cmd {
 		m.pendingAction = action
 		return nil
 	}
-	if action == "quit" {
-		return tea.Quit
-	}
-	m.modal = action
-	m.draft = ""
-	return nil
+	return m.finishAction(action)
 }
 func (m *projectEditorModel) startPlay() tea.Cmd {
 	if m.document == nil {
@@ -191,6 +207,10 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				m.modal = ""
 				return m, nil
 			}
+			if m.modal == "assets" {
+				cmd := m.updateAssets(key)
+				return m, cmd
+			}
 			if m.modal == "parent" {
 				m.updateParentPicker(key)
 				return m, nil
@@ -199,11 +219,8 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				if key == "d" {
 					action := m.pendingAction
 					m.modal = ""
-					if action == "quit" {
-						return m, tea.Quit
-					}
-					m.modal = action
-					m.draft = ""
+					cmd := m.finishAction(action)
+					return m, cmd
 				}
 				return m, nil
 			}
@@ -223,6 +240,15 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					if err == nil {
 						err = m.install(p)
+					}
+				case "extract":
+					if e, ok := m.selectedEntity(); ok {
+						var path string
+						path, err = m.project.Extract(m.document.Document(), e.ID, strings.TrimSpace(m.draft))
+						if err == nil {
+							m.modal = ""
+							m.message = "Created resource " + path + "; A browses resources"
+						}
 					}
 				case "property":
 					if e, ok := m.selectedEntity(); ok {
@@ -362,6 +388,8 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			switch key {
+			case "a", "r", "ctrl+r", "ctrl+u", "ctrl+t":
+				m.resourceCommand(key)
 			case "h":
 				if e, ok := m.selectedEntity(); ok {
 					m.modal = "parent"
@@ -451,9 +479,18 @@ func (m projectEditorModel) View() string {
 		if m.play != nil {
 			runtimeStatus = fmt.Sprintf(" Tick:%d Pending:%d", m.play.World.Stats().Tick, m.play.PendingCommands())
 		}
-		fmt.Fprintf(&out, "Project editor - %s%s [%s]%s\nResource: %s\n", m.project.Manifest.Name, dirty, mode, runtimeStatus, m.project.Manifest.EntryScene)
+		path := m.project.Manifest.EntryScene
+		if m.activeResource != nil {
+			path = m.resourcePath + " [SOURCE]"
+		}
+		fmt.Fprintf(&out, "Project editor - %s%s [%s]%s\nResource: %s\n", m.project.Manifest.Name, dirty, mode, runtimeStatus, path)
 		side := []string{"Hierarchy (Tab switches focus)"}
 		entities := m.document.Document().Hierarchy()
+		for i := range entities {
+			if _, _, ok := m.document.Document().Link(entities[i].ID); ok {
+				entities[i].Name += " [linked]"
+			}
+		}
 		first := max(0, m.selected-2)
 		for i := first; i < min(len(entities), first+4); i++ {
 			prefix := "  "
@@ -474,7 +511,7 @@ func (m projectEditorModel) View() string {
 			first = max(0, m.property-1)
 			visible := max(2, len(m.frame)-len(side))
 			for i := first; i < min(len(project.Properties), first+visible); i++ {
-				p := project.Properties[i]
+				p := m.inspectorProperty(i, e)
 				prefix := "  "
 				if i == m.property {
 					prefix = "> "
@@ -489,7 +526,7 @@ func (m projectEditorModel) View() string {
 				}
 			}
 		}
-		contentHeight := max(1, m.height-9)
+		contentHeight := max(1, m.height-10)
 		if m.width < 65 || contentHeight < 10 {
 			side = nil
 			if m.focus == 0 {
@@ -506,7 +543,7 @@ func (m projectEditorModel) View() string {
 				side = append(side, "Inspector (local; Tab: Hierarchy)")
 				first := max(0, m.property-contentHeight+2)
 				for i := first; i < min(len(project.Properties), first+contentHeight-1); i++ {
-					p := project.Properties[i]
+					p := m.inspectorProperty(i, e)
 					prefix := "  "
 					if i == m.property {
 						prefix = "> "
@@ -532,11 +569,15 @@ func (m projectEditorModel) View() string {
 				out.WriteString(line + "\n")
 			}
 		}
-		out.WriteString("B box / G sphere | E edit | Del delete | Ctrl+D duplicate\nCtrl+S save | Ctrl+Z/Y undo/redo | Ctrl+N/O new/open\nP/F5 Play | Space pause | N step | I impulse | F8/Esc Stop\nH parent | 1/2/3 camera | +/- zoom | Q exit editor\n")
+		out.WriteString("B box / G sphere | E edit | Del delete | Ctrl+D duplicate\nCtrl+S save | Ctrl+Z/Y undo/redo | Ctrl+N/O new/open\nP/F5 Play | Space pause | N step | I impulse | F8/Esc Stop\nH parent | 1/2/3 camera | +/- zoom | Q exit editor\nA assets | R extract | Ctrl+R refresh | Ctrl+U unpack | Ctrl+T reset\n")
 	}
 	if m.modal != "" {
 		if m.modal == "discard" {
 			out.WriteString("\nUnsaved edits: D discard | Esc cancel\n")
+		} else if m.modal == "assets" {
+			out.WriteString(m.resourceBrowser())
+		} else if m.modal == "extract" {
+			fmt.Fprintf(&out, "\nResource name: %s_\nEnter create | Esc cancel\n", m.draft)
 		} else if m.modal == "parent" {
 			e, ok := m.selectedEntity()
 			if ok {

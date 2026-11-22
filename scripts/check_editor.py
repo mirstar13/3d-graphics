@@ -104,6 +104,49 @@ with tempfile.TemporaryDirectory() as parent:
         s.send(b"q"); s.close()
     finally:
         s.cleanup()
+    s = Session(["-project", root])
+    try:
+        s.wait(b"Opened Example")
+        s.send(b"\x1b[B"); s.wait(b"> Box")
+        s.send(b"r"); s.wait(b"Resource name")
+        s.send(b"\x7f" * 3 + b"Assembly\r"); s.wait(b"Created resource")
+        for _ in range(2):
+            s.send(b"a"); s.wait(b"Scene resources")
+            s.send(b"\x1b[B"); s.wait(b"> Assembly")
+            s.send(b"\r"); s.wait(b"Instantiated Assembly")
+        s.send(b"e"); s.wait(b"Edit Name")
+        s.send(b"\x7f" * 3 + b"Custom\r"); s.wait(b"Property updated")
+        s.send(b"\x13"); s.wait(b"Saved scenes/main.yaml")
+        s.send(b"a"); s.wait(b"Scene resources")
+        s.send(b"\x1b[B"); s.wait(b"> Assembly")
+        s.send(b"e"); s.wait(b"Editing source: Assembly")
+        s.send(b"e"); s.wait(b"Edit Name")
+        s.send(b"\x7f" * 3 + b"SourceBox\r"); s.wait(b"Property updated")
+        s.send(b"\x13"); s.wait(b"Saved resources/")
+        s.send(b"a"); s.wait(b"Scene resources")
+        s.send(b"\r"); s.wait(b"Opened Example")
+        s.send(b"\x12"); s.wait(b"Links refreshed")
+        s.send(b"\x1b[B" * 5); s.wait(b"> Custom [linked]")
+        s.send(b"\x14"); s.wait(b"Property override reset")
+        s.send(b"\x1a"); s.wait(b"Undo")
+        s.send(b"\x15"); s.wait(b"Instance unpacked")
+        s.send(b"\x13"); s.wait(b"Saved scenes/main.yaml")
+        s.send(b"p"); s.wait(b"[PLAY]")
+        s.send(b"\x1b"); s.wait(b"Stopped; authored scene preserved")
+        s.send(b"q"); s.close()
+        with open(scene_path, "rb") as file:
+            saved = file.read()
+        assert b"instances:" in saved and b"name: Custom" in saved
+    finally:
+        s.cleanup()
+    s = Session(["-project", root])
+    try:
+        s.wait(b"Opened Example")
+        s.send(b"\x1b[B" * 3); s.wait(b"SourceBox [linked]")
+        s.send(b"q"); s.close()
+    finally:
+        s.cleanup()
+print("Linked resources extract/instantiate/source edit/override/reset/unpack/reopen PASS")
 print("Project create/edit/save/play/pause/impulse/step/stop/discard/reopen/resize PASS")
 
 s=Session([])
