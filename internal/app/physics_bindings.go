@@ -2,8 +2,8 @@ package app
 
 import (
 	"fmt"
-	"github.com/mirstar13/go-3d-graphics/internal/demo"
 	"github.com/mirstar13/go-3d-graphics/internal/engine"
+	"github.com/mirstar13/go-3d-graphics/internal/game"
 	"github.com/mirstar13/go-3d-graphics/internal/physics"
 )
 
@@ -15,7 +15,7 @@ type bodyBinding struct {
 }
 type jointVisual struct {
 	id   physics.JointID
-	spec demo.JointSpec
+	spec game.JointSpec
 	node *engine.SceneNode
 }
 
@@ -26,7 +26,7 @@ type physicsBindings struct {
 	items  []bodyBinding
 }
 
-func newPhysicsBindings(world *physics.World, scene *engine.Scene, specs []demo.BodySpec) (*physicsBindings, error) {
+func newPhysicsBindings(world *physics.World, scene *engine.Scene, specs []game.BodySpec) (*physicsBindings, error) {
 	bindings := &physicsBindings{world: world, scene: scene}
 	for _, spec := range specs {
 		if err := bindings.add(spec); err != nil {
@@ -35,7 +35,7 @@ func newPhysicsBindings(world *physics.World, scene *engine.Scene, specs []demo.
 	}
 	return bindings, nil
 }
-func (b *physicsBindings) add(spec demo.BodySpec) error {
+func (b *physicsBindings) add(spec game.BodySpec) error {
 	node := spec.Node
 	if node == nil || node.Parent != b.scene.Root || node.Transform.Scale != (engine.Point{X: 1, Y: 1, Z: 1}) || b.scene.Root.Transform.GetWorldMatrix() != engine.IdentityMatrix() {
 		return fmt.Errorf("physics binding requires an unscaled visual under the identity scene root")
@@ -117,7 +117,7 @@ func (b *physicsBindings) present(alpha float64) {
 	b.updateJointVisuals()
 }
 
-func (b *physicsBindings) addJoints(specs []demo.JointSpec) error {
+func (b *physicsBindings) addJoints(specs []game.JointSpec) error {
 	find := func(node *engine.SceneNode) (physics.BodyID, error) {
 		for _, binding := range b.items {
 			if binding.node == node {

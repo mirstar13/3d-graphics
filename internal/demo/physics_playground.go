@@ -3,6 +3,7 @@ package demo
 import (
 	"fmt"
 	"github.com/mirstar13/go-3d-graphics/internal/engine"
+	"github.com/mirstar13/go-3d-graphics/internal/game"
 	"github.com/mirstar13/go-3d-graphics/internal/physics"
 	"math"
 )
@@ -12,13 +13,7 @@ const PhysicsPlayground = 6
 
 // BodySpec explicitly binds a procedural visual to independent collision geometry.
 // The application creates bodies and owns the resulting ID-to-node registry.
-type BodySpec struct {
-	// VisualOffset is the local vector from body centre of mass to visual origin.
-	VisualOffset engine.Point
-	Node         *engine.SceneNode
-	Desc         physics.BodyDesc
-	Target       func(float64) (engine.Point, engine.Quaternion)
-}
+type BodySpec = game.BodySpec
 
 func playgroundBox(scene *engine.Scene, name string, p, half engine.Point, color engine.Color) *engine.SceneNode {
 	node := box(scene, name, p.X, p.Y, p.Z, 1, 1, 1, color)
@@ -143,10 +138,7 @@ func PhysicsSpecs(scene *engine.Scene, index int) ([]BodySpec, error) {
 
 // JointSpec binds visual nodes through the application's body registry. A nil B
 // denotes a world anchor; the descriptor's BodyIDs are assigned by the application.
-type JointSpec struct {
-	A, B *engine.SceneNode
-	Desc physics.JointDesc
-}
+type JointSpec = game.JointSpec
 
 // PhysicsJoints describes constraints between registered body visuals or world anchors.
 func PhysicsJoints(scene *engine.Scene, index int) []JointSpec {
