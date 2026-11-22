@@ -20,10 +20,12 @@ type Manifest struct {
 	EntryScene string `yaml:"entry_scene"`
 }
 
-// Entity is a root-level primitive in the first authoring schema. Size contains
+// Entity is an authored primitive with an optional persistent parent ID.
+// Position and Rotation are local to the parent. Size contains
 // box half extents or the sphere radius in X; Rotation is Euler degrees.
 type Entity struct {
 	ID       string       `yaml:"id"`
+	Parent   string       `yaml:"parent,omitempty"`
 	Name     string       `yaml:"name"`
 	Shape    string       `yaml:"shape"`
 	Body     string       `yaml:"body"`
@@ -111,5 +113,5 @@ func (d Document) Validate() error {
 			return fmt.Errorf("entity %s: mass outside 0.01..10000 kg", e.ID)
 		}
 	}
-	return nil
+	return d.validateHierarchy()
 }

@@ -134,32 +134,64 @@ func (e *Editor) Add(shape string) (string, error) {
 	next.Entities = append(next.Entities, entity)
 	return id, e.change(next)
 }
+
+// Delete removes a complete subtree as one undoable edit.
 func (e *Editor) Delete(id string) error {
 	next := e.Document()
-	for i, v := range next.Entities {
-		if v.ID == id {
-			next.Entities = append(next.Entities[:i], next.Entities[i+1:]...)
-			return e.change(next)
+	removed := map[string]bool{}
+	for _, id := range next.SubtreeIDs(id) {
+		removed[id] = true
+	}
+	if len(removed) == 0 {
+		return fmt.Errorf("entity no longer exists")
+	}
+	kept := next.Entities[:0]
+	for _, v := range next.Entities {
+		if !removed[v.ID] {
+			kept = append(kept, v)
 		}
 	}
-	return fmt.Errorf("entity no longer exists")
+	next.Entities = kept
+	return e.change(next)
 }
+
+// Duplicate copies a subtree, remapping internal links and retaining its external
+// parent. Only the new root receives a +1 local-X offset.
 func (e *Editor) Duplicate(id string) (string, error) {
 	next := e.Document()
-	for _, v := range next.Entities {
-		if v.ID == id {
-			newID, err := newID()
-			if err != nil {
-				return "", err
+	ids := next.SubtreeIDs(id)
+	if len(ids) == 0 {
+		return "", fmt.Errorf("entity no longer exists")
+	}
+	if len(next.Entities)+len(ids) > MaxEntities {
+		return "", fmt.Errorf("scene exceeds %d entities", MaxEntities)
+	}
+	remap := map[string]string{}
+	for _, old := range ids {
+		fresh, err := newID()
+		if err != nil {
+			return "", err
+		}
+		remap[old] = fresh
+	}
+	for _, v := range e.document.Entities {
+		if fresh, ok := remap[v.ID]; ok {
+			if v.ID == id {
+				name := []rune(v.Name)
+				v.Name = string(name[:min(len(name), 75)]) + " copy"
+				v.Position.X += 1
 			}
-			v.ID = newID
-			v.Name += " copy"
-			v.Position.X += 1
+			v.ID = fresh
+			if parent, ok := remap[v.Parent]; ok {
+				v.Parent = parent
+			}
 			next.Entities = append(next.Entities, v)
-			return newID, e.change(next)
 		}
 	}
-	return "", fmt.Errorf("entity no longer exists")
+	if err := e.change(next); err != nil {
+		return "", err
+	}
+	return remap[id], nil
 }
 func (e *Editor) Undo() bool {
 	if len(e.past) == 0 {
