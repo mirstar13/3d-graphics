@@ -38,12 +38,26 @@ type Entity struct {
 
 // Document contains authored state only, never live handles, velocities or caches.
 type Document struct {
-	Version  int      `yaml:"version"`
-	Name     string   `yaml:"name"`
-	Entities []Entity `yaml:"entities"`
+	Version   int        `yaml:"version"`
+	Name      string     `yaml:"name"`
+	Entities  []Entity   `yaml:"entities"`
+	Instances []Instance `yaml:"instances,omitempty"`
+	// RootOrder is serialization metadata consumed by Project.Resolve.
+	RootOrder []string `yaml:"root_order,omitempty"`
 }
 
-func (d Document) Clone() Document { d.Entities = append([]Entity(nil), d.Entities...); return d }
+func (d Document) Clone() Document {
+	d.Entities = append([]Entity(nil), d.Entities...)
+	d.RootOrder = append([]string(nil), d.RootOrder...)
+	if d.Instances != nil {
+		instances := make([]Instance, len(d.Instances))
+		for i, in := range d.Instances {
+			instances[i] = cloneInstance(in)
+		}
+		d.Instances = instances
+	}
+	return d
+}
 
 // NewDocument supplies a static floor and a falling box for a complete play loop.
 func NewDocument() Document {
@@ -113,5 +127,8 @@ func (d Document) Validate() error {
 			return fmt.Errorf("entity %s: mass outside 0.01..10000 kg", e.ID)
 		}
 	}
-	return d.validateHierarchy()
+	if err := d.validateHierarchy(); err != nil {
+		return err
+	}
+	return d.validateInstances()
 }

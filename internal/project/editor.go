@@ -108,6 +108,7 @@ func (e *Editor) Set(id, key, value string) error {
 					if err := p.Set(&next.Entities[i], value); err != nil {
 						return err
 					}
+					next.recordOverride(id, key, p.Get(next.Entities[i]))
 					return e.change(next)
 				}
 			}
@@ -138,6 +139,15 @@ func (e *Editor) Add(shape string) (string, error) {
 // Delete removes a complete subtree as one undoable edit.
 func (e *Editor) Delete(id string) error {
 	next := e.Document()
+	if i, _, ok := next.Link(id); ok {
+		if next.Instances[i].Root != id {
+			return fmt.Errorf("delete the instance root or unpack before deleting a member")
+		}
+		next.Instances = append(next.Instances[:i], next.Instances[i+1:]...)
+		if len(next.Instances) == 0 {
+			next.Instances = nil
+		}
+	}
 	removed := map[string]bool{}
 	for _, id := range next.SubtreeIDs(id) {
 		removed[id] = true
@@ -159,6 +169,9 @@ func (e *Editor) Delete(id string) error {
 // parent. Only the new root receives a +1 local-X offset.
 func (e *Editor) Duplicate(id string) (string, error) {
 	next := e.Document()
+	if i, _, ok := next.Link(id); ok && next.Instances[i].Root != id {
+		return "", fmt.Errorf("duplicate the instance root or unpack first")
+	}
 	ids := next.SubtreeIDs(id)
 	if len(ids) == 0 {
 		return "", fmt.Errorf("entity no longer exists")
@@ -186,6 +199,23 @@ func (e *Editor) Duplicate(id string) (string, error) {
 				v.Parent = parent
 			}
 			next.Entities = append(next.Entities, v)
+		}
+	}
+	for _, in := range e.document.Instances {
+		if fresh, ok := remap[in.Root]; ok {
+			copy := cloneInstance(in)
+			copy.Root = fresh
+			for source, target := range copy.Members {
+				copy.Members[source] = remap[target]
+			}
+			next.Instances = append(next.Instances, copy)
+		}
+	}
+	for _, v := range next.Entities {
+		if v.ID == remap[id] {
+			next.recordOverride(v.ID, "name", v.Name)
+			prop, _ := property("position.x")
+			next.recordOverride(v.ID, "position.x", prop.Get(v))
 		}
 	}
 	if err := e.change(next); err != nil {

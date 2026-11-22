@@ -70,6 +70,12 @@ func (d Document) SubtreeIDs(id string) []string {
 // Use an empty parent to detach to the root. Validation is atomic with undo history.
 func (e *Editor) Reparent(id, parent string) error {
 	next := e.Document()
+	if _, _, ok := next.Link(id); ok {
+		return fmt.Errorf("unpack the instance before reparenting")
+	}
+	if _, _, ok := next.Link(parent); ok {
+		return fmt.Errorf("unpack the destination instance before parenting into it")
+	}
 	for i := range next.Entities {
 		if next.Entities[i].ID == id {
 			next.Entities[i].Parent = parent

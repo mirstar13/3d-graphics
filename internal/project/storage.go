@@ -51,17 +51,36 @@ func scenePath(root, entry string) (string, error) {
 	if e != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", fmt.Errorf("entry_scene escapes project")
 	}
-	// Existing scene resources must also resolve within the project through symlinks.
-	if resolved, e := filepath.EvalSymlinks(path); e == nil {
-		base, e := filepath.EvalSymlinks(root)
-		if e != nil {
-			return "", e
-		}
-		rel, e = filepath.Rel(base, resolved)
-		if e != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return "", fmt.Errorf("entry_scene resolves outside project")
-		}
+	// Resolve the nearest existing ancestor, not just the final file. A new
+	// resource beneath a symlinked directory must obey the same containment rule.
+	base, e := filepath.EvalSymlinks(root)
+	if e != nil {
+		return "", e
 	}
+	probe := path
+	for {
+		resolved, err := filepath.EvalSymlinks(probe)
+		if err == nil {
+			rel, err = filepath.Rel(base, resolved)
+			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				return "", fmt.Errorf("project path resolves outside project")
+			}
+			break
+		}
+		if !os.IsNotExist(err) {
+			return "", err
+		}
+		// A dangling symlink is an error, not an absent ordinary destination.
+		if info, err := os.Lstat(probe); err == nil && info.Mode()&os.ModeSymlink != 0 {
+			return "", fmt.Errorf("dangling project symlink")
+		}
+		parent := filepath.Dir(probe)
+		if parent == probe {
+			return "", fmt.Errorf("cannot resolve project path")
+		}
+		probe = parent
+	}
+
 	return path, nil
 }
 
@@ -85,7 +104,7 @@ func Open(root string) (*Project, error) {
 	if e = decode(path, &p.Scene); e != nil {
 		return nil, fmt.Errorf("scene: %w", e)
 	}
-	if e = p.Scene.Validate(); e != nil {
+	if p.Scene, e = p.Resolve(p.Scene); e != nil {
 		return nil, e
 	}
 	return p, nil
@@ -94,6 +113,9 @@ func writeAtomic(path string, value any) error {
 	data, e := yaml.Marshal(value)
 	if e != nil {
 		return e
+	}
+	if len(data) > 1<<20 {
+		return fmt.Errorf("document exceeds 1 MiB")
 	}
 	f, e := os.CreateTemp(filepath.Dir(path), ".scene-*.yaml")
 	if e != nil {
@@ -156,7 +178,11 @@ func (p *Project) Save(d Document) error {
 	if e != nil {
 		return e
 	}
-	if e = writeAtomic(path, d); e != nil {
+	serialized := d.compact()
+	if _, e = p.Resolve(serialized); e != nil {
+		return e
+	}
+	if e = writeAtomic(path, serialized); e != nil {
 		return e
 	}
 	p.Scene = d.Clone()
