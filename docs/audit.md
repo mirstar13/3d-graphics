@@ -267,3 +267,23 @@ offset, including interpolation and joint-link anchor conversion. Tests cover
 analytic two-mass inertia, rotated off-diagonal terms, tensor inversion, mass
 changes, off-centre impulses, joint anchors, mesh contacts, and immutable snapshots.
 The playground adds an asymmetrically weighted dumbbell. Compound CCD is rejected.
+
+## Authored convex hulls
+
+Hull validation checks finite/unique vertices, closed consistently wound topology,
+convexity, nondegenerate faces, volume, and positive-definite mass properties.
+Mass integration first shifts the asset near the origin to reduce cancellation;
+volume moments supply centre of mass and full inertia. Coplanar triangles merge
+into convex face boundaries, removing internal diagonals from collision axes.
+
+For this bounded low-poly implementation (64 vertices/128 input triangles), SAT
+and face clipping replace the planned GJK/EPA path. Sphere contacts use closest
+surface points; hull/box/hull pairs use face and edge axes; hull/mesh contacts use
+triangle SAT with the existing coplanar patch reduction. Contact manifolds retain
+up to four supporting points per shape pair. Hulls can be compound children.
+
+Tests compare box-shaped hulls with primitive boxes, check a tetrahedron's analytic
+mass properties, translated assets, thin valid hulls, invalid topology/concavity,
+reversed pair order, sleeping-disabled stacks on planes/meshes, seam traversal,
+and compound convex support. The playground adds a convex wedge. General convex
+distance queries, hull CCD, and automatic convex decomposition are not implemented.

@@ -1,8 +1,25 @@
 # Physics follow-up implementation plan
 
-Status: implementation in progress. Milestones 1–8 are implemented (CCD is limited to the initial supported pairs); subsequent milestones
-remain queued in the order below. Builds on the completed [rigid-body milestone](rigid-bodies-colliders-plan.md).
-This document tracks the remaining physics work.
+Status: milestones 1–9 are implemented, with the scope decisions below. Builds on
+the completed [rigid-body milestone](rigid-bodies-colliders-plan.md).
+
+## Delivered scope and deliberate variations
+
+- CCD covers dynamic spheres against static planes, boxes, and triangle meshes.
+  Other pairs, including sensors, retain discrete behavior. Query/impact budgets
+  can conservatively stop motion; no unrestricted CCD guarantee is made.
+- Joints include rigid distance, ball-and-socket, and hinge constraints, hinge
+  limits, and torque-limited motors. Compliance and breakage remain extensions.
+- Authored convex hulls use bounded-size SAT and face clipping, reusing the box
+  solver's manifold conventions. This replaces the originally proposed GJK/EPA
+  implementation for this release. It supports multi-point resting contacts and
+  primitive/mesh parity tests without introducing a second penetration algorithm.
+  General convex distance queries and conservative-advancement hull CCD remain
+  deferred, as do hull generation and automatic convex decomposition.
+- Compound convex parts provide moving complex objects; dynamic concave triangle
+  collision and soft bodies remain separate projects.
+
+The sections below retain the implementation sequence and acceptance criteria.
 
 ## Goal and priorities
 

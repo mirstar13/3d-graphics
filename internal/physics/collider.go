@@ -14,11 +14,13 @@ const (
 	PlaneShape
 	MeshShape
 	CompoundShape
+	HullShape
 )
 
 // Shape is immutable once constructed; body creation validates its dimensions.
 // Mesh geometry is copied and validated by NewTriangleMesh.
 type Shape struct {
+	hull     *convexHull
 	compound *compoundShape
 	kind     ShapeKind
 	radius   float64
@@ -77,6 +79,10 @@ func (c Collider) validate(kind BodyType) error {
 	case PlaneShape:
 		if kind != Static || !finitePoint(s.normal) || length(s.normal) < 1e-10 || !finite(s.offset) {
 			return fmt.Errorf("plane requires a static body and a finite nonzero normal")
+		}
+	case HullShape:
+		if s.hull == nil {
+			return fmt.Errorf("hull requires validated geometry")
 		}
 	case CompoundShape:
 		if s.compound == nil {
@@ -140,6 +146,12 @@ func bodyBounds(b *body) bounds {
 	s := b.state.Collider.Shape
 	p := b.state.Position
 	switch s.kind {
+	case HullShape:
+		result := emptyBounds()
+		for _, v := range s.hull.vertices {
+			result.include(add(b.state.Position, b.state.Rotation.RotateVector(v)))
+		}
+		return result
 	case CompoundShape:
 		result := emptyBounds()
 		for _, child := range s.compound.children {

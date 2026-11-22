@@ -35,6 +35,9 @@ func collide(a, b *body) []Contact {
 	if bk == CompoundShape {
 		return flipContacts(compoundContacts(b, a))
 	}
+	if ak == HullShape || bk == HullShape {
+		return hullPair(a, b)
+	}
 	if ak > bk {
 		return flipContacts(collide(b, a))
 	}

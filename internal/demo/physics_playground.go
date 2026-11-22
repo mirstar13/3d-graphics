@@ -49,6 +49,10 @@ func buildPlayground(scene *engine.Scene) {
 		node := playgroundBox(scene, fmt.Sprintf("DumbbellPart%d", i), child.Position, child.Shape.HalfExtents(), palette[2])
 		dumbbell.AddChild(node)
 	}
+	wedge := engine.NewMesh()
+	wedge.Vertices, wedge.Indices = wedgeGeometry()
+	wedge.Material = material(palette[0])
+	meshNode(scene, "Wedge", wedge, 4, 3, 8)
 	ramp := engine.NewMesh()
 	ramp.Vertices = rampVertices()
 	ramp.Indices = []int{0, 2, 1, 0, 3, 2}
@@ -118,6 +122,17 @@ func PhysicsSpecs(scene *engine.Scene, index int) ([]BodySpec, error) {
 	dumbbell.Desc.Position.Y += center.Y
 	dumbbell.Desc.Position.Z += center.Z
 	dumbbell.VisualOffset = engine.Point{X: -center.X, Y: -center.Y, Z: -center.Z}
+	vertices, indices := wedgeGeometry()
+	hull, err := physics.ConvexHull(vertices, indices)
+	if err != nil {
+		return nil, err
+	}
+	wedge := add("Wedge", physics.Dynamic, hull)
+	center = hull.CenterOfMass()
+	wedge.Desc.Position.X += center.X
+	wedge.Desc.Position.Y += center.Y
+	wedge.Desc.Position.Z += center.Z
+	wedge.VisualOffset = engine.Point{X: -center.X, Y: -center.Y, Z: -center.Z}
 	for _, spec := range specs {
 		if spec.Node == nil {
 			return nil, fmt.Errorf("physics playground visual is missing")
@@ -133,6 +148,7 @@ type JointSpec struct {
 	Desc physics.JointDesc
 }
 
+// PhysicsJoints describes constraints between registered body visuals or world anchors.
 func PhysicsJoints(scene *engine.Scene, index int) []JointSpec {
 	if index != PhysicsPlayground {
 		return nil
@@ -146,4 +162,10 @@ func dumbbellChildren() []physics.CompoundChild {
 		{Shape: physics.Box(engine.Point{X: .6, Y: .6, Z: .6}), Position: engine.Point{X: 1.2, Y: .4}, Rotation: engine.IdentityQuaternion(), Weight: 2},
 		{Shape: physics.Box(engine.Point{X: 1.2, Y: .15, Z: .15}), Rotation: engine.IdentityQuaternion(), Weight: .2},
 	}
+}
+
+func wedgeGeometry() ([]engine.Point, []int) {
+	vertices := []engine.Point{{X: -.8, Y: -.7, Z: -.7}, {X: .8, Y: -.7, Z: -.7}, {X: -.8, Y: .4, Z: -.7}, {X: .8, Y: .9, Z: -.7}, {X: -.8, Y: -.7, Z: .7}, {X: .8, Y: -.7, Z: .7}, {X: -.8, Y: .4, Z: .7}, {X: .8, Y: .9, Z: .7}}
+	indices := []int{0, 4, 6, 0, 6, 2, 1, 3, 7, 1, 7, 5, 0, 1, 5, 0, 5, 4, 2, 6, 7, 2, 7, 3, 0, 2, 3, 0, 3, 1, 4, 5, 7, 4, 7, 6}
+	return vertices, indices
 }

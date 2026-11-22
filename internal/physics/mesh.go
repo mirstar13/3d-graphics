@@ -187,6 +187,8 @@ func primitiveMesh(a, b *body) []Contact {
 				}
 			}
 			group.contacts = append(group.contacts, contact(a, b, add(a.state.Position, mul(n, radius)), p, n, feature))
+		} else if a.state.Collider.Shape.kind == HullShape {
+			group.contacts = append(group.contacts, hullTriangle(a, b, tri, feature)...)
 		} else {
 			group.contacts = append(group.contacts, boxTriangle(a, b, tri, feature)...)
 		}

@@ -45,6 +45,11 @@ func (w *World) DebugLines() []engine.DebugLine {
 					line(point(a), point(c), color)
 				}
 			}
+		case HullShape:
+			poly := bodyPoly(b)
+			for _, e := range poly.edges {
+				line(poly.vertices[e[0]], poly.vertices[e[1]], color)
+			}
 		case BoxShape:
 			vertices := boxVertices(b)
 			for i := 0; i < 8; i++ {

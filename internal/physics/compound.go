@@ -16,7 +16,7 @@ type compoundShape struct {
 	inertia  InertiaTensor
 }
 
-// Compound copies up to 32 child spheres/boxes and recentres them about their
+// Compound copies up to 32 child spheres, boxes, or hulls and recentres them about their
 // weighted centre of mass. Body poses refer to that centre, not the input origin.
 func Compound(children []CompoundChild) (Shape, error) {
 	if len(children) == 0 || len(children) > 32 {
@@ -26,8 +26,8 @@ func Compound(children []CompoundChild) (Shape, error) {
 	total := 0.0
 	for i := range data.children {
 		child := &data.children[i]
-		if child.Shape.kind != SphereShape && child.Shape.kind != BoxShape {
-			return Shape{}, fmt.Errorf("compound children must be spheres or boxes")
+		if child.Shape.kind != SphereShape && child.Shape.kind != BoxShape && child.Shape.kind != HullShape {
+			return Shape{}, fmt.Errorf("compound children must be spheres, boxes, or convex hulls")
 		}
 		if err := (Collider{Shape: child.Shape}).validate(Dynamic); err != nil {
 			return Shape{}, err
@@ -72,6 +72,9 @@ func Compound(children []CompoundChild) (Shape, error) {
 
 // CenterOfMass returns the offset from the construction origin to the mass centre.
 func (s Shape) CenterOfMass() vec {
+	if s.hull != nil {
+		return s.hull.center
+	}
 	if s.compound != nil {
 		return s.compound.center
 	}

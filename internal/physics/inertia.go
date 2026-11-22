@@ -31,6 +31,9 @@ func tensorInverse(t InertiaTensor) (InertiaTensor, bool) {
 	return result, true
 }
 func tensorFor(s Shape, mass float64) InertiaTensor {
+	if s.kind == HullShape {
+		return tensorScale(s.hull.inertia, mass)
+	}
 	if s.kind == CompoundShape {
 		return tensorScale(s.compound.inertia, mass)
 	}

@@ -1,7 +1,8 @@
 // Package physics implements fixed-step rigid-body simulation with +Y up.
 // Positions use metres, time uses seconds, and angular velocity uses radians
 // per second. Dynamic spheres and oriented boxes collide with each other,
-// static planes, and immutable static triangle meshes. Kinematic bodies supply
+// static planes, and immutable static triangle meshes. Convex hulls and compound
+// convex bodies use discrete SAT contacts and full inertia tensors. Kinematic bodies supply
 // target poses. Contacts support friction, restitution, sensors, and layer masks.
 //
 // Worlds and their mutations belong to one simulation goroutine. Generation-

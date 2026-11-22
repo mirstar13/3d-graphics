@@ -68,11 +68,18 @@ fast bodies can tunnel in those cases. CCD has a bounded impact budget and stops
 CCD motion conservatively if exhausted. Distance, ball-and-socket, and hinge joints
 support local/world anchors and connected-body collision filtering; hinges also
 support limits and torque-limited motors. Dynamic triangle meshes remain future work.
-Compound colliders combine up to 32 locally positioned/rotated spheres and boxes
+
+Compound colliders combine up to 32 locally positioned/rotated spheres, boxes, or convex hulls
 with explicit relative mass weights. They use a full inertia tensor and expose
 the construction-origin-to-centre-of-mass offset for visual bindings. Compounds
 use discrete collision detection. Collision shapes are independent of render
 meshes, LOD, and anti-aliasing.
+
+`physics.ConvexHull` validates an authored closed convex triangle surface (4–64
+vertices, up to 128 triangles). It computes mass properties, merges coplanar faces,
+and generates multi-point SAT contacts. Hulls interact with spheres, boxes, other
+hulls, planes, and static triangle meshes. Automatic hull generation, convex
+decomposition, hull CCD, and direct dynamic concave meshes remain future work.
 
 ## Settings screen
 
@@ -217,7 +224,7 @@ repeatable PTY test and native Windows/macOS test procedure.
 | 4 | Lantern courtyard | A moving overhead light and visible cast shadows. |
 | 5 | Detail runway | Spheres approach and recede through three complete meshes with timed LOD fades. |
 | 6 | Wave field | 81 instanced columns animate as a wave; useful for comparing CPU modes and AA. |
-| 7 | Physics playground | Falling spheres, stacked crates, a moving platform, a triangle-mesh ramp, and a joint-driven pendulum. |
+| 7 | Physics playground | Falling spheres, stacked crates, a moving platform, a triangle-mesh ramp, a pendulum, a compound dumbbell, and a convex wedge. |
 
 These replace the former 13 technical examples. Geometry/material examples were
 combined into the gallery; hierarchy, textures, shadows, LOD, and performance
