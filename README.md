@@ -17,6 +17,17 @@ to omitted fields. Explicit CLI flags override file values. A missing default
 file uses built-in defaults, while a missing explicitly requested file or invalid
 YAML reports an error. Unknown keys and invalid values are rejected.
 
+## Project editor (prototype)
+
+Run `go run . -editor`, use **E** in the start menu, or open an existing project
+with `go run . -project /path/to/MyGame`. Create a project, add boxes/spheres, edit
+properties, save, and Play/Stop without changing the authored scene. The workspace
+includes hierarchy/inspector focus, selection outlines, undo/redo, and pause/step.
+
+See the [editor guide](docs/editor-first-milestone.md) for controls, project files,
+validation, and the current scope. Nested scenes, scripts, full asset tooling,
+and game export are future milestones.
+
 ## Start menu
 
 `go run .` opens New scene, Settings, and Exit. Use Up/Down and Enter.
@@ -244,3 +255,10 @@ To export a framebuffer contact sheet for review:
     DEMO_PREVIEW=/tmp/demo-preview.png go test ./internal/demo -run TestScenePreview -count=1
 
 Panels follow the picker order from left to right, top to bottom.
+
+## Toward a terminal game engine
+
+See the [terminal game engine roadmap](docs/terminal-game-engine-roadmap.md) for
+a Godot/Unity-style project editor, scene authoring, attachable gameplay, standalone
+exports, native validation, and further physics work. The initial project editor workflow is implemented; the roadmap distinguishes
+that first slice from the remaining authoring and export capabilities.
