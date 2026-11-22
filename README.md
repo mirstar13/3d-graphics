@@ -68,7 +68,11 @@ fast bodies can tunnel in those cases. CCD has a bounded impact budget and stops
 CCD motion conservatively if exhausted. Distance, ball-and-socket, and hinge joints
 support local/world anchors and connected-body collision filtering; hinges also
 support limits and torque-limited motors. Dynamic triangle meshes remain future work.
-Collision shapes are independent of render meshes, LOD, and anti-aliasing.
+Compound colliders combine up to 32 locally positioned/rotated spheres and boxes
+with explicit relative mass weights. They use a full inertia tensor and expose
+the construction-origin-to-centre-of-mass offset for visual bindings. Compounds
+use discrete collision detection. Collision shapes are independent of render
+meshes, LOD, and anti-aliasing.
 
 ## Settings screen
 

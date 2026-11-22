@@ -250,3 +250,20 @@ Regression fixtures cover a 10-second pendulum energy/length bound, hanging-chai
 anchor error and wakeup, kinematic attachments, hinge-axis drift, torque/angle
 limits, connected-body filtering, and deferred removal. The playground adds a
 small pendulum and presentation-only link, staying within its geometry budget.
+
+## Compound primitive bodies
+
+Immutable compound colliders accept up to 32 sphere/box children with explicit
+local poses and relative mass weights. Construction computes the mass centre,
+rotates each child tensor, and adds parallel-axis contributions. Dynamics now use
+full symmetric 3x3 inertia/inverse-inertia tensors; the existing diagonal snapshot
+remains for inspection. Overlapping children contribute additive mass, so authored
+weights describe the intended distribution rather than an inferred union volume.
+
+Each child retains its own contact manifold and feature namespace; compounds do
+not discard distinct supports through a global four-contact reduction. Debug
+outlines include children. Application bindings carry an explicit body-to-visual
+offset, including interpolation and joint-link anchor conversion. Tests cover
+analytic two-mass inertia, rotated off-diagonal terms, tensor inversion, mass
+changes, off-centre impulses, joint anchors, mesh contacts, and immutable snapshots.
+The playground adds an asymmetrically weighted dumbbell. Compound CCD is rejected.

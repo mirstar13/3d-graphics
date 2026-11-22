@@ -52,7 +52,8 @@ func NewBodyDesc(kind BodyType, shape Shape) BodyDesc {
 
 // BodyState is a copy; changing it never changes the world.
 type BodyState struct {
-	ID BodyID
+	InertiaTensor InertiaTensor
+	ID            BodyID
 	BodyDesc
 	Inertia          vec
 	PreviousPosition vec
@@ -60,6 +61,7 @@ type BodyState struct {
 	Sleeping         bool
 }
 type body struct {
+	inverseTensor                          InertiaTensor
 	targetActive                           bool
 	ccdStopped                             bool
 	state                                  BodyState
@@ -94,10 +96,10 @@ func validateBody(desc BodyDesc) error {
 		return err
 	}
 	if desc.Type == Dynamic {
-		i := inertiaFor(desc.Collider.Shape, desc.Mass)
-		if !finitePoint(i) || i.X <= 0 || i.Y <= 0 || i.Z <= 0 || !finite(1/i.X) || !finite(1/i.Y) || !finite(1/i.Z) || !finite(1/desc.Mass) {
+		if _, ok := tensorInverse(tensorFor(desc.Collider.Shape, desc.Mass)); !ok || !finite(1/desc.Mass) {
 			return fmt.Errorf("invalid body inertia")
 		}
+
 	}
 	return nil
 }
@@ -136,7 +138,7 @@ func (w *World) AddBody(desc BodyDesc) (BodyID, error) {
 	b := &body{state: BodyState{ID: id, BodyDesc: desc, PreviousPosition: desc.Position, PreviousRotation: desc.Rotation}, active: !w.advancing}
 	if desc.Type == Dynamic {
 		b.inverseMass = 1 / desc.Mass
-		b.state.Inertia = inertiaFor(desc.Collider.Shape, desc.Mass)
+		b.updateInertia()
 	} else {
 		b.state.Velocity = vec{}
 		b.state.AngularVelocity = vec{}
@@ -278,7 +280,7 @@ func (w *World) SetCollider(id BodyID, collider Collider) error {
 	return w.mutate(id, func(b *body) {
 		b.state.Collider = collider
 		if b.state.Type == Dynamic {
-			b.state.Inertia = inertiaFor(collider.Shape, b.state.Mass)
+			b.updateInertia()
 		}
 	})
 }
@@ -298,7 +300,7 @@ func (w *World) SetMass(id BodyID, mass float64) error {
 		b.state.Mass = mass
 		if b.state.Type == Dynamic {
 			b.inverseMass = 1 / mass
-			b.state.Inertia = inertiaFor(b.state.Collider.Shape, mass)
+			b.updateInertia()
 		}
 	})
 }

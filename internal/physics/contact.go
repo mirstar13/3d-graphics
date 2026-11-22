@@ -29,6 +29,12 @@ func flipContacts(cs []Contact) []Contact {
 }
 func collide(a, b *body) []Contact {
 	ak, bk := a.state.Collider.Shape.kind, b.state.Collider.Shape.kind
+	if ak == CompoundShape {
+		return compoundContacts(a, b)
+	}
+	if bk == CompoundShape {
+		return flipContacts(compoundContacts(b, a))
+	}
 	if ak > bk {
 		return flipContacts(collide(b, a))
 	}

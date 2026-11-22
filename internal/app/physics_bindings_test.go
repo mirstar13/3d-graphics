@@ -25,7 +25,9 @@ func TestPhysicsPlaygroundBindingsAndPause(t *testing.T) {
 	}
 	for _, binding := range sim.bindings.items {
 		s, err := sim.world.Body(binding.id)
-		if err != nil || s.Position != binding.node.Transform.Position {
+		offset := s.Rotation.RotateVector(binding.visualOffset)
+		expected := engine.Point{X: s.Position.X + offset.X, Y: s.Position.Y + offset.Y, Z: s.Position.Z + offset.Z}
+		if err != nil || expected != binding.node.Transform.Position {
 			t.Fatal("pose ownership lost", err)
 		}
 	}

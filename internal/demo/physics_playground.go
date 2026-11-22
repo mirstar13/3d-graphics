@@ -13,9 +13,11 @@ const PhysicsPlayground = 6
 // BodySpec explicitly binds a procedural visual to independent collision geometry.
 // The application creates bodies and owns the resulting ID-to-node registry.
 type BodySpec struct {
-	Node   *engine.SceneNode
-	Desc   physics.BodyDesc
-	Target func(float64) (engine.Point, engine.Quaternion)
+	// VisualOffset is the local vector from body centre of mass to visual origin.
+	VisualOffset engine.Point
+	Node         *engine.SceneNode
+	Desc         physics.BodyDesc
+	Target       func(float64) (engine.Point, engine.Quaternion)
 }
 
 func playgroundBox(scene *engine.Scene, name string, p, half engine.Point, color engine.Color) *engine.SceneNode {
@@ -40,6 +42,13 @@ func buildPlayground(scene *engine.Scene) {
 	playgroundBox(scene, "Platform", engine.Point{X: -3, Y: -2, Z: -6}, engine.Point{X: 2, Y: .4, Z: 2}, palette[3])
 	playgroundBox(scene, "Pendulum", engine.Point{X: -11, Y: 1, Z: 8}, engine.Point{X: .5, Y: .5, Z: .5}, palette[4%len(palette)])
 	playgroundBox(scene, "PendulumStand", engine.Point{X: -13, Y: 0, Z: 8}, engine.Point{X: .15, Y: 4, Z: .15}, palette[1])
+	dumbbell := engine.NewSceneNode("Dumbbell")
+	dumbbell.Transform.SetPosition(0, 3, 8)
+	scene.AddNode(dumbbell)
+	for i, child := range dumbbellChildren() {
+		node := playgroundBox(scene, fmt.Sprintf("DumbbellPart%d", i), child.Position, child.Shape.HalfExtents(), palette[2])
+		dumbbell.AddChild(node)
+	}
 	ramp := engine.NewMesh()
 	ramp.Vertices = rampVertices()
 	ramp.Indices = []int{0, 2, 1, 0, 3, 2}
@@ -99,6 +108,16 @@ func PhysicsSpecs(scene *engine.Scene, index int) ([]BodySpec, error) {
 	}
 	add("Ramp", physics.Static, physics.Mesh(mesh))
 	add("Pendulum", physics.Dynamic, physics.Box(engine.Point{X: .5, Y: .5, Z: .5}))
+	compound, err := physics.Compound(dumbbellChildren())
+	if err != nil {
+		return nil, err
+	}
+	dumbbell := add("Dumbbell", physics.Dynamic, compound)
+	center := compound.CenterOfMass()
+	dumbbell.Desc.Position.X += center.X
+	dumbbell.Desc.Position.Y += center.Y
+	dumbbell.Desc.Position.Z += center.Z
+	dumbbell.VisualOffset = engine.Point{X: -center.X, Y: -center.Y, Z: -center.Z}
 	for _, spec := range specs {
 		if spec.Node == nil {
 			return nil, fmt.Errorf("physics playground visual is missing")
@@ -119,4 +138,12 @@ func PhysicsJoints(scene *engine.Scene, index int) []JointSpec {
 		return nil
 	}
 	return []JointSpec{{A: scene.FindNode("Pendulum"), Desc: physics.JointDesc{Kind: physics.DistanceJoint, AnchorB: engine.Point{X: -13, Y: 4, Z: 8}, Length: math.Sqrt(13)}}}
+}
+
+func dumbbellChildren() []physics.CompoundChild {
+	return []physics.CompoundChild{
+		{Shape: physics.Box(engine.Point{X: .6, Y: .6, Z: .6}), Position: engine.Point{X: -1.2}, Rotation: engine.IdentityQuaternion(), Weight: 1},
+		{Shape: physics.Box(engine.Point{X: .6, Y: .6, Z: .6}), Position: engine.Point{X: 1.2, Y: .4}, Rotation: engine.IdentityQuaternion(), Weight: 2},
+		{Shape: physics.Box(engine.Point{X: 1.2, Y: .15, Z: .15}), Rotation: engine.IdentityQuaternion(), Weight: .2},
+	}
 }

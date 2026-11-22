@@ -10,8 +10,21 @@ import (
 func (w *World) DebugLines() []engine.DebugLine {
 	var lines []engine.DebugLine
 	line := func(a, b vec, c engine.Color) { lines = append(lines, engine.DebugLine{Start: a, End: b, Color: c}) }
+	var bodies []*body
 	for _, slot := range w.bodies {
 		b := slot.body
+		if b == nil || !b.active || b.state.Disabled {
+			continue
+		}
+		if b.state.Collider.Shape.kind == CompoundShape {
+			for _, child := range b.state.Collider.Shape.compound.children {
+				bodies = append(bodies, compoundBody(b, child))
+			}
+		} else {
+			bodies = append(bodies, b)
+		}
+	}
+	for _, b := range bodies {
 		if b == nil || !b.active || b.state.Disabled {
 			continue
 		}

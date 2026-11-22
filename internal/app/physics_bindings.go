@@ -8,9 +8,10 @@ import (
 )
 
 type bodyBinding struct {
-	id     physics.BodyID
-	node   *engine.SceneNode
-	target func(float64) (engine.Point, engine.Quaternion)
+	visualOffset engine.Point
+	id           physics.BodyID
+	node         *engine.SceneNode
+	target       func(float64) (engine.Point, engine.Quaternion)
 }
 type jointVisual struct {
 	id   physics.JointID
@@ -51,7 +52,7 @@ func (b *physicsBindings) add(spec demo.BodySpec) error {
 	if err != nil {
 		return err
 	}
-	b.items = append(b.items, bodyBinding{id: id, node: node, target: spec.Target})
+	b.items = append(b.items, bodyBinding{id: id, node: node, target: spec.Target, visualOffset: spec.VisualOffset})
 	return nil
 }
 func (b *physicsBindings) before(tick physics.Tick) error {
@@ -79,7 +80,8 @@ func (b *physicsBindings) synchronize() {
 			b.scene.RemoveNode(binding.node)
 			continue
 		}
-		binding.node.Transform.SetPosition(state.Position.X, state.Position.Y, state.Position.Z)
+		offset := state.Rotation.RotateVector(binding.visualOffset)
+		binding.node.Transform.SetPosition(state.Position.X+offset.X, state.Position.Y+offset.Y, state.Position.Z+offset.Z)
 		binding.node.Transform.SetRotationQuaternion(state.Rotation)
 		binding.node.SetEnabled(!state.Disabled)
 		kept = append(kept, binding)
@@ -108,7 +110,8 @@ func (b *physicsBindings) present(alpha float64) {
 		a, z := state.PreviousPosition, state.Position
 		p := engine.Point{X: a.X + (z.X-a.X)*alpha, Y: a.Y + (z.Y-a.Y)*alpha, Z: a.Z + (z.Z-a.Z)*alpha}
 		q := state.PreviousRotation.Slerp(state.Rotation, alpha)
-		binding.node.Transform.SetPosition(p.X, p.Y, p.Z)
+		offset := q.RotateVector(binding.visualOffset)
+		binding.node.Transform.SetPosition(p.X+offset.X, p.Y+offset.Y, p.Z+offset.Z)
 		binding.node.Transform.SetRotationQuaternion(q)
 	}
 	b.updateJointVisuals()
@@ -154,6 +157,14 @@ func (b *physicsBindings) updateJointVisuals() {
 	point := func(node *engine.SceneNode, local engine.Point) engine.Point {
 		if node == nil {
 			return local
+		}
+		for _, binding := range b.items {
+			if binding.node == node {
+				local.X -= binding.visualOffset.X
+				local.Y -= binding.visualOffset.Y
+				local.Z -= binding.visualOffset.Z
+				break
+			}
 		}
 		v := node.Transform.Rotation.RotateVector(local)
 		p := node.Transform.Position

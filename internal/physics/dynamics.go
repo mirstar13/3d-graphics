@@ -7,13 +7,11 @@ func inverseInertia(b *body, v vec) vec {
 		return vec{}
 	}
 	local := inverseRotate(b.state.Rotation, v)
-	i := b.state.Inertia
-	return b.state.Rotation.RotateVector(vec{X: local.X / i.X, Y: local.Y / i.Y, Z: local.Z / i.Z})
+	return b.state.Rotation.RotateVector(tensorVector(b.inverseTensor, local))
 }
 func worldInertia(b *body, v vec) vec {
 	local := inverseRotate(b.state.Rotation, v)
-	i := b.state.Inertia
-	return b.state.Rotation.RotateVector(vec{X: local.X * i.X, Y: local.Y * i.Y, Z: local.Z * i.Z})
+	return b.state.Rotation.RotateVector(tensorVector(b.state.InertiaTensor, local))
 }
 func (w *World) prepareBodies(dt float64) {
 	for _, slot := range w.bodies {

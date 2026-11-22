@@ -13,17 +13,19 @@ const (
 	BoxShape
 	PlaneShape
 	MeshShape
+	CompoundShape
 )
 
 // Shape is immutable once constructed; body creation validates its dimensions.
 // Mesh geometry is copied and validated by NewTriangleMesh.
 type Shape struct {
-	kind   ShapeKind
-	radius float64
-	half   vec
-	normal vec
-	offset float64
-	mesh   *TriangleMesh
+	compound *compoundShape
+	kind     ShapeKind
+	radius   float64
+	half     vec
+	normal   vec
+	offset   float64
+	mesh     *TriangleMesh
 }
 
 // Sphere constructs a sphere centred at the body origin.
@@ -75,6 +77,10 @@ func (c Collider) validate(kind BodyType) error {
 	case PlaneShape:
 		if kind != Static || !finitePoint(s.normal) || length(s.normal) < 1e-10 || !finite(s.offset) {
 			return fmt.Errorf("plane requires a static body and a finite nonzero normal")
+		}
+	case CompoundShape:
+		if s.compound == nil {
+			return fmt.Errorf("compound requires validated children")
 		}
 	case MeshShape:
 		if kind != Static || s.mesh == nil {
@@ -134,6 +140,14 @@ func bodyBounds(b *body) bounds {
 	s := b.state.Collider.Shape
 	p := b.state.Position
 	switch s.kind {
+	case CompoundShape:
+		result := emptyBounds()
+		for _, child := range s.compound.children {
+			b := bodyBounds(compoundBody(b, child))
+			result.include(b.min)
+			result.include(b.max)
+		}
+		return result
 	case SphereShape:
 		r := vec{X: s.radius, Y: s.radius, Z: s.radius}
 		return bounds{min: sub(p, r), max: add(p, r)}
