@@ -28,7 +28,10 @@ pause/step. Press **R** to extract a subtree and **A** to browse resources.
 Physics bodies remain root-level. Press **K** to edit project key bindings;
 **Tab** to focus the viewport, arrows to aim the reticle, and **F** to pick.
 See the [resource workflow](docs/editor-scene-resources.md) and
-[input/selection guide](docs/editor-input-selection.md).
+[input/selection guide](docs/editor-input-selection.md). During Play, **Ctrl+L**
+opens [manipulation tools](docs/editor-play-tools.md) for configurable impulses,
+checked runtime spawning, deletion, reset, and live physics inspection.
+See [remaining creator-alpha work](docs/creator-alpha-remaining.md) for the scope estimate.
 
 See the [editor guide](docs/editor-first-milestone.md) for controls, project files,
 validation, and the current scope. Nested scenes, scripts, full asset tooling,

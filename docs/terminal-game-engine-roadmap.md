@@ -1,9 +1,12 @@
 # Terminal game engine: implementation roadmap
 
 Status: the first editor vertical slice, hierarchy authoring, and basic linked
-scene resources, semantic input bindings, and keyboard query selection are implemented.
+scene resources, semantic input bindings, keyboard query selection, and interactive
+Play manipulation are implemented. See [remaining creator-alpha work](creator-alpha-remaining.md)
+for the current 8–12 milestone planning estimate.
 See the [resource milestone](editor-resources-plan.md) and
-[input/selection milestone](editor-input-selection-plan.md).
+[input/selection milestone](editor-input-selection-plan.md) and
+[manipulation milestone](editor-manipulation-plan.md).
 See the [hierarchy milestone](editor-hierarchy-plan.md). See the
 [editor guide](editor-first-milestone.md) for delivered scope and tests. Remaining
 stages below are planned. Builds on the completed [physics follow-up work](physics-follow-up-plan.md).
@@ -446,9 +449,10 @@ loads, undo/redo, instance identity, failed builds, crashed play sessions, and c
 shutdown. Native terminal checks remain distinct from PTY and compilation tests.
 Keep stress tests and long benchmarks separate from fast unit suites.
 
-The next implementation milestone is interactive viewport manipulation: configurable
-impulses at the picked point or centre of mass, overlap-checked runtime spawning,
-runtime deletion/reset, and live physics inspection. Build on the new actions and
-read-only queries; write its detailed plan before coding. Fuller component authoring,
-gameplay attachment and export still follow. The creator alpha is not complete.
-Keep physics extensions behind demonstrated creator workflow needs.
+The next implementation milestone is component/document authoring, beginning with a
+scoped camera/light and scene-simulation-settings slice. Write its implementation
+plan before coding, including migration and linked-resource semantics. Richer
+physics authoring, gameplay behavior/API work, supervised Play, HUD/game flow,
+standalone export and an editable complete game remain. See the
+[remaining-work assessment](creator-alpha-remaining.md); the creator alpha is not
+complete. Keep advanced physics behind demonstrated creator workflow needs.

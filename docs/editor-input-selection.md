@@ -39,7 +39,7 @@ They apply when editing either the entry scene or a resource in that project.
 | Play | P, F5 | Edit |
 | Pause/resume | Space, F6 | Play |
 | Step | N, F7 | Paused Play |
-| Upward impulse | I | Play, selected dynamic body |
+| Configured impulse (upward by default) | I | Play, selected dynamic body |
 | Pick / clear | F / 0 | Workspace |
 | Previous / next | [ / ] | Workspace |
 | Reticle up/down/left/right | Arrow keys | Viewport focus |
@@ -53,7 +53,7 @@ are rejected without changing the manifest or active bindings.
 Supported binding tokens are unused lowercase letters/digits, `[`/`]`, `space`,
 `f5`/`f6`/`f7`, and `f9` through `f12`. Arrow tokens `up`, `down`, `left`, `right`
 are permitted only for reticle actions. Fixed controls include Escape/Q/Ctrl+C,
-F8, Tab, E/Enter, B/G, H, A/R, K, Delete, camera/zoom keys and the existing Ctrl
+F8, Tab, E/Enter, B/G, H, A/R, K, Delete, Ctrl+L Play tools, camera/zoom keys and the existing Ctrl
 commands. Launcher, browser and text-entry navigation remain fixed.
 
 For example, the manifest can contain:
@@ -111,5 +111,6 @@ PTY test edits/persists/resets a binding, picks/cycles/clears, steps a queued im
 resizes, and reopens in another process.
 
 Mouse selection, reliable held-key axes, arbitrary overlap shapes, configurable
-launcher keys, off-centre impulse UI and runtime spawning tools are outside this
-milestone. See the [implementation plan](editor-input-selection-plan.md).
+launcher keys, arbitrary runtime property editing are outside this
+milestone. Off-centre impulses and runtime spawning are now available through
+[Play tools](editor-play-tools.md). See the [implementation plan](editor-input-selection-plan.md).

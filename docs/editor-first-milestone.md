@@ -33,6 +33,8 @@ and renderer-settings workflows remain available.
 Project changes and exit prompt before discarding unsaved edits: D discards;
 Escape cancels. A failed open keeps the previous project and edits intact.
 Save during Play saves the authored document, never the simulated body positions.
+See [Play tools](editor-play-tools.md) for checked runtime spawning, picked-point
+impulses, deletion/reset and the read-only live inspector.
 
 ## Controls
 
@@ -59,7 +61,8 @@ Save during Play saves the authored document, never the simulated body positions
 | Edit | P / F5 | Start Play from current authored document, including unsaved edits. |
 | Play | Space / F6 | Pause / resume. |
 | Paused Play | N / F7 | Apply pending runtime commands and advance one tick. |
-| Play | I | Queue an upward impulse on the selected dynamic body. |
+| Play | I | Queue the configured impulse (default: upward, at centre). |
+| Play | Ctrl+L | Pause and open manipulation tools: configure, spawn, delete, reset. |
 | Play | F8 / Escape / Ctrl+C | Stop; preserve authored state. |
 | Edit | Q / Escape / Ctrl+C | Exit editor, guarding unsaved edits. |
 
