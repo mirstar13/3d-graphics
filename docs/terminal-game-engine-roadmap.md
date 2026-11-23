@@ -1,7 +1,9 @@
 # Terminal game engine: implementation roadmap
 
 Status: the first editor vertical slice, hierarchy authoring, and basic linked
-scene resources are implemented. See the [resource milestone](editor-resources-plan.md).
+scene resources, semantic input bindings, and keyboard query selection are implemented.
+See the [resource milestone](editor-resources-plan.md) and
+[input/selection milestone](editor-input-selection-plan.md).
 See the [hierarchy milestone](editor-hierarchy-plan.md). See the
 [editor guide](editor-first-milestone.md) for delivered scope and tests. Remaining
 stages below are planned. Builds on the completed [physics follow-up work](physics-follow-up-plan.md).
@@ -444,9 +446,9 @@ loads, undo/redo, instance identity, failed builds, crashed play sessions, and c
 shutdown. Native terminal checks remain distinct from PTY and compilation tests.
 Keep stress tests and long benchmarks separate from fast unit suites.
 
-The next implementation milestone is the remaining stage-1 input and selection
-foundation: semantic actions/configurable bindings, read-only world queries, and
-keyboard reticle selection. Write its detailed implementation plan before coding.
-Basic linked resources are complete; nested links/inherited variants, fuller
-components, gameplay attachment, and export remain outstanding. The creator alpha
-is not yet complete. Keep physics expansion behind creator workflow priorities.
+The next implementation milestone is interactive viewport manipulation: configurable
+impulses at the picked point or centre of mass, overlap-checked runtime spawning,
+runtime deletion/reset, and live physics inspection. Build on the new actions and
+read-only queries; write its detailed plan before coding. Fuller component authoring,
+gameplay attachment and export still follow. The creator alpha is not complete.
+Keep physics extensions behind demonstrated creator workflow needs.

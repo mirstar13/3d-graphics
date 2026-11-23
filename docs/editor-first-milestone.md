@@ -22,8 +22,7 @@ and renderer-settings workflows remain available.
    directory. Press O instead to open an existing project directory.
 2. The starter scene contains a static floor and a dynamic box. Use Up/Down to
    select an object in the hierarchy. Its oriented bounds appear in the viewport.
-3. Press B to add a box or G to add a sphere. Tab moves focus between hierarchy
-   and inspector. Up/Down chooses an inspector property; E or Enter edits it.
+3. Press B to add a box or G to add a sphere. Tab cycles hierarchy, inspector, and viewport focus. Up/Down chooses an inspector property; E or Enter edits it.
    Backspace changes the value; Enter validates/applies; Escape cancels.
 4. Press Ctrl+S to save. An asterisk marks unsaved authored changes.
 5. Press P or F5 to play a separate copy. Space pauses/resumes, N or F7 steps
@@ -41,7 +40,10 @@ Save during Play saves the authored document, never the simulated body positions
 | --- | --- | --- |
 | Project manager | N / O | New / open project directory. |
 | Workspace | Ctrl+N / Ctrl+O | New / open another project. |
-| Workspace | Tab, Up/Down | Switch panel focus, select object/property. |
+| Workspace | Tab, Up/Down | Cycle hierarchy/inspector/viewport; navigate focused panel. |
+| Workspace | F / 0 / [ / ] | Pick reticle / clear / previous / next selection. |
+| Viewport | Arrow keys | Move reticle one cell per press. |
+| Edit | K | Configure project action bindings. |
 | Edit | E / Enter | Edit selected property. |
 | Edit | B / G | Add box / sphere. |
 | Edit | A | Browse resources; Enter instantiate/open, E edit source. |
@@ -61,7 +63,9 @@ Save during Play saves the authored document, never the simulated body positions
 | Play | F8 / Escape / Ctrl+C | Stop; preserve authored state. |
 | Edit | Q / Escape / Ctrl+C | Exit editor, guarding unsaved edits. |
 
-Text entry consumes keys until applied/cancelled. Gameplay commands cannot fire
+Play/selection/reticle action keys in this table are defaults; **K** changes them.
+See the [input and picking guide](editor-input-selection.md) for binding and query
+semantics. Text entry consumes keys until applied/cancelled. Gameplay commands cannot fire
 through a property/path dialog. In narrow terminals, the focused hierarchy or
 inspector replaces the viewport to keep selected properties accessible.
 

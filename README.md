@@ -25,7 +25,10 @@ properties, save, and Play/Stop without changing the authored scene. The workspa
 includes nested visual hierarchies, reparenting, subtree duplication/deletion,
 linked scene resources, property overrides, selection outlines, undo/redo, and
 pause/step. Press **R** to extract a subtree and **A** to browse resources.
-Physics bodies remain root-level. See the [resource workflow](docs/editor-scene-resources.md).
+Physics bodies remain root-level. Press **K** to edit project key bindings;
+**Tab** to focus the viewport, arrows to aim the reticle, and **F** to pick.
+See the [resource workflow](docs/editor-scene-resources.md) and
+[input/selection guide](docs/editor-input-selection.md).
 
 See the [editor guide](docs/editor-first-milestone.md) for controls, project files,
 validation, and the current scope. Nested scenes, scripts, full asset tooling,
