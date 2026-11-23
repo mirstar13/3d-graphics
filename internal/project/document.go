@@ -8,6 +8,7 @@ import (
 	"unicode"
 
 	"github.com/mirstar13/go-3d-graphics/internal/engine"
+	"github.com/mirstar13/go-3d-graphics/internal/input"
 )
 
 const Version = 1
@@ -15,9 +16,10 @@ const MaxEntities = 128
 
 // Manifest identifies a project and its initial scene. Version is the file schema.
 type Manifest struct {
-	Version    int    `yaml:"version"`
-	Name       string `yaml:"name"`
-	EntryScene string `yaml:"entry_scene"`
+	Version    int            `yaml:"version"`
+	Name       string         `yaml:"name"`
+	EntryScene string         `yaml:"entry_scene"`
+	Bindings   input.Bindings `yaml:"bindings,omitempty"`
 }
 
 // Entity is an authored primitive with an optional persistent parent ID.

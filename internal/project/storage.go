@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/mirstar13/go-3d-graphics/internal/input"
 	"gopkg.in/yaml.v3"
 )
 
@@ -96,6 +97,9 @@ func Open(root string) (*Project, error) {
 	}
 	if p.Manifest.Version != Version || !ValidText(p.Manifest.Name, 80) {
 		return nil, fmt.Errorf("unsupported project version or invalid name")
+	}
+	if e = input.Validate(p.Manifest.Bindings); e != nil {
+		return nil, e
 	}
 	path, e := scenePath(root, p.Manifest.EntryScene)
 	if e != nil {
@@ -186,5 +190,19 @@ func (p *Project) Save(d Document) error {
 		return e
 	}
 	p.Scene = d.Clone()
+	return nil
+}
+
+// SaveBindings atomically persists project input preferences independently of scene undo.
+func (p *Project) SaveBindings(bindings input.Bindings) error {
+	if err := input.Validate(bindings); err != nil {
+		return err
+	}
+	next := p.Manifest
+	next.Bindings = input.Clone(bindings)
+	if err := writeAtomic(filepath.Join(p.Root, "project.yaml"), next); err != nil {
+		return err
+	}
+	p.Manifest = next
 	return nil
 }
