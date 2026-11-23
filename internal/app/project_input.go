@@ -60,15 +60,18 @@ func (m projectEditorModel) bindingsView() string {
 	return out.String()
 }
 func (m *projectEditorModel) cycleSelection(delta int) {
-	count := len(m.document.Document().Entities)
+	entries := m.hierarchy()
+	count := len(entries)
 	if count == 0 {
-		m.selected = -1
+		m.clearSelection()
 		return
 	}
-	if m.selected < 0 && delta < 0 {
-		m.selected = 0
+	index := m.selectionIndex()
+	if index < 0 && delta < 0 {
+		index = 0
 	}
-	m.selected = (m.selected + count + delta) % count
+	index = (index + count + delta) % count
+	m.selectID(entries[index].ID)
 	m.renderPreview()
 }
 func (m *projectEditorModel) moveReticle(dx, dy int) {
@@ -107,10 +110,15 @@ func (m *projectEditorModel) pickReticle() {
 		return
 	}
 	if !ok {
-		m.selected = -1
+		m.clearSelection()
 		m.message = "No hit; selection cleared"
 	} else {
 		m.selectID(hit.FileID)
+		if m.play != nil && !hit.VisualProxy {
+			if anchor, err := m.play.AnchorAt(hit.Entity, hit.Point); err == nil {
+				m.hitAnchor = &anchor
+			}
+		}
 		kind := "collider"
 		if hit.VisualProxy {
 			kind = "visual proxy"

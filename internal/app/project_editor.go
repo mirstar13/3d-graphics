@@ -41,10 +41,16 @@ type projectEditorModel struct {
 	assetTarget                                    string
 	bindingSelected                                int
 	reticleU, reticleV                             float64
+	toolValues                                     [9]string
+	toolField                                      int
+	runtimeSelection, pendingSpawn                 string
+	hitAnchor                                      *game.Anchor
+	spawnPreview                                   project.Entity
+	spawnSequence                                  uint64
 }
 
 func newProjectEditor(settings config.Settings) projectEditorModel {
-	return projectEditorModel{settings: settings, width: 80, height: 30, zoom: 1, reticleU: .5, reticleV: .5}
+	return projectEditorModel{settings: settings, width: 80, height: 30, zoom: 1, reticleU: .5, reticleV: .5, toolValues: defaultToolValues}
 }
 func (m projectEditorModel) Init() tea.Cmd { return nil }
 func (m *projectEditorModel) install(p *project.Project) error {
@@ -71,6 +77,13 @@ func (m *projectEditorModel) install(p *project.Project) error {
 	return nil
 }
 func (m *projectEditorModel) selectedEntity() (project.Entity, bool) {
+	if m.play != nil {
+		if id, ok := m.play.Find(m.runtimeSelection); ok {
+			e, err := m.play.State(id)
+			return e, err == nil
+		}
+		return project.Entity{}, false
+	}
 	if m.document == nil || m.selected < 0 {
 		return project.Entity{}, false
 	}
@@ -92,6 +105,7 @@ func (m *projectEditorModel) refresh() {
 	m.renderPreview()
 }
 func (m *projectEditorModel) renderPreview() {
+	m.reconcileRuntime()
 	session := m.preview
 	if m.play != nil {
 		session = m.play
@@ -179,6 +193,13 @@ func (m *projectEditorModel) startPlay() tea.Cmd {
 		m.message = err.Error()
 		return nil
 	}
+	selected, ok := m.selectedEntity()
+	m.runtimeSelection = ""
+	m.pendingSpawn = ""
+	m.hitAnchor = nil
+	if ok {
+		m.runtimeSelection = selected.ID
+	}
 	m.play = session
 	m.lastTick = time.Now()
 	m.message = "Playing a copy; Stop preserves authored edits"
@@ -231,6 +252,10 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				m.modal = ""
 				return m, nil
 			}
+			if m.modal == "tools" {
+				m.updateTools(key)
+				return m, nil
+			}
 			if m.modal == "bindings" {
 				m.updateBindings(key)
 				return m, nil
@@ -269,6 +294,10 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 					if err == nil {
 						err = m.install(p)
 					}
+				case "tool_value":
+					err = m.saveToolValue()
+				case "spawn_confirm":
+					err = m.confirmSpawn()
 				case "binding":
 					err = m.saveBinding()
 				case "extract":
@@ -317,6 +346,9 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		switch key {
+		case "ctrl+l":
+			m.openTools()
+			return m, nil
 		case "ctrl+n":
 			cmd := m.begin("new")
 			return m, cmd
@@ -354,7 +386,7 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case input.Pick:
 			m.pickReticle()
 		case input.Clear:
-			m.selected = -1
+			m.clearSelection()
 			m.message = "Selection cleared"
 			m.renderPreview()
 		case input.Next:
@@ -383,7 +415,8 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == 0 {
 				m.cycleSelection(delta)
 			} else {
-				m.property = (m.property + len(project.Properties) + delta) % len(project.Properties)
+				count := max(1, len(m.inspectorRows()))
+				m.property = (m.property + count + delta) % count
 			}
 		case "1", "2", "3":
 			m.view = 0
@@ -422,17 +455,7 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				m.renderPreview()
 			}
 		case input.Impulse:
-			if m.play != nil {
-				if e, ok := m.selectedEntity(); ok {
-					if id, ok := m.play.Find(e.ID); ok {
-						if err := m.play.QueueImpulse(id, engine.Point{Y: 5}); err != nil {
-							m.message = err.Error()
-						} else {
-							m.message = "Upward impulse queued for next tick"
-						}
-					}
-				}
-			}
+			m.applyToolImpulse()
 		default:
 			if m.play != nil {
 				m.message = "Stop Play to edit authored properties"
@@ -539,16 +562,17 @@ func (m projectEditorModel) View() string {
 		}
 		fmt.Fprintf(&out, "Project editor - %s%s [%s]%s\nResource: %s\n", m.project.Manifest.Name, dirty, mode, runtimeStatus, path)
 		side := []string{"Hierarchy (Tab switches focus)"}
-		entities := m.document.Document().Hierarchy()
+		entities := m.hierarchy()
+		selected := m.selectionIndex()
 		for i := range entities {
 			if _, _, ok := m.document.Document().Link(entities[i].ID); ok {
 				entities[i].Name += " [linked]"
 			}
 		}
-		first := max(0, m.selected-2)
+		first := max(0, selected-2)
 		for i := first; i < min(len(entities), first+4); i++ {
 			prefix := "  "
-			if i == m.selected {
+			if i == selected {
 				prefix = "> "
 			}
 			side = append(side, prefix+strings.Repeat("  ", min(entities[i].Depth, 8))+entities[i].Name)
@@ -563,35 +587,21 @@ func (m projectEditorModel) View() string {
 		if m.focus == 1 {
 			focus = "Inspector"
 		}
-		side = append(side, "", "Inspector (local) - focus: "+focus)
-		if e, ok := m.selectedEntity(); ok {
-			first = max(0, m.property-1)
-			visible := max(2, len(m.frame)-len(side))
-			for i := first; i < min(len(project.Properties), first+visible); i++ {
-				p := m.inspectorProperty(i, e)
-				prefix := "  "
-				if i == m.property {
-					prefix = "> "
-				}
-				side = append(side, prefix+p.Label+": "+p.Get(e)+" "+p.Units)
-			}
-			if m.play != nil {
-				if id, ok := m.play.Find(e.ID); ok {
-					if state, err := m.play.State(id); err == nil {
-						side = append(side, fmt.Sprintf("Live Y:%.2f Tick:%d Pending:%d", state.Position.Y, m.play.World.Stats().Tick, m.play.PendingCommands()))
-					}
-				}
-			}
+		modeLabel := "local"
+		if m.play != nil {
+			modeLabel = "live, read-only"
 		}
+		side = append(side, "", "Inspector ("+modeLabel+") - focus: "+focus)
+		side = append(side, m.inspectorSlice(max(2, len(m.frame)-len(side)))...)
 		contentHeight := max(1, m.height-11)
 		if m.width < 65 || contentHeight < 10 {
 			side = nil
 			if m.focus == 0 {
 				side = append(side, "Hierarchy (Tab: Inspector)")
-				first := max(0, m.selected-contentHeight+2)
+				first := max(0, selected-contentHeight+2)
 				for i := first; i < min(len(entities), first+contentHeight-1); i++ {
 					prefix := "  "
-					if i == m.selected {
+					if i == selected {
 						prefix = "> "
 					}
 					side = append(side, prefix+strings.Repeat("  ", min(entities[i].Depth, 8))+entities[i].Name)
@@ -601,19 +611,12 @@ func (m projectEditorModel) View() string {
 				if m.width < 65 {
 					side = append(side, m.frame...)
 				}
-			} else if e, ok := m.selectedEntity(); ok {
-				side = append(side, "Inspector (local; Tab: Viewport)")
-				first := max(0, m.property-contentHeight+2)
-				for i := first; i < min(len(project.Properties), first+contentHeight-1); i++ {
-					p := m.inspectorProperty(i, e)
-					prefix := "  "
-					if i == m.property {
-						prefix = "> "
-					}
-					side = append(side, prefix+p.Label+": "+p.Get(e))
-				}
+			} else {
+				side = append(side, "Inspector ("+modeLabel+"; Tab: Viewport)")
+				side = append(side, m.inspectorSlice(max(1, contentHeight-1))...)
 			}
 		}
+
 		if m.width >= 65 {
 			w := max(12, min(70, (m.width-3)/2))
 			for i := 0; i < min(contentHeight, max(len(m.frame), len(side))); i++ {
@@ -634,17 +637,32 @@ func (m projectEditorModel) View() string {
 		bindings := m.project.Manifest.Bindings
 		out.WriteString(input.Help(bindings, input.Play, input.Pause, input.Step, input.Impulse) + " | F8/Esc Stop\n")
 		out.WriteString(input.Help(bindings, input.Pick, input.Clear, input.Previous, input.Next) + " | K bindings\n")
-		out.WriteString("B box / G sphere | E edit | Del delete | Ctrl+D duplicate\nCtrl+S save | Ctrl+Z/Y undo/redo | Ctrl+N/O new/open\n")
+		if m.play != nil {
+			out.WriteString("Live hierarchy/inspector | Tab focus | Ctrl+L tools\nCtrl+S saves authored scene | Stop discards runtime changes\n")
+		} else {
+			out.WriteString("B box / G sphere | E edit | Del delete | Ctrl+D duplicate\nCtrl+S save | Ctrl+Z/Y undo/redo | Ctrl+N/O new/open\n")
+		}
 		if m.focus == 2 {
 			out.WriteString(input.Help(bindings, input.AimUp, input.AimDown, input.AimLeft, input.AimRight) + "\n")
 		} else {
 			out.WriteString("H parent | 1/2/3 camera | +/- zoom | Q exit editor\n")
 		}
-		out.WriteString("A assets | R extract | Ctrl+R refresh | Ctrl+U unpack | Ctrl+T reset\n")
+		if m.play != nil {
+			fmt.Fprintf(&out, "Ctrl+L tools | Impulse (%s,%s,%s) %s\n", m.toolValues[0], m.toolValues[1], m.toolValues[2], m.toolValues[3])
+		} else {
+			out.WriteString("A assets | R extract | Ctrl+R refresh | Ctrl+U unpack | Ctrl+T reset\n")
+		}
 	}
 	if m.modal != "" {
 		if m.modal == "discard" {
 			out.WriteString("\nUnsaved edits: D discard | Esc cancel\n")
+		} else if m.modal == "tools" {
+			out.WriteString(m.toolsView())
+		} else if m.modal == "tool_value" {
+			fmt.Fprintf(&out, "\nEdit %s: %s_\nEnter apply | Esc cancel\n", toolLabels[m.toolField], m.draft)
+		} else if m.modal == "spawn_confirm" {
+			e := m.spawnPreview
+			fmt.Fprintf(&out, "\nSpawn preview: %s\nPosition %.2f %.2f %.2f\nSize %.2f m | Mass %.2f kg\nEnter queue | Esc cancel\n", e.Shape, e.Position.X, e.Position.Y, e.Position.Z, e.Size.X, e.Mass)
 		} else if m.modal == "bindings" {
 			out.WriteString(m.bindingsView())
 		} else if m.modal == "binding" {
@@ -707,6 +725,13 @@ func runProjectEditor(settings config.Settings, path string) error {
 
 // selectID preserves identity when tree order changes after a document command.
 func (m *projectEditorModel) selectID(id string) {
+	if m.play != nil {
+		if _, ok := m.play.Find(id); ok {
+			m.runtimeSelection = id
+			m.hitAnchor = nil
+		}
+		return
+	}
 	for i, e := range m.document.Document().Hierarchy() {
 		if e.ID == id {
 			m.selected = i
