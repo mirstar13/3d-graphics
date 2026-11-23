@@ -22,6 +22,7 @@ type entity struct {
 	body        physics.BodyID
 	generation  uint32
 	active      bool
+	spawned     bool
 }
 
 var sessionSequence atomic.Uint64
@@ -173,6 +174,9 @@ func (s *Session) State(id EntityID) (project.Entity, error) {
 
 // QueueImpulse applies a world-space impulse once at the next simulation tick.
 func (s *Session) QueueImpulse(id EntityID, impulse engine.Point) error {
+	return s.queueImpulse(id, impulse, nil)
+}
+func (s *Session) queueImpulse(id EntityID, impulse engine.Point, localPoint *engine.Point) error {
 	e, err := s.lookup(id)
 	if err != nil {
 		return err
@@ -185,10 +189,28 @@ func (s *Session) QueueImpulse(id EntityID, impulse engine.Point) error {
 			return fmt.Errorf("invalid impulse")
 		}
 	}
+	var anchor engine.Point
+	if localPoint != nil {
+		anchor = *localPoint
+		for _, v := range []float64{anchor.X, anchor.Y, anchor.Z} {
+			if math.IsNaN(v) || math.IsInf(v, 0) {
+				return fmt.Errorf("invalid local anchor")
+			}
+		}
+	}
 	return s.enqueue(func() error {
 		e, err := s.lookup(id)
 		if err != nil {
 			return err
+		}
+		if localPoint != nil {
+			b, err := s.World.Body(e.body)
+			if err != nil {
+				return err
+			}
+			offset := b.Rotation.RotateVector(anchor)
+			point := engine.Point{X: b.Position.X + offset.X, Y: b.Position.Y + offset.Y, Z: b.Position.Z + offset.Z}
+			return s.World.AddImpulseAtPoint(e.body, impulse, point)
 		}
 		return s.World.AddImpulse(e.body, impulse)
 	})
@@ -210,8 +232,7 @@ func (s *Session) QueueSpawn(d project.Entity) error {
 		if err := s.validateSpawn(d); err != nil {
 			return err
 		}
-		_, err := s.spawn(d)
-		return err
+		return s.spawnRuntime(d)
 	})
 }
 
