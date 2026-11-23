@@ -11,6 +11,7 @@ import (
 	"github.com/mirstar13/go-3d-graphics/internal/config"
 	"github.com/mirstar13/go-3d-graphics/internal/engine"
 	"github.com/mirstar13/go-3d-graphics/internal/game"
+	"github.com/mirstar13/go-3d-graphics/internal/input"
 	"github.com/mirstar13/go-3d-graphics/internal/project"
 	"github.com/mirstar13/go-3d-graphics/internal/terminal"
 )
@@ -38,10 +39,12 @@ type projectEditorModel struct {
 	assets                                         []project.ResourceInfo
 	assetSelected                                  int
 	assetTarget                                    string
+	bindingSelected                                int
+	reticleU, reticleV                             float64
 }
 
 func newProjectEditor(settings config.Settings) projectEditorModel {
-	return projectEditorModel{settings: settings, width: 80, height: 30, zoom: 1}
+	return projectEditorModel{settings: settings, width: 80, height: 30, zoom: 1, reticleU: .5, reticleV: .5}
 }
 func (m projectEditorModel) Init() tea.Cmd { return nil }
 func (m *projectEditorModel) install(p *project.Project) error {
@@ -68,7 +71,7 @@ func (m *projectEditorModel) install(p *project.Project) error {
 	return nil
 }
 func (m *projectEditorModel) selectedEntity() (project.Entity, bool) {
-	if m.document == nil {
+	if m.document == nil || m.selected < 0 {
 		return project.Entity{}, false
 	}
 	entities := m.document.Document().Hierarchy()
@@ -97,10 +100,10 @@ func (m *projectEditorModel) renderPreview() {
 		m.frame = nil
 		return
 	}
-	w, h := max(12, min(70, (m.width-3)/2)), max(4, min(26, m.height-10))
+	w, h := max(12, min(70, (m.width-3)/2)), max(1, min(26, m.height-11))
 	if m.width < 65 {
-		w = max(12, m.width-2)
-		h = 4
+		w = max(1, m.width)
+		h = max(1, min(26, m.height-12))
 	}
 	renderer := terminal.NewTerminalRenderer(bufio.NewWriter(io.Discard), h, w)
 	renderer.UseColor = false
@@ -125,6 +128,11 @@ func (m *projectEditorModel) renderPreview() {
 	for y, row := range renderer.Surface {
 		m.frame[y] = string(row)
 	}
+	x, y := m.reticleCell(w, h)
+	row := []rune(m.frame[y])
+	row[x] = '+'
+	m.frame[y] = string(row)
+
 }
 func (m *projectEditorModel) save() {
 	if m.document == nil {
@@ -201,10 +209,30 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.renderPreview()
 		return m, nextEditorTick()
 	case tea.KeyMsg:
+		if m.modal == "" && msg.Type == tea.KeyRunes {
+			if msg.Paste {
+				return m, nil
+			}
+			if len(msg.Runes) > 1 {
+				var commands []tea.Cmd
+				for _, r := range msg.Runes {
+					next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}, Alt: msg.Alt})
+					m = next.(projectEditorModel)
+					if cmd != nil {
+						commands = append(commands, cmd)
+					}
+				}
+				return m, tea.Batch(commands...)
+			}
+		}
 		key := msg.String()
 		if m.modal != "" {
 			if key == "esc" || key == "ctrl+c" {
 				m.modal = ""
+				return m, nil
+			}
+			if m.modal == "bindings" {
+				m.updateBindings(key)
 				return m, nil
 			}
 			if m.modal == "assets" {
@@ -241,6 +269,8 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 					if err == nil {
 						err = m.install(p)
 					}
+				case "binding":
+					err = m.saveBinding()
 				case "extract":
 					if e, ok := m.selectedEntity(); ok {
 						var path string
@@ -317,20 +347,41 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if action := input.Resolve(m.project.Manifest.Bindings, key, m.focus == 2); action != "" {
+			key = action
+		}
 		switch key {
+		case input.Pick:
+			m.pickReticle()
+		case input.Clear:
+			m.selected = -1
+			m.message = "Selection cleared"
+			m.renderPreview()
+		case input.Next:
+			m.cycleSelection(1)
+		case input.Previous:
+			m.cycleSelection(-1)
+		case input.AimUp:
+			m.moveReticle(0, -1)
+		case input.AimDown:
+			m.moveReticle(0, 1)
+		case input.AimLeft:
+			m.moveReticle(-1, 0)
+		case input.AimRight:
+			m.moveReticle(1, 0)
 		case "tab":
-			m.focus = 1 - m.focus
+			m.focus = (m.focus + 1) % 3
+			m.renderPreview()
 		case "up", "down":
+			if m.focus == 2 {
+				break
+			}
 			delta := 1
 			if key == "up" {
 				delta = -1
 			}
 			if m.focus == 0 {
-				count := len(m.document.Document().Entities)
-				if count > 0 {
-					m.selected = (m.selected + count + delta) % count
-					m.renderPreview()
-				}
+				m.cycleSelection(delta)
 			} else {
 				m.property = (m.property + len(project.Properties) + delta) % len(project.Properties)
 			}
@@ -349,7 +400,7 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "-":
 			m.zoom = min(5, m.zoom*1.25)
 			m.renderPreview()
-		case "f5", "p":
+		case input.Play:
 			if m.play == nil {
 				cmd := m.startPlay()
 				return m, cmd
@@ -358,19 +409,19 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.play = nil
 			m.renderPreview()
 			m.message = "Stopped; authored scene preserved"
-		case "f6", " ":
+		case input.Pause:
 			if m.play != nil {
 				m.play.World.SetPaused(!m.play.World.Stats().Paused)
 				m.lastTick = time.Now()
 			}
-		case "f7", "n":
+		case input.Step:
 			if m.play != nil && m.play.World.Stats().Paused {
 				if err := m.play.Step(); err != nil {
 					m.message = err.Error()
 				}
 				m.renderPreview()
 			}
-		case "i":
+		case input.Impulse:
 			if m.play != nil {
 				if e, ok := m.selectedEntity(); ok {
 					if id, ok := m.play.Find(e.ID); ok {
@@ -388,6 +439,9 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			switch key {
+			case "k":
+				m.modal = "bindings"
+				m.bindingSelected = 0
 			case "a", "r", "ctrl+r", "ctrl+u", "ctrl+t":
 				m.resourceCommand(key)
 			case "h":
@@ -503,6 +557,9 @@ func (m projectEditorModel) View() string {
 			side = append(side, "(empty: B box / G sphere)")
 		}
 		focus := "Hierarchy"
+		if m.focus == 2 {
+			focus = "Viewport"
+		}
 		if m.focus == 1 {
 			focus = "Inspector"
 		}
@@ -526,7 +583,7 @@ func (m projectEditorModel) View() string {
 				}
 			}
 		}
-		contentHeight := max(1, m.height-10)
+		contentHeight := max(1, m.height-11)
 		if m.width < 65 || contentHeight < 10 {
 			side = nil
 			if m.focus == 0 {
@@ -539,8 +596,13 @@ func (m projectEditorModel) View() string {
 					}
 					side = append(side, prefix+strings.Repeat("  ", min(entities[i].Depth, 8))+entities[i].Name)
 				}
+			} else if m.focus == 2 {
+				side = []string{"Viewport (Tab switches focus)"}
+				if m.width < 65 {
+					side = append(side, m.frame...)
+				}
 			} else if e, ok := m.selectedEntity(); ok {
-				side = append(side, "Inspector (local; Tab: Hierarchy)")
+				side = append(side, "Inspector (local; Tab: Viewport)")
 				first := max(0, m.property-contentHeight+2)
 				for i := first; i < min(len(project.Properties), first+contentHeight-1); i++ {
 					p := m.inspectorProperty(i, e)
@@ -569,11 +631,24 @@ func (m projectEditorModel) View() string {
 				out.WriteString(line + "\n")
 			}
 		}
-		out.WriteString("B box / G sphere | E edit | Del delete | Ctrl+D duplicate\nCtrl+S save | Ctrl+Z/Y undo/redo | Ctrl+N/O new/open\nP/F5 Play | Space pause | N step | I impulse | F8/Esc Stop\nH parent | 1/2/3 camera | +/- zoom | Q exit editor\nA assets | R extract | Ctrl+R refresh | Ctrl+U unpack | Ctrl+T reset\n")
+		bindings := m.project.Manifest.Bindings
+		out.WriteString(input.Help(bindings, input.Play, input.Pause, input.Step, input.Impulse) + " | F8/Esc Stop\n")
+		out.WriteString(input.Help(bindings, input.Pick, input.Clear, input.Previous, input.Next) + " | K bindings\n")
+		out.WriteString("B box / G sphere | E edit | Del delete | Ctrl+D duplicate\nCtrl+S save | Ctrl+Z/Y undo/redo | Ctrl+N/O new/open\n")
+		if m.focus == 2 {
+			out.WriteString(input.Help(bindings, input.AimUp, input.AimDown, input.AimLeft, input.AimRight) + "\n")
+		} else {
+			out.WriteString("H parent | 1/2/3 camera | +/- zoom | Q exit editor\n")
+		}
+		out.WriteString("A assets | R extract | Ctrl+R refresh | Ctrl+U unpack | Ctrl+T reset\n")
 	}
 	if m.modal != "" {
 		if m.modal == "discard" {
 			out.WriteString("\nUnsaved edits: D discard | Esc cancel\n")
+		} else if m.modal == "bindings" {
+			out.WriteString(m.bindingsView())
+		} else if m.modal == "binding" {
+			fmt.Fprintf(&out, "\nBind %s: %s_\nComma-separated keys | Enter save | Esc cancel\n", input.Definitions()[m.bindingSelected].Label, m.draft)
 		} else if m.modal == "assets" {
 			out.WriteString(m.resourceBrowser())
 		} else if m.modal == "extract" {
