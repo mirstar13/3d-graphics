@@ -23,6 +23,7 @@ func nextEditorTick() tea.Cmd {
 }
 
 type projectEditorModel struct {
+	build                                          buildPanel
 	sceneField                                     int
 	settings                                       config.Settings
 	project                                        *project.Project
@@ -219,6 +220,16 @@ func (m *projectEditorModel) startPlay() tea.Cmd {
 }
 func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := message.(type) {
+	case projectBuildResult:
+		if m.build.cancel != nil {
+			m.build.cancel()
+			m.build.cancel = nil
+		}
+		m.build.output = "Built " + msg.path
+		if msg.err != nil {
+			m.build.output = "Build failed\n" + msg.err.Error()
+		}
+		return m, nil
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.renderPreview()
@@ -254,6 +265,9 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		key := msg.String()
+		if m.modal == "build" {
+			return m.buildKey(key)
+		}
 		if m.modal == "scene" || m.modal == "scene_edit" {
 			m.sceneKey(msg)
 			return m, nil
@@ -366,6 +380,11 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		switch key {
+		case "ctrl+b":
+			if m.project != nil && m.activeResource == nil && m.play == nil {
+				return m.startBuild()
+			}
+			return m, nil
 		case "ctrl+e":
 			if m.document != nil && m.play == nil && m.activeResource == nil {
 				m.modal = "scene"
@@ -564,6 +583,9 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 func (m projectEditorModel) View() string {
+	if m.modal == "build" {
+		return m.buildView()
+	}
 	if m.modal == "scene" || m.modal == "scene_edit" {
 		return m.scenePanel()
 	}
@@ -675,7 +697,7 @@ func (m projectEditorModel) View() string {
 		if m.focus == 2 {
 			out.WriteString(input.Help(bindings, input.AimUp, input.AimDown, input.AimLeft, input.AimRight) + "\n")
 		} else {
-			out.WriteString("Ctrl+E scene settings | H parent | 1/2/3 camera | +/- zoom | Q exit editor\n")
+			out.WriteString("Ctrl+B build | Ctrl+E scene settings | H parent | 1/2/3 camera | +/- zoom | Q exit editor\n")
 		}
 		if m.play != nil {
 			fmt.Fprintf(&out, "Ctrl+L tools | Impulse (%s,%s,%s) %s\n", m.toolValues[0], m.toolValues[1], m.toolValues[2], m.toolValues[3])

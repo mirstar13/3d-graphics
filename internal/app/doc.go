@@ -25,6 +25,23 @@
 // Ctrl+D duplicates it. Delete removes it. E edits an inspector property.
 // Ctrl+Z and Ctrl+Y navigate history. Ctrl+S saves authored data during Edit or Play.
 //
+// # Building gameplay code
+//
+// New projects include go.mod and a root main.go with a creator.Behavior.
+// Supply those files manually for older scene-only projects. Install Go 1.24.6
+// or later and press Ctrl+B in scene Edit mode to compile for the host platform.
+// The first build downloads the pinned engine module and dependencies. To build
+// against a local engine checkout, replace the module in the project directory:
+//
+//	go mod edit -replace=github.com/mirstar13/go-3d-graphics=/absolute/path/to/engine
+//
+// Scroll compiler diagnostics with Up/Down, fix the source, then press Ctrl+B
+// to rebuild. Escape cancels a running build or closes its results. Successful
+// builds produce build/game (build/game.exe on Windows). Launch from the project
+// directory so the starter finds project.yaml. Its main function runs one tick.
+//
+// # Visual assets
+//
 // Put Wavefront files in the project assets directory (create it in existing
 // projects). In the entity inspector set Mesh OBJ to assets/model.obj. Set
 // Material MTL#name to assets/palette.mtl#Copper to override every face or

@@ -63,6 +63,17 @@ with tempfile.TemporaryDirectory() as parent:
         s.wait(b"Project editor")
         s.send(b"n"); s.wait(b"new project directory")
         s.send(root.encode() + b"\r"); s.wait(b"Opened Example")
+        s.send(b"\x02"); s.wait(b"Built build/game", seconds=90)
+        source_path = os.path.join(root, "main.go")
+        with open(source_path, "rb") as file:
+            starter = file.read()
+        with open(source_path, "ab") as file:
+            file.write(b"\nvar _ = missingGameplaySymbol\n")
+        s.send(b"\x02"); s.wait(b"undefined: missingGameplaySymbol", seconds=30)
+        with open(source_path, "wb") as file:
+            file.write(starter)
+        s.send(b"\x02"); s.wait(b"Built build/game", seconds=30)
+        s.send(b"\x1b"); s.wait(b"Hierarchy")
         s.send(b"g"); s.wait(b"Added sphere")
         s.send(b"e"); s.wait(b"Edit Name")
         s.send(b"\x7f" * len("New sphere") + b"Player\r"); s.wait(b"Property updated")
