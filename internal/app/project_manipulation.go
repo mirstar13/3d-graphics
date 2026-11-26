@@ -185,7 +185,7 @@ func (m *projectEditorModel) confirmSpawn() error {
 }
 func (m *projectEditorModel) resetPlay() {
 	paused := m.play.World.Stats().Paused
-	session, err := game.NewSession(m.document.Document(), m.settings.Physics.WorldOptions())
+	session, err := game.NewProjectSession(m.project.Root, m.document.Document(), m.settings.Physics.WorldOptions())
 	if err != nil {
 		m.message = err.Error()
 		return

@@ -59,7 +59,7 @@ func (m *projectEditorModel) install(p *project.Project) error {
 	if err != nil {
 		return err
 	}
-	preview, err := game.NewSession(p.Scene, m.settings.Physics.WorldOptions())
+	preview, err := game.NewProjectSession(p.Root, p.Scene, m.settings.Physics.WorldOptions())
 	if err != nil {
 		return err
 	}
@@ -97,7 +97,7 @@ func (m *projectEditorModel) selectedEntity() (project.Entity, bool) {
 }
 func (m *projectEditorModel) refresh() {
 	m.selectedEntity()
-	preview, err := game.NewSession(m.document.Document(), m.settings.Physics.WorldOptions())
+	preview, err := game.NewProjectSession(m.project.Root, m.document.Document(), m.settings.Physics.WorldOptions())
 	if err != nil {
 		m.message = err.Error()
 		return
@@ -194,7 +194,7 @@ func (m *projectEditorModel) startPlay() tea.Cmd {
 	if m.document == nil {
 		return nil
 	}
-	session, err := game.NewSession(m.document.Document(), m.settings.Physics.WorldOptions())
+	session, err := game.NewProjectSession(m.project.Root, m.document.Document(), m.settings.Physics.WorldOptions())
 	if err != nil {
 		m.message = err.Error()
 		return nil
@@ -322,7 +322,16 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				case "property":
 					if e, ok := m.selectedEntity(); ok {
-						err = m.document.Set(e.ID, project.Properties[m.property].Key, m.draft)
+						prop := project.Properties[m.property]
+						if prop.Key == "mesh_asset" || prop.Key == "material_asset" {
+							err = prop.Set(&e, m.draft)
+							if err == nil {
+								_, _, err = e.LoadVisualAssets(m.project.Root)
+							}
+						}
+						if err == nil {
+							err = m.document.Set(e.ID, prop.Key, m.draft)
+						}
 					}
 					if err == nil {
 						m.modal = ""

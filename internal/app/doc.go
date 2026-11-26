@@ -25,6 +25,18 @@
 // Ctrl+D duplicates it. Delete removes it. E edits an inspector property.
 // Ctrl+Z and Ctrl+Y navigate history. Ctrl+S saves authored data during Edit or Play.
 //
+// Put Wavefront files in the project assets directory (create it in existing
+// projects). In the entity inspector set Mesh OBJ to assets/model.obj. Set
+// Material MTL#name to assets/palette.mtl#Copper to override every face or
+// leave it empty to use the OBJ face assignments and entity color fallback.
+// Clearing Mesh OBJ restores the primitive. The size axes scale OBJ vertices
+// about the model origin. Visual-only picking uses the authored primitive proxy.
+//
+// Collider shape accepts box or sphere. An empty value follows the primitive
+// shape. Collider dimensions are box half extents or sphere radius in X. A
+// zero component follows the corresponding visual size. Select Body none for
+// a visual-only mesh. Asset references also work inside linked resources.
+//
 // The entity inspector accepts initial linear velocity in m/s and angular
 // velocity in rad/s on each world axis. Play applies these to dynamic bodies.
 // Enable Sensor on a collider to detect contact without a collision response.
