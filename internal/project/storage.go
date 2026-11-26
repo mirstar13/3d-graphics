@@ -172,6 +172,11 @@ func Create(root string) (*Project, error) {
 	if e = writeAtomic(filepath.Join(root, "project.yaml"), p.Manifest); e != nil {
 		return nil, e
 	}
+	for file, contents := range map[string]string{"go.mod": starterModule, "go.sum": starterSums, "main.go": starterMain} {
+		if e = os.WriteFile(filepath.Join(root, file), []byte(contents), 0644); e != nil {
+			return nil, e
+		}
+	}
 	if e = p.Save(p.Scene); e != nil {
 		return nil, e
 	}
