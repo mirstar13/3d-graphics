@@ -54,6 +54,9 @@ type Entity struct {
 	// authored values for a later switch to dynamic.
 	Velocity        engine.Point `yaml:"velocity,omitempty"`
 	AngularVelocity engine.Point `yaml:"angular_velocity,omitempty"`
+	// Friction controls tangential resistance. Restitution sets bounce from zero to one.
+	Friction    Coefficient `yaml:"friction,omitempty"`
+	Restitution Coefficient `yaml:"restitution,omitempty"`
 	// Sensor colliders report overlapping contacts without applying impulses.
 	Sensor bool         `yaml:"sensor,omitempty"`
 	Color  engine.Color `yaml:"color"`
@@ -156,6 +159,12 @@ func (d Document) Validate() error {
 			if !validPosition(v) {
 				return fmt.Errorf("entity %s: initial velocity components must be finite and within ±1e9", e.ID)
 			}
+		}
+		if !finiteRange(e.Friction.Resolve(0), 0, math.Sqrt(math.MaxFloat64)) {
+			return fmt.Errorf("entity %s: friction must be nonnegative and small enough to combine with another collider", e.ID)
+		}
+		if !finiteRange(e.Restitution.Resolve(0), 0, 1) {
+			return fmt.Errorf("entity %s: restitution must be within 0..1", e.ID)
 		}
 		if !finiteRange(e.Mass, .01, 10000) {
 			return fmt.Errorf("entity %s: mass outside 0.01..10000 kg", e.ID)

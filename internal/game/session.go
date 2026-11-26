@@ -152,6 +152,8 @@ func (s *Session) spawn(d project.Entity) (EntityID, error) {
 		desc.Position = d.Position
 		desc.Rotation = q
 		desc.Mass = d.Mass
+		desc.Collider.Friction = d.Friction.Resolve(desc.Collider.Friction)
+		desc.Collider.Restitution = d.Restitution.Resolve(desc.Collider.Restitution)
 		desc.Collider.Sensor = d.Sensor
 		if kind == physics.Dynamic {
 			desc.Velocity = d.Velocity

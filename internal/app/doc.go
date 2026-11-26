@@ -28,6 +28,8 @@
 // The entity inspector accepts initial linear velocity in m/s and angular
 // velocity in rad/s on each world axis. Play applies these to dynamic bodies.
 // Enable Sensor on a collider to detect contact without a collision response.
+// Friction controls sliding resistance. Restitution ranges from 0 to 1.
+// Enter default to inherit the physics material (0.6 friction, 0.1 restitution).
 // These properties support linked-instance overrides and undo like mass.
 //
 // R extracts the selection as a resource. A browses resources. Enter instantiates

@@ -81,7 +81,10 @@ func properties() []Property {
 			e.Sensor = value
 			return nil
 		}})
-	return result
+	return append(result,
+		coefficientProperty("friction", "Friction", func(e *Entity) *Coefficient { return &e.Friction }),
+		coefficientProperty("restitution", "Restitution", func(e *Entity) *Coefficient { return &e.Restitution }),
+	)
 }
 
 // Editor owns authored snapshots and a bounded history. Runtime sessions receive copies.
