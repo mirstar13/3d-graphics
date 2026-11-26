@@ -102,6 +102,9 @@ func properties() []Property {
 				e.SphereCCD = v
 				return nil
 			}},
+		number("enter_impulse.x", "Sensor enter impulse X", "N·s", func(e *Entity) *float64 { return &e.EnterImpulse.X }),
+		number("enter_impulse.y", "Sensor enter impulse Y", "N·s", func(e *Entity) *float64 { return &e.EnterImpulse.Y }),
+		number("enter_impulse.z", "Sensor enter impulse Z", "N·s", func(e *Entity) *float64 { return &e.EnterImpulse.Z }),
 	)
 }
 

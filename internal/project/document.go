@@ -54,6 +54,9 @@ type Entity struct {
 	// authored values for a later switch to dynamic.
 	Velocity        engine.Point `yaml:"velocity,omitempty"`
 	AngularVelocity engine.Point `yaml:"angular_velocity,omitempty"`
+	// EnterImpulse is a world-space impulse delivered to a dynamic body when
+	// it enters this sensor. The zero vector disables the action.
+	EnterImpulse engine.Point `yaml:"enter_impulse,omitempty"`
 	// LinearDamping and AngularDamping control the decay of body velocity.
 	LinearDamping  Coefficient `yaml:"linear_damping,omitempty"`
 	AngularDamping Coefficient `yaml:"angular_damping,omitempty"`
@@ -163,6 +166,9 @@ func (d Document) Validate() error {
 			if !finiteRange(v, .05, 100) {
 				return fmt.Errorf("entity %s: size outside 0.05..100 m", e.ID)
 			}
+		}
+		if !validPosition(e.EnterImpulse) {
+			return fmt.Errorf("entity %s: invalid sensor enter impulse", e.ID)
 		}
 		for _, v := range []engine.Point{e.Velocity, e.AngularVelocity} {
 			if !validPosition(v) {

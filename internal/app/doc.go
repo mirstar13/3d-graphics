@@ -39,6 +39,11 @@
 // Zero disables that damping term. Enter default to restore the physics value.
 // Set Sphere CCD to on for a fast dynamic sphere to sweep against supported
 // static colliders, off to disable it, or default to inherit the scene policy.
+// To build a launch pad, enable Sensor on a static box and set Sensor enter
+// impulse Y to 5 N·s. When a dynamic body enters, the pad applies that impulse
+// on the next fixed tick. Remaining inside does not retrigger it. Leaving and
+// entering again activates it again. The vector uses world axes and a larger
+// mass gains less speed. A zero vector disables the action.
 // These properties support linked-instance overrides and undo like mass.
 //
 // R extracts the selection as a resource. A browses resources. Enter instantiates

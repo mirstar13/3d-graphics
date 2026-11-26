@@ -20,7 +20,7 @@ func TestBodyAuthoringReopenAndPlay(t *testing.T) {
 		}
 	}
 	m.selectID("box")
-	values := map[string]string{"shape": "sphere", "sphere_ccd": "on", "linear_damping": "0", "angular_damping": "0.7", "velocity.x": "4", "angular_velocity.z": "-2", "sensor": "true", "friction": "0", "restitution": "0.85", "collision_layer": "0x80000000", "collision_mask": "0"}
+	values := map[string]string{"enter_impulse.y": "5", "shape": "sphere", "sphere_ccd": "on", "linear_damping": "0", "angular_damping": "0.7", "velocity.x": "4", "angular_velocity.z": "-2", "sensor": "true", "friction": "0", "restitution": "0.85", "collision_layer": "0x80000000", "collision_mask": "0"}
 	for i, prop := range project.Properties {
 		value, ok := values[prop.Key]
 		if !ok {
@@ -56,6 +56,9 @@ func TestBodyAuthoringReopenAndPlay(t *testing.T) {
 	b, err := m.play.Inspect(id)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if b.Entity.EnterImpulse.Y != 5 {
+		t.Fatal("sensor entry action lost across save and Play")
 	}
 	if !b.Body.CCD || b.Body.LinearDamping != 0 || b.Body.AngularDamping != .7 {
 		t.Fatalf("unexpected motion settings %+v", b.Body)

@@ -29,6 +29,7 @@ var sessionSequence atomic.Uint64
 
 // Session owns live entities and a world; all operations belong to the update goroutine.
 type Session struct {
+	enterImpulses map[physics.BodyID]engine.Point
 	// InitialCamera holds the authored view used to restore transient editor navigation.
 	InitialCamera project.CameraSettings
 	Scene         *engine.Scene
@@ -175,6 +176,12 @@ func (s *Session) spawn(d project.Entity) (EntityID, error) {
 			return EntityID{}, err
 		}
 		entry.body = id
+		if d.Sensor && d.EnterImpulse != (engine.Point{}) {
+			if s.enterImpulses == nil {
+				s.enterImpulses = make(map[physics.BodyID]engine.Point)
+			}
+			s.enterImpulses[id] = d.EnterImpulse
+		}
 	}
 	slot := len(s.entities)
 	for i, old := range s.entities {
@@ -310,6 +317,7 @@ func (s *Session) QueueDestroy(id EntityID) error {
 				if err := s.World.RemoveBody(child.body); err != nil {
 					return err
 				}
+				delete(s.enterImpulses, child.body)
 			}
 			s.Scene.RemoveNode(child.node)
 			child.active = false
@@ -318,8 +326,32 @@ func (s *Session) QueueDestroy(id EntityID) error {
 		return nil
 	})
 }
+
+// applyEnterImpulses submits each sensor's action once per new contact pair.
+func (s *Session) applyEnterImpulses() {
+	if len(s.enterImpulses) == 0 {
+		return
+	}
+	for _, event := range s.World.ContactEvents() {
+		if !event.Sensor || event.Phase != physics.ContactBegin {
+			continue
+		}
+		s.applySensorImpulse(event.A, event.B)
+		s.applySensorImpulse(event.B, event.A)
+	}
+}
+
+func (s *Session) applySensorImpulse(sensor, other physics.BodyID) {
+	if impulse, ok := s.enterImpulses[sensor]; ok {
+		if err := s.World.AddImpulse(other, impulse); err != nil {
+			s.lastError = err
+		}
+	}
+}
+
 func (s *Session) hooks() physics.StepHooks {
 	return physics.StepHooks{AfterStep: func(t physics.Tick) {
+		s.applyEnterImpulses()
 		for i := range s.entities {
 			e := &s.entities[i]
 			if !e.active || e.description.Body == "none" {
