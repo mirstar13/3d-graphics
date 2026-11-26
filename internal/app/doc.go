@@ -30,6 +30,11 @@
 // Enable Sensor on a collider to detect contact without a collision response.
 // Friction controls sliding resistance. Restitution ranges from 0 to 1.
 // Enter default to inherit the physics material (0.6 friction, 0.1 restitution).
+// Collision layer and mask accept 32-bit decimal or 0x-prefixed hexadecimal
+// values. Each body's mask must include at least one layer of the other body
+// for contact. A zero mask suppresses all contacts. Layer zero also excludes
+// the collider from layer-based spatial queries. Enter default for layer 1 or
+// mask 0xFFFFFFFF. Sensor contacts follow the same filtering rules.
 // These properties support linked-instance overrides and undo like mass.
 //
 // R extracts the selection as a resource. A browses resources. Enter instantiates

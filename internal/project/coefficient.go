@@ -3,20 +3,26 @@ package project
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
-// Coefficient is an optional collider material coefficient. Its zero value
-// inherits the physics world's body descriptor default. It is copied by value
-// with entity snapshots, including explicit zero-friction or zero-bounce edits.
-type Coefficient struct {
-	value float64
+// OptionalNumber stores an authored scalar by value so snapshots retain both
+// explicit zeroes and the distinction between an override and inheritance.
+type OptionalNumber[T float64 | uint32] struct {
+	value T
 	set   bool
 }
 
-// Resolve returns the authored coefficient or the supplied physics default.
-func (c Coefficient) Resolve(fallback float64) float64 {
+// Coefficient is an optional collider material coefficient.
+type Coefficient = OptionalNumber[float64]
+
+// CollisionBits is a 32-bit layer or mask override.
+type CollisionBits = OptionalNumber[uint32]
+
+// Resolve returns the authored number or the supplied physics default.
+func (c OptionalNumber[T]) Resolve(fallback T) T {
 	if c.set {
 		return c.value
 	}
@@ -24,23 +30,26 @@ func (c Coefficient) Resolve(fallback float64) float64 {
 }
 
 // IsZero permits YAML to omit inherited values.
-func (c Coefficient) IsZero() bool { return !c.set }
+func (c OptionalNumber[T]) IsZero() bool { return !c.set }
 
-// MarshalYAML stores an authored coefficient as a numeric scalar.
-func (c Coefficient) MarshalYAML() (any, error) {
+// MarshalYAML stores an authored number as a numeric scalar.
+func (c OptionalNumber[T]) MarshalYAML() (any, error) {
 	if !c.set {
 		return nil, nil
 	}
 	return c.value, nil
 }
 
-// UnmarshalYAML restores an explicit numeric coefficient, including zero.
-func (c *Coefficient) UnmarshalYAML(node *yaml.Node) error {
-	var value float64
+// UnmarshalYAML restores an explicit numeric number, including zero.
+func (c *OptionalNumber[T]) UnmarshalYAML(node *yaml.Node) error {
+	var value T
+	if _, bits := any(value).(uint32); bits && node.ShortTag() != "!!int" {
+		return fmt.Errorf("collision bits require an unsigned 32-bit integer")
+	}
 	if err := node.Decode(&value); err != nil {
 		return err
 	}
-	*c = Coefficient{value, true}
+	*c = OptionalNumber[T]{value, true}
 	return nil
 }
 
@@ -61,6 +70,33 @@ func coefficientProperty(key, label string, field func(*Entity) *Coefficient) Pr
 			return fmt.Errorf("%s requires a number or default", label)
 		}
 		*field(e) = Coefficient{value, true}
+		return nil
+	}}
+}
+
+// bitsProperty displays hexadecimal so individual collision channels are visible.
+func bitsProperty(key, label string, field func(*Entity) *CollisionBits) Property {
+	return Property{Key: key, Label: label, Get: func(e Entity) string {
+		bits := field(&e)
+		if !bits.set {
+			return "default"
+		}
+		return fmt.Sprintf("0x%08X", bits.value)
+	}, Set: func(e *Entity, text string) error {
+		if text == "default" {
+			*field(e) = CollisionBits{}
+			return nil
+		}
+		base := 10
+		if strings.HasPrefix(text, "0x") || strings.HasPrefix(text, "0X") {
+			text = text[2:]
+			base = 16
+		}
+		value, err := strconv.ParseUint(text, base, 32)
+		if err != nil {
+			return fmt.Errorf("%s requires a 32-bit decimal or hexadecimal integer, or default", label)
+		}
+		*field(e) = CollisionBits{uint32(value), true}
 		return nil
 	}}
 }

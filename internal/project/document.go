@@ -54,6 +54,9 @@ type Entity struct {
 	// authored values for a later switch to dynamic.
 	Velocity        engine.Point `yaml:"velocity,omitempty"`
 	AngularVelocity engine.Point `yaml:"angular_velocity,omitempty"`
+	// CollisionLayer defines membership bits. CollisionMask selects accepted layers.
+	CollisionLayer CollisionBits `yaml:"collision_layer,omitempty"`
+	CollisionMask  CollisionBits `yaml:"collision_mask,omitempty"`
 	// Friction controls tangential resistance. Restitution sets bounce from zero to one.
 	Friction    Coefficient `yaml:"friction,omitempty"`
 	Restitution Coefficient `yaml:"restitution,omitempty"`

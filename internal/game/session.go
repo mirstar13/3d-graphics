@@ -154,6 +154,8 @@ func (s *Session) spawn(d project.Entity) (EntityID, error) {
 		desc.Mass = d.Mass
 		desc.Collider.Friction = d.Friction.Resolve(desc.Collider.Friction)
 		desc.Collider.Restitution = d.Restitution.Resolve(desc.Collider.Restitution)
+		desc.Collider.Layer = d.CollisionLayer.Resolve(desc.Collider.Layer)
+		desc.Collider.Mask = d.CollisionMask.Resolve(desc.Collider.Mask)
 		desc.Collider.Sensor = d.Sensor
 		if kind == physics.Dynamic {
 			desc.Velocity = d.Velocity

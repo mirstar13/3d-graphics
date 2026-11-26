@@ -35,3 +35,33 @@ func TestSceneLightingAndGravityInheritance(t *testing.T) {
 		t.Fatal("legacy light", err)
 	}
 }
+
+func TestAuthoredCollisionMaskFiltersContact(t *testing.T) {
+	for _, tc := range []struct {
+		mask    string
+		contact bool
+	}{{"0x80000000", true}, {"1", false}, {"0", false}} {
+		t.Run(tc.mask, func(t *testing.T) {
+			ed, err := project.NewEditor(project.NewDocument())
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, setting := range [][3]string{{"floor", "collision_layer", "0x80000000"}, {"box", "collision_mask", tc.mask}, {"box", "position.y", "0.25"}} {
+				if err := ed.Set(setting[0], setting[1], setting[2]); err != nil {
+					t.Fatal(err)
+				}
+			}
+			options := physics.DefaultOptions()
+			s, err := NewSession(ed.Document(), options)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := s.Advance(options.FixedStep); err != nil {
+				t.Fatal(err)
+			}
+			if got := len(s.World.Contacts()) > 0; got != tc.contact {
+				t.Fatalf("contact = %v, want %v", got, tc.contact)
+			}
+		})
+	}
+}

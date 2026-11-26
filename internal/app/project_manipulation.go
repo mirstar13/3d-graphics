@@ -286,6 +286,7 @@ func (m *projectEditorModel) inspectorRows() []string {
 	rows := []string{"Name: " + e.Name, "Body: " + e.Body, fmt.Sprintf("Runtime spawn: %t", inspection.Spawned), fmt.Sprintf("Position: %.2f %.2f %.2f", p.X, p.Y, p.Z), fmt.Sprintf("Rotation: %.2f %.2f %.2f", r.X, r.Y, r.Z)}
 	if b := inspection.Body; b != nil {
 		rows = append(rows, fmt.Sprintf("Mass: %.2f kg", b.Mass), fmt.Sprintf("Velocity: %.2f %.2f %.2f", b.Velocity.X, b.Velocity.Y, b.Velocity.Z), fmt.Sprintf("Angular: %.2f %.2f %.2f", b.AngularVelocity.X, b.AngularVelocity.Y, b.AngularVelocity.Z), fmt.Sprintf("Sleeping: %t", b.Sleeping), fmt.Sprintf("Sensor: %t", b.Collider.Sensor), fmt.Sprintf("Friction: %g", b.Collider.Friction), fmt.Sprintf("Restitution: %g", b.Collider.Restitution))
+		rows = append(rows, fmt.Sprintf("Collision layer: 0x%08X", b.Collider.Layer), fmt.Sprintf("Collision mask: 0x%08X", b.Collider.Mask))
 	}
 	return rows
 }

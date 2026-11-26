@@ -84,6 +84,8 @@ func properties() []Property {
 	return append(result,
 		coefficientProperty("friction", "Friction", func(e *Entity) *Coefficient { return &e.Friction }),
 		coefficientProperty("restitution", "Restitution", func(e *Entity) *Coefficient { return &e.Restitution }),
+		bitsProperty("collision_layer", "Collision layer", func(e *Entity) *CollisionBits { return &e.CollisionLayer }),
+		bitsProperty("collision_mask", "Collision mask", func(e *Entity) *CollisionBits { return &e.CollisionMask }),
 	)
 }
 
