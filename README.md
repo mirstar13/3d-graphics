@@ -27,15 +27,10 @@ linked scene resources, property overrides, selection outlines, undo/redo, and
 pause/step. Press **R** to extract a subtree and **A** to browse resources.
 Physics bodies remain root-level. Press **K** to edit project key bindings;
 **Tab** to focus the viewport, arrows to aim the reticle, and **F** to pick.
-See the [resource workflow](docs/editor-scene-resources.md) and
-[input/selection guide](docs/editor-input-selection.md). During Play, **Ctrl+L**
-opens [manipulation tools](docs/editor-play-tools.md) for configurable impulses,
-checked runtime spawning, deletion, reset, and live physics inspection.
-See [remaining creator-alpha work](docs/creator-alpha-remaining.md) for the scope estimate.
-
-See the [editor guide](docs/editor-first-milestone.md) for controls, project files,
-validation, and the current scope. Nested scenes, scripts, full asset tooling,
-and game export are future milestones.
+Press **Ctrl+E** to author the scene camera, lighting and simulation settings.
+During Play, **Ctrl+L** opens tools for configurable impulses, checked spawning,
+runtime deletion, reset and physics inspection. Run `go doc ./internal/app` for
+the editor controls and `go doc ./internal/project` for scene storage and links.
 
 ## Start menu
 
@@ -219,9 +214,6 @@ Package and API comments are available through Go's documentation tool:
     go test -race ./...
     go vet ./...
 
-See [the code audit](docs/audit.md) for corrected bugs, regression coverage,
-removed code, and remaining improvement areas.
-
 OBJ imports preserve `usemtl` assignments per triangulated face, including faces
 before the first material directive. Missing libraries or material names are
 reported as errors. MTL diffuse/specular properties are supported; texture-map
@@ -231,8 +223,7 @@ Detail runway uses timed, dithered cross-fades. Morph mode interpolates meshes
 with matching vertex/index topology and falls back to a cross-fade otherwise.
 Shadow maps select one of the transitioning meshes at the midpoint.
 
-See [terminal compatibility checks](docs/terminal-compatibility.md) for the
-repeatable PTY test and native Windows/macOS test procedure.
+Run `go doc ./internal/terminal` for terminal compatibility checks.
 
 ## Scene catalog
 
@@ -267,7 +258,6 @@ Panels follow the picker order from left to right, top to bottom.
 
 ## Toward a terminal game engine
 
-See the [terminal game engine roadmap](docs/terminal-game-engine-roadmap.md) for
-a Godot/Unity-style project editor, scene authoring, attachable gameplay, standalone
-exports, native validation, and further physics work. The initial project editor workflow is implemented; the roadmap distinguishes
-that first slice from the remaining authoring and export capabilities.
+The creator roadmap includes richer asset and physics authoring, gameplay behaviors,
+a public API, project-local Go builds, supervised Play, HUDs, standalone export,
+an editable sample game and native-platform validation.

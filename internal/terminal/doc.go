@@ -22,4 +22,13 @@
 // retain full-cell coverage. SSAA shades at twice each dimension and downsamples
 // colors, glyphs, and nearest depth. Scratch buffers resize with the viewport.
 // LOD fades partition screen cells with complementary ordered dithering.
+//
+// # Terminal compatibility checks
+//
+// Build the application with the race detector and run scripts/check_terminal.py
+// against the binary on a PTY. On native Windows and macOS, check menu return,
+// resizing, color modes, cursor restoration, echo and prompt exit. Re-enter a
+// scene after returning to the menu. On Windows 10 in VS Code with PowerShell,
+// disabling terminal.integrated.gpuAcceleration prevented recurring corruption
+// during one follow-up observation. The cause remains unconfirmed.
 package terminal
