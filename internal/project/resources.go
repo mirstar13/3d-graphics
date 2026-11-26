@@ -27,6 +27,9 @@ type Instance struct {
 }
 
 func (r Resource) Validate() error {
+	if r.Scene.SceneSettings != (SceneSettings{}) {
+		return fmt.Errorf("global settings are only valid in scenes")
+	}
 	if r.Version != Version || !ValidText(r.ID, 80) {
 		return fmt.Errorf("invalid resource version or ID")
 	}

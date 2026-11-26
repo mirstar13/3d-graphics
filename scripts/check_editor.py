@@ -181,6 +181,11 @@ with tempfile.TemporaryDirectory() as parent:
     s = Session(["-project", root])
     try:
         s.wait(b"Opened Example")
+        s.send(b"\x05"); s.wait(b"Scene settings")
+        s.send(b"l"); s.wait(b"> Light 2")
+        s.send(b"d"); s.wait(b"> Key")
+        s.send(b"r"); s.wait(b"> Ambient")
+        s.send(b"\x1b"); s.wait(b"Hierarchy")
         with open(scene_path, "rb") as file:
             authored_before_tools = file.read()
         s.send(b"p"); s.wait(b"[PLAY]")

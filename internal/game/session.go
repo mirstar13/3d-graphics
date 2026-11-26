@@ -29,33 +29,70 @@ var sessionSequence atomic.Uint64
 
 // Session owns live entities and a world; all operations belong to the update goroutine.
 type Session struct {
-	Scene     *engine.Scene
-	Lighting  *engine.LightingSystem
-	World     *physics.World
-	id        uint64
-	entities  []entity
-	pending   []func() error
-	lastError error
+	// InitialCamera holds the authored view used to restore transient editor navigation.
+	InitialCamera project.CameraSettings
+	Scene         *engine.Scene
+	Lighting      *engine.LightingSystem
+	World         *physics.World
+	id            uint64
+	entities      []entity
+	pending       []func() error
+	lastError     error
 }
 
+// NewSession constructs an independent runtime from authored data and application physics defaults.
 func NewSession(d project.Document, options physics.Options) (*Session, error) {
 	if err := d.Validate(); err != nil {
 		return nil, err
+	}
+	if v := d.Simulation; v != nil {
+		if v.GravityX != nil {
+			options.Gravity.X = *v.GravityX
+		}
+		if v.GravityY != nil {
+			options.Gravity.Y = *v.GravityY
+		}
+		if v.GravityZ != nil {
+			options.Gravity.Z = *v.GravityZ
+		}
+		if v.Sleeping != nil {
+			options.Sleeping = *v.Sleeping
+		}
+		if v.DefaultCCD != nil {
+			options.DefaultCCD = *v.DefaultCCD
+		}
+		if v.VelocityIterations != nil {
+			options.VelocityIterations = *v.VelocityIterations
+		}
+		if v.PositionIterations != nil {
+			options.PositionIterations = *v.PositionIterations
+		}
 	}
 	world, err := physics.NewWorld(options)
 	if err != nil {
 		return nil, err
 	}
 	scene := engine.NewScene()
-	scene.Camera.SetPosition(14, 11, -20)
-	scene.Camera.LookAt(engine.Point{Y: 1})
-	scene.Camera.Near = .2
-	scene.Camera.Far = 300
-	scene.Camera.SetFOV(60, 40)
-	s := &Session{Scene: scene, World: world, id: sessionSequence.Add(1)}
+	c := project.DefaultCamera()
+	if d.Camera != nil {
+		c = *d.Camera
+	}
+	scene.Camera.SetPosition(c.Position.X, c.Position.Y, c.Position.Z)
+	scene.Camera.LookAt(c.Target)
+	scene.Camera.SetFOV(c.FOVX, c.FOVY)
+	scene.Camera.Near, scene.Camera.Far = c.Near, c.Far
+	s := &Session{InitialCamera: c, Scene: scene, World: world, id: sessionSequence.Add(1)}
 	s.Lighting = engine.NewLightingSystem(scene.Camera)
-	s.Lighting.AmbientIntensity = .5
-	s.Lighting.AddLight(engine.NewLight(-5, 12, -8, engine.ColorWhite, 1))
+	lighting := project.DefaultLighting()
+	if d.Lighting != nil {
+		lighting = *d.Lighting
+	}
+	s.Lighting.AmbientLight, s.Lighting.AmbientIntensity = lighting.Ambient, lighting.Intensity
+	for _, p := range lighting.Lights {
+		light := engine.NewLight(p.Position.X, p.Position.Y, p.Position.Z, p.Color, p.Intensity)
+		light.IsEnabled = p.Enabled
+		s.Lighting.AddLight(light)
+	}
 	for _, entry := range d.Hierarchy() {
 		if _, err = s.spawn(entry.Entity); err != nil {
 			return nil, err

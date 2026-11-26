@@ -1,4 +1,18 @@
 // Package project owns versioned authored documents independently of runtime state.
+//
+// # Project files
+//
+// The manifest selects the initial scene and stores semantic input bindings.
+// Scene files store stable entity identities, local transforms, root ordering
+// and linked instances. Bodies occupy hierarchy roots. A reusable resource has
+// one root and contains ordinary entities. Instance member maps connect each
+// source identity to its host identity. Overrides address source IDs and property
+// keys. Refresh resolves source changes and reapplies overrides. Unpacking keeps
+// the resolved entities and drops their link.
+//
+// Global camera, lighting and simulation fields belong to the host scene.
+// Omitting lighting restores the default rig. Supplying an empty light list
+// removes point illumination. Simulation overrides apply independently per field.
 package project
 
 import (
@@ -40,15 +54,18 @@ type Entity struct {
 
 // Document contains authored state only, never live handles, velocities or caches.
 type Document struct {
-	Version   int        `yaml:"version"`
-	Name      string     `yaml:"name"`
-	Entities  []Entity   `yaml:"entities"`
-	Instances []Instance `yaml:"instances,omitempty"`
+	SceneSettings `yaml:",inline"`
+	Version       int        `yaml:"version"`
+	Name          string     `yaml:"name"`
+	Entities      []Entity   `yaml:"entities"`
+	Instances     []Instance `yaml:"instances,omitempty"`
 	// RootOrder is serialization metadata consumed by Project.Resolve.
 	RootOrder []string `yaml:"root_order,omitempty"`
 }
 
+// Clone returns an independent authored snapshot suitable for editing or history.
 func (d Document) Clone() Document {
+	d.SceneSettings = d.SceneSettings.clone()
 	d.Entities = append([]Entity(nil), d.Entities...)
 	d.RootOrder = append([]string(nil), d.RootOrder...)
 	if d.Instances != nil {
@@ -86,6 +103,9 @@ func finiteRange(v, lo, hi float64) bool {
 	return !math.IsNaN(v) && !math.IsInf(v, 0) && v >= lo && v <= hi
 }
 func (d Document) Validate() error {
+	if err := d.SceneSettings.validate(); err != nil {
+		return err
+	}
 	if d.Version != Version {
 		return fmt.Errorf("unsupported scene version %d", d.Version)
 	}

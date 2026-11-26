@@ -191,6 +191,7 @@ func (m *projectEditorModel) resetPlay() {
 		return
 	}
 	session.World.SetPaused(paused)
+	m.view, m.zoom = 0, 1
 	m.play = session
 	m.runtimeSelection = ""
 	m.pendingSpawn = ""

@@ -23,6 +23,7 @@ func nextEditorTick() tea.Cmd {
 }
 
 type projectEditorModel struct {
+	sceneField                                     int
 	settings                                       config.Settings
 	project                                        *project.Project
 	document                                       *project.Editor
@@ -123,15 +124,20 @@ func (m *projectEditorModel) renderPreview() {
 	renderer.UseColor = false
 	renderer.ShadowRenderer = nil
 	renderer.SetLightingSystem(session.Lighting)
-	eye := engine.Point{X: 14, Y: 11, Z: -20}
+	camera := session.InitialCamera
+	eye := camera.Position
+	target := camera.Target
 	if m.view == 1 {
 		eye = engine.Point{Y: 8, Z: -24}
 	}
 	if m.view == 2 {
 		eye = engine.Point{X: 24, Y: 8}
 	}
-	session.Scene.Camera.SetPosition(eye.X*m.zoom, eye.Y*m.zoom, eye.Z*m.zoom)
-	session.Scene.Camera.LookAt(engine.Point{Y: 1})
+	if m.view != 0 {
+		target = engine.Point{Y: 1}
+	}
+	session.Scene.Camera.SetPosition(target.X+(eye.X-target.X)*m.zoom, target.Y+(eye.Y-target.Y)*m.zoom, target.Z+(eye.Z-target.Z)*m.zoom)
+	session.Scene.Camera.LookAt(target)
 	renderer.RenderScene(session.Scene)
 	if e, ok := m.selectedEntity(); ok {
 		if id, ok := session.Find(e.ID); ok {
@@ -200,6 +206,7 @@ func (m *projectEditorModel) startPlay() tea.Cmd {
 	if ok {
 		m.runtimeSelection = selected.ID
 	}
+	m.view, m.zoom = 0, 1
 	m.play = session
 	m.lastTick = time.Now()
 	m.message = "Playing a copy; Stop preserves authored edits"
@@ -247,6 +254,10 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		key := msg.String()
+		if m.modal == "scene" || m.modal == "scene_edit" {
+			m.sceneKey(msg)
+			return m, nil
+		}
 		if m.modal != "" {
 			if key == "esc" || key == "ctrl+c" {
 				m.modal = ""
@@ -346,6 +357,13 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		switch key {
+		case "ctrl+e":
+			if m.document != nil && m.play == nil && m.activeResource == nil {
+				m.modal = "scene"
+				m.sceneField = 0
+				m.message = ""
+			}
+			return m, nil
 		case "ctrl+l":
 			m.openTools()
 			return m, nil
@@ -537,6 +555,9 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 func (m projectEditorModel) View() string {
+	if m.modal == "scene" || m.modal == "scene_edit" {
+		return m.scenePanel()
+	}
 	var out strings.Builder
 	if m.project == nil {
 		out.WriteString("Project editor\n\nN New project | O Open project\n\nCreate a new directory or open one containing project.yaml.\nEsc returns to launcher.\n")
@@ -645,7 +666,7 @@ func (m projectEditorModel) View() string {
 		if m.focus == 2 {
 			out.WriteString(input.Help(bindings, input.AimUp, input.AimDown, input.AimLeft, input.AimRight) + "\n")
 		} else {
-			out.WriteString("H parent | 1/2/3 camera | +/- zoom | Q exit editor\n")
+			out.WriteString("Ctrl+E scene settings | H parent | 1/2/3 camera | +/- zoom | Q exit editor\n")
 		}
 		if m.play != nil {
 			fmt.Fprintf(&out, "Ctrl+L tools | Impulse (%s,%s,%s) %s\n", m.toolValues[0], m.toolValues[1], m.toolValues[2], m.toolValues[3])
