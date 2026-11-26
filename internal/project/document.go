@@ -49,7 +49,14 @@ type Entity struct {
 	Rotation engine.Point `yaml:"rotation"`
 	Size     engine.Point `yaml:"size"`
 	Mass     float64      `yaml:"mass"`
-	Color    engine.Color `yaml:"color"`
+	// Velocity and AngularVelocity initialize dynamic bodies in world coordinates
+	// (metres per second and radians per second). Other body types retain these
+	// authored values for a later switch to dynamic.
+	Velocity        engine.Point `yaml:"velocity,omitempty"`
+	AngularVelocity engine.Point `yaml:"angular_velocity,omitempty"`
+	// Sensor colliders report overlapping contacts without applying impulses.
+	Sensor bool         `yaml:"sensor,omitempty"`
+	Color  engine.Color `yaml:"color"`
 }
 
 // Document contains authored state only, never live handles, velocities or caches.
@@ -143,6 +150,11 @@ func (d Document) Validate() error {
 		for _, v := range []float64{e.Size.X, e.Size.Y, e.Size.Z} {
 			if !finiteRange(v, .05, 100) {
 				return fmt.Errorf("entity %s: size outside 0.05..100 m", e.ID)
+			}
+		}
+		for _, v := range []engine.Point{e.Velocity, e.AngularVelocity} {
+			if !validPosition(v) {
+				return fmt.Errorf("entity %s: initial velocity components must be finite and within ±1e9", e.ID)
 			}
 		}
 		if !finiteRange(e.Mass, .01, 10000) {

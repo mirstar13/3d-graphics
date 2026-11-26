@@ -25,6 +25,11 @@
 // Ctrl+D duplicates it. Delete removes it. E edits an inspector property.
 // Ctrl+Z and Ctrl+Y navigate history. Ctrl+S saves authored data during Edit or Play.
 //
+// The entity inspector accepts initial linear velocity in m/s and angular
+// velocity in rad/s on each world axis. Play applies these to dynamic bodies.
+// Enable Sensor on a collider to detect contact without a collision response.
+// These properties support linked-instance overrides and undo like mass.
+//
 // R extracts the selection as a resource. A browses resources. Enter instantiates
 // a resource and E opens its source. Ctrl+R refreshes linked instances. Ctrl+T
 // clears a property override and Ctrl+U unpacks an instance. K edits project key

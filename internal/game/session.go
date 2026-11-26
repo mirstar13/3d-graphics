@@ -152,6 +152,11 @@ func (s *Session) spawn(d project.Entity) (EntityID, error) {
 		desc.Position = d.Position
 		desc.Rotation = q
 		desc.Mass = d.Mass
+		desc.Collider.Sensor = d.Sensor
+		if kind == physics.Dynamic {
+			desc.Velocity = d.Velocity
+			desc.AngularVelocity = d.AngularVelocity
+		}
 		id, err := s.World.AddBody(desc)
 		if err != nil {
 			s.Scene.RemoveNode(node)

@@ -66,6 +66,21 @@ func properties() []Property {
 			return nil
 		}})
 	}
+	result = append(result,
+		number("velocity.x", "Initial velocity X", "m/s", func(e *Entity) *float64 { return &e.Velocity.X }),
+		number("velocity.y", "Initial velocity Y", "m/s", func(e *Entity) *float64 { return &e.Velocity.Y }),
+		number("velocity.z", "Initial velocity Z", "m/s", func(e *Entity) *float64 { return &e.Velocity.Z }),
+		number("angular_velocity.x", "Initial angular X", "rad/s", func(e *Entity) *float64 { return &e.AngularVelocity.X }),
+		number("angular_velocity.y", "Initial angular Y", "rad/s", func(e *Entity) *float64 { return &e.AngularVelocity.Y }),
+		number("angular_velocity.z", "Initial angular Z", "rad/s", func(e *Entity) *float64 { return &e.AngularVelocity.Z }),
+		Property{Key: "sensor", Label: "Sensor", Choices: []string{"false", "true"}, Get: func(e Entity) string { return strconv.FormatBool(e.Sensor) }, Set: func(e *Entity, v string) error {
+			value, err := strconv.ParseBool(v)
+			if err != nil {
+				return fmt.Errorf("sensor must be true or false")
+			}
+			e.Sensor = value
+			return nil
+		}})
 	return result
 }
 
