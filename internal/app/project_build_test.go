@@ -24,13 +24,6 @@ func TestProjectBuildCorrectFailRebuild(t *testing.T) {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("%v: %s", err, out)
 	}
-	sums, err := os.ReadFile(filepath.Join(repo, "go.sum"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = os.WriteFile(filepath.Join(root, "go.sum"), sums, 0644); err != nil {
-		t.Fatal(err)
-	}
 	source := filepath.Join(root, "main.go")
 	good, err := os.ReadFile(source)
 	if err != nil {
