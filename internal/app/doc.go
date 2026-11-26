@@ -44,6 +44,9 @@
 // on the next fixed tick. Remaining inside does not retrigger it. Leaving and
 // entering again activates it again. The vector uses world axes and a larger
 // mass gains less speed. A zero vector disables the action.
+// Enable One-shot sensor impulse to launch only the first dynamic entrant.
+// With simultaneous entries, physics contact order chooses the recipient.
+// Resetting Play rearms each pad. Existing pads repeat by default.
 // These properties support linked-instance overrides and undo like mass.
 //
 // R extracts the selection as a resource. A browses resources. Enter instantiates

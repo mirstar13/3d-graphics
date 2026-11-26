@@ -67,3 +67,46 @@ func TestSensorEnterAction(t *testing.T) {
 		})
 	}
 }
+
+func TestOneShotSensorRecipientsAndRestart(t *testing.T) {
+	for _, once := range []bool{false, true} {
+		d := project.NewDocument()
+		d.Entities[0].Sensor = true
+		d.Entities[0].EnterOnce = once
+		d.Entities[0].EnterImpulse = engine.Point{Y: 3}
+		d.Entities[1].Position = engine.Point{X: -2, Y: .25}
+		second := d.Entities[1]
+		second.ID = "second"
+		second.Position.X = 2
+		d.Entities = append(d.Entities, second)
+		opts := physics.DefaultOptions()
+		opts.Gravity = engine.Point{}
+		for run := 0; run < 2; run++ {
+			s, err := NewSession(d, opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = s.Advance(2 * opts.FixedStep); err != nil {
+				t.Fatal(err)
+			}
+			recipients := 0
+			for _, name := range []string{"box", "second"} {
+				id, _ := s.Find(name)
+				state, err := s.Inspect(id)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if state.Body.Velocity.Y > 0 {
+					recipients++
+				}
+			}
+			want := 2
+			if once {
+				want = 1
+			}
+			if recipients != want {
+				t.Fatalf("once=%v run=%d got %d recipients, want %d", once, run, recipients, want)
+			}
+		}
+	}
+}

@@ -54,6 +54,8 @@ type Entity struct {
 	// authored values for a later switch to dynamic.
 	Velocity        engine.Point `yaml:"velocity,omitempty"`
 	AngularVelocity engine.Point `yaml:"angular_velocity,omitempty"`
+	// EnterOnce consumes the impulse after its first dynamic recipient in a session.
+	EnterOnce bool `yaml:"enter_once,omitempty"`
 	// EnterImpulse is a world-space impulse delivered to a dynamic body when
 	// it enters this sensor. The zero vector disables the action.
 	EnterImpulse engine.Point `yaml:"enter_impulse,omitempty"`

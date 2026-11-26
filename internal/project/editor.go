@@ -30,6 +30,16 @@ func properties() []Property {
 			return err
 		}}
 	}
+	boolean := func(key, label string, field func(*Entity) *bool) Property {
+		return Property{Key: key, Label: label, Choices: []string{"false", "true"}, Get: func(e Entity) string { return strconv.FormatBool(*field(&e)) }, Set: func(e *Entity, v string) error {
+			value, err := strconv.ParseBool(v)
+			if err != nil {
+				return fmt.Errorf("%s must be true or false", key)
+			}
+			*field(e) = value
+			return nil
+		}}
+	}
 	result := []Property{
 		text("name", "Name", func(e *Entity) *string { return &e.Name }),
 		text("shape", "Shape", func(e *Entity) *string { return &e.Shape }, "box", "sphere"),
@@ -73,14 +83,7 @@ func properties() []Property {
 		number("angular_velocity.x", "Initial angular X", "rad/s", func(e *Entity) *float64 { return &e.AngularVelocity.X }),
 		number("angular_velocity.y", "Initial angular Y", "rad/s", func(e *Entity) *float64 { return &e.AngularVelocity.Y }),
 		number("angular_velocity.z", "Initial angular Z", "rad/s", func(e *Entity) *float64 { return &e.AngularVelocity.Z }),
-		Property{Key: "sensor", Label: "Sensor", Choices: []string{"false", "true"}, Get: func(e Entity) string { return strconv.FormatBool(e.Sensor) }, Set: func(e *Entity, v string) error {
-			value, err := strconv.ParseBool(v)
-			if err != nil {
-				return fmt.Errorf("sensor must be true or false")
-			}
-			e.Sensor = value
-			return nil
-		}})
+		boolean("sensor", "Sensor", func(e *Entity) *bool { return &e.Sensor }))
 	return append(result,
 		coefficientProperty("friction", "Friction", func(e *Entity) *Coefficient { return &e.Friction }),
 		coefficientProperty("restitution", "Restitution", func(e *Entity) *Coefficient { return &e.Restitution }),
@@ -102,6 +105,7 @@ func properties() []Property {
 				e.SphereCCD = v
 				return nil
 			}},
+		boolean("enter_once", "One-shot sensor impulse", func(e *Entity) *bool { return &e.EnterOnce }),
 		number("enter_impulse.x", "Sensor enter impulse X", "N·s", func(e *Entity) *float64 { return &e.EnterImpulse.X }),
 		number("enter_impulse.y", "Sensor enter impulse Y", "N·s", func(e *Entity) *float64 { return &e.EnterImpulse.Y }),
 		number("enter_impulse.z", "Sensor enter impulse Z", "N·s", func(e *Entity) *float64 { return &e.EnterImpulse.Z }),

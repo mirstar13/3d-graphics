@@ -27,9 +27,14 @@ type entity struct {
 
 var sessionSequence atomic.Uint64
 
+type sensorImpulse struct {
+	vector engine.Point
+	once   bool
+}
+
 // Session owns live entities and a world; all operations belong to the update goroutine.
 type Session struct {
-	enterImpulses map[physics.BodyID]engine.Point
+	enterImpulses map[physics.BodyID]sensorImpulse
 	// InitialCamera holds the authored view used to restore transient editor navigation.
 	InitialCamera project.CameraSettings
 	Scene         *engine.Scene
@@ -178,9 +183,9 @@ func (s *Session) spawn(d project.Entity) (EntityID, error) {
 		entry.body = id
 		if d.Sensor && d.EnterImpulse != (engine.Point{}) {
 			if s.enterImpulses == nil {
-				s.enterImpulses = make(map[physics.BodyID]engine.Point)
+				s.enterImpulses = make(map[physics.BodyID]sensorImpulse)
 			}
-			s.enterImpulses[id] = d.EnterImpulse
+			s.enterImpulses[id] = sensorImpulse{vector: d.EnterImpulse, once: d.EnterOnce}
 		}
 	}
 	slot := len(s.entities)
@@ -342,10 +347,26 @@ func (s *Session) applyEnterImpulses() {
 }
 
 func (s *Session) applySensorImpulse(sensor, other physics.BodyID) {
-	if impulse, ok := s.enterImpulses[sensor]; ok {
-		if err := s.World.AddImpulse(other, impulse); err != nil {
+	action, ok := s.enterImpulses[sensor]
+	if !ok {
+		return
+	}
+	if action.once {
+		body, err := s.World.Body(other)
+		if err != nil {
 			s.lastError = err
+			return
 		}
+		if body.Type != physics.Dynamic {
+			return
+		}
+	}
+	if err := s.World.AddImpulse(other, action.vector); err != nil {
+		s.lastError = err
+		return
+	}
+	if action.once {
+		delete(s.enterImpulses, sensor)
 	}
 }
 
