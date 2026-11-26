@@ -52,3 +52,14 @@ func (s *Session) Pick(ray physics.Ray) (PickHit, bool, error) {
 	}
 	return best, found, nil
 }
+
+// BodyEntities snapshots the current mapping from physics bodies to live handles.
+func (s *Session) BodyEntities() map[physics.BodyID]EntityID {
+	ids := make(map[physics.BodyID]EntityID)
+	for i, e := range s.entities {
+		if e.active && e.description.Body != "none" {
+			ids[e.body] = EntityID{s.id, uint32(i), e.generation}
+		}
+	}
+	return ids
+}
