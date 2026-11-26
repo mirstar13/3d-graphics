@@ -34,6 +34,7 @@ type sensorImpulse struct {
 
 // Session owns live entities and a world; all operations belong to the update goroutine.
 type Session struct {
+	projectRoot   string
 	sensorEvents  []SensorEvent
 	enterImpulses map[physics.BodyID]sensorImpulse
 	// InitialCamera holds the authored view used to restore transient editor navigation.
@@ -49,6 +50,11 @@ type Session struct {
 
 // NewSession constructs an independent runtime from authored data and application physics defaults.
 func NewSession(d project.Document, options physics.Options) (*Session, error) {
+	return NewProjectSession("", d, options)
+}
+
+// NewProjectSession resolves authored visual assets relative to root.
+func NewProjectSession(root string, d project.Document, options physics.Options) (*Session, error) {
 	if err := d.Validate(); err != nil {
 		return nil, err
 	}
@@ -88,7 +94,7 @@ func NewSession(d project.Document, options physics.Options) (*Session, error) {
 	scene.Camera.LookAt(c.Target)
 	scene.Camera.SetFOV(c.FOVX, c.FOVY)
 	scene.Camera.Near, scene.Camera.Far = c.Near, c.Far
-	s := &Session{InitialCamera: c, Scene: scene, World: world, id: sessionSequence.Add(1)}
+	s := &Session{projectRoot: root, InitialCamera: c, Scene: scene, World: world, id: sessionSequence.Add(1)}
 	s.Lighting = engine.NewLightingSystem(scene.Camera)
 	lighting := project.DefaultLighting()
 	if d.Lighting != nil {
@@ -126,8 +132,25 @@ func (s *Session) spawn(d project.Entity) (EntityID, error) {
 	m.DiffuseColor = d.Color
 	m.AmbientStrength = .6
 	m.SpecularStrength = .2
+	asset, material, err := d.LoadVisualAssets(s.projectRoot)
+	if err != nil {
+		return EntityID{}, fmt.Errorf("entity %s: %w", d.ID, err)
+	}
+	if material != nil {
+		m = *material
+	}
 	var node *engine.SceneNode
-	if d.Shape == "box" {
+	if asset != nil {
+		asset.Material = &m
+		if material != nil {
+			asset.FaceMaterials = nil
+		}
+		for i, v := range asset.Vertices {
+			asset.Vertices[i] = engine.Point{X: v.X * d.Size.X, Y: v.Y * d.Size.Y, Z: v.Z * d.Size.Z}
+		}
+		node = engine.NewSceneNodeWithObject("entity:"+d.ID, asset)
+		s.Scene.AddNode(node)
+	} else if d.Shape == "box" {
 		node = s.Scene.CreateCube("entity:"+d.ID, 1, &m)
 		mesh := node.Object.(*engine.Mesh)
 		for i, v := range mesh.Vertices {
@@ -151,9 +174,10 @@ func (s *Session) spawn(d project.Entity) (EntityID, error) {
 		if d.Body == "dynamic" {
 			kind = physics.Dynamic
 		}
-		shape := physics.Box(d.Size)
-		if d.Shape == "sphere" {
-			shape = physics.Sphere(d.Size.X)
+		size := d.CollisionSize()
+		shape := physics.Box(size)
+		if d.CollisionShape() == "sphere" {
+			shape = physics.Sphere(size.X)
 		}
 		desc := physics.NewBodyDesc(kind, shape)
 		desc.Position = d.Position
@@ -447,7 +471,12 @@ func (s *Session) SelectionLines(id EntityID) []engine.DebugLine {
 		return nil
 	}
 	half := e.description.Size
-	if e.description.Shape == "sphere" {
+	shape := e.description.Shape
+	if e.description.Body != "none" {
+		half = e.description.CollisionSize()
+		shape = e.description.CollisionShape()
+	}
+	if shape == "sphere" {
 		half = engine.Point{X: half.X, Y: half.X, Z: half.X}
 	}
 	var vertices [8]engine.Point

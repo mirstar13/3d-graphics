@@ -15,12 +15,19 @@ import (
 // geometric face normals because Mesh has no per-vertex normal storage.
 // usemtl assignments are stored per triangulated face.
 func LoadOBJ(filepath string) (*Mesh, error) {
-	mesh, _, err := loadOBJ(filepath)
+	mesh, _, err := loadOBJ(filepath, os.Open)
 	return mesh, err
 }
 
-func loadOBJ(filepath string) (*Mesh, *MaterialLibrary, error) {
-	file, err := os.Open(filepath)
+// LoadProjectOBJ loads a project-relative OBJ and resolves its material libraries
+// within the same filesystem root, including through symlinks.
+func LoadProjectOBJ(root, filename string) (*Mesh, error) {
+	mesh, _, err := loadOBJ(filename, func(name string) (*os.File, error) { return os.OpenInRoot(root, name) })
+	return mesh, err
+}
+
+func loadOBJ(filepath string, open func(string) (*os.File, error)) (*Mesh, *MaterialLibrary, error) {
+	file, err := open(filepath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot open file: %w", err)
 	}
@@ -135,7 +142,7 @@ func loadOBJ(filepath string) (*Mesh, *MaterialLibrary, error) {
 
 		case "mtllib":
 			for _, name := range parts[1:] {
-				lib, err := LoadMTL(path.Join(path.Dir(filepath), name))
+				lib, err := loadMTL(path.Join(path.Dir(filepath), name), open)
 				if err != nil {
 					return nil, nil, fmt.Errorf("line %d: %w", lineNum, err)
 				}
@@ -341,7 +348,16 @@ func NewMaterialLibrary() *MaterialLibrary {
 
 // LoadMTL loads a Wavefront MTL material library file
 func LoadMTL(filepath string) (*MaterialLibrary, error) {
-	file, err := os.Open(filepath)
+	return loadMTL(filepath, os.Open)
+}
+
+// LoadProjectMTL loads a material library beneath the project root.
+func LoadProjectMTL(root, filename string) (*MaterialLibrary, error) {
+	return loadMTL(filename, func(name string) (*os.File, error) { return os.OpenInRoot(root, name) })
+}
+
+func loadMTL(filepath string, open func(string) (*os.File, error)) (*MaterialLibrary, error) {
+	file, err := open(filepath)
 	if err != nil {
 		return nil, fmt.Errorf("cannot open material file: %w", err)
 	}
@@ -434,7 +450,7 @@ type OBJWithMaterials struct {
 
 // LoadOBJWithMaterials loads an OBJ file and attempts to load its materials
 func LoadOBJWithMaterials(filepath string) (*OBJWithMaterials, error) {
-	mesh, materials, err := loadOBJ(filepath)
+	mesh, materials, err := loadOBJ(filepath, os.Open)
 	if err != nil {
 		return nil, err
 	}

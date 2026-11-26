@@ -105,6 +105,12 @@ func properties() []Property {
 				e.SphereCCD = v
 				return nil
 			}},
+		text("mesh_asset", "Mesh OBJ", func(e *Entity) *string { return &e.MeshAsset }),
+		text("material_asset", "Material MTL#name", func(e *Entity) *string { return &e.MaterialAsset }),
+		text("collider_shape", "Collider shape", func(e *Entity) *string { return &e.ColliderShape }, "", "box", "sphere"),
+		number("collider_size.x", "Collider half X", "m", func(e *Entity) *float64 { return &e.ColliderSize.X }),
+		number("collider_size.y", "Collider half Y", "m", func(e *Entity) *float64 { return &e.ColliderSize.Y }),
+		number("collider_size.z", "Collider half Z", "m", func(e *Entity) *float64 { return &e.ColliderSize.Z }),
 		boolean("enter_once", "One-shot sensor impulse", func(e *Entity) *bool { return &e.EnterOnce }),
 		number("enter_impulse.x", "Sensor enter impulse X", "N·s", func(e *Entity) *float64 { return &e.EnterImpulse.X }),
 		number("enter_impulse.y", "Sensor enter impulse Y", "N·s", func(e *Entity) *float64 { return &e.EnterImpulse.Y }),

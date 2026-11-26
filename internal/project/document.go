@@ -54,6 +54,12 @@ type Entity struct {
 	// authored values for a later switch to dynamic.
 	Velocity        engine.Point `yaml:"velocity,omitempty"`
 	AngularVelocity engine.Point `yaml:"angular_velocity,omitempty"`
+	// MeshAsset selects an OBJ. MaterialAsset selects a named MTL entry (path#name).
+	MeshAsset     string `yaml:"mesh_asset,omitempty"`
+	MaterialAsset string `yaml:"material_asset,omitempty"`
+	// ColliderShape inherits Shape when empty. Zero collider dimensions inherit Size per axis.
+	ColliderShape string       `yaml:"collider_shape,omitempty"`
+	ColliderSize  engine.Point `yaml:"collider_size,omitempty"`
 	// EnterOnce consumes the impulse after its first dynamic recipient in a session.
 	EnterOnce bool `yaml:"enter_once,omitempty"`
 	// EnterImpulse is a world-space impulse delivered to a dynamic body when
@@ -148,6 +154,17 @@ func (d Document) Validate() error {
 		if !ValidText(e.Name, 80) {
 			return fmt.Errorf("entity %s: invalid name", e.ID)
 		}
+		if err := e.validateAssets(); err != nil {
+			return fmt.Errorf("entity %s: %w", e.ID, err)
+		}
+		if e.ColliderShape != "" && e.ColliderShape != "sphere" && e.ColliderShape != "box" {
+			return fmt.Errorf("entity %s: unsupported collider shape", e.ID)
+		}
+		for _, v := range []float64{e.ColliderSize.X, e.ColliderSize.Y, e.ColliderSize.Z} {
+			if v != 0 && !finiteRange(v, .05, 100) {
+				return fmt.Errorf("entity %s: collider dimensions must inherit (0) or be 0.05..100 m", e.ID)
+			}
+		}
 		if e.Shape != "box" && e.Shape != "sphere" {
 			return fmt.Errorf("entity %s: unsupported shape", e.ID)
 		}
@@ -183,7 +200,7 @@ func (d Document) Validate() error {
 		switch e.SphereCCD {
 		case "", "off":
 		case "on":
-			if e.Body != "dynamic" || e.Shape != "sphere" {
+			if e.Body != "dynamic" || e.CollisionShape() != "sphere" {
 				return fmt.Errorf("entity %s: CCD requires a dynamic sphere", e.ID)
 			}
 		default:

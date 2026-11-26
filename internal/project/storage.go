@@ -111,6 +111,9 @@ func Open(root string) (*Project, error) {
 	if p.Scene, e = p.Resolve(p.Scene); e != nil {
 		return nil, e
 	}
+	if err := p.Scene.validateVisualFiles(root); err != nil {
+		return nil, err
+	}
 	return p, nil
 }
 func writeAtomic(path string, value any) error {
@@ -158,6 +161,9 @@ func Create(root string) (*Project, error) {
 	if e = os.Mkdir(filepath.Join(root, "scenes"), 0755); e != nil {
 		return nil, e
 	}
+	if e = os.Mkdir(filepath.Join(root, "assets"), 0755); e != nil {
+		return nil, e
+	}
 	name := filepath.Base(root)
 	if !ValidText(name, 80) {
 		return nil, fmt.Errorf("invalid project directory name")
@@ -183,7 +189,11 @@ func (p *Project) Save(d Document) error {
 		return e
 	}
 	serialized := d.compact()
-	if _, e = p.Resolve(serialized); e != nil {
+	resolved, e := p.Resolve(serialized)
+	if e != nil {
+		return e
+	}
+	if e = resolved.validateVisualFiles(p.Root); e != nil {
 		return e
 	}
 	if e = writeAtomic(path, serialized); e != nil {

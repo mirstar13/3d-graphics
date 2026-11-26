@@ -99,9 +99,10 @@ func (s *Session) CheckSpawn(d project.Entity, budget int) error {
 	if len(s.Hierarchy()) >= budget {
 		return fmt.Errorf("entity budget reached (%d)", budget)
 	}
-	radius := d.Size.X
-	if d.Shape == "box" {
-		radius = math.Sqrt(d.Size.X*d.Size.X + d.Size.Y*d.Size.Y + d.Size.Z*d.Size.Z)
+	size := d.CollisionSize()
+	radius := size.X
+	if d.CollisionShape() == "box" {
+		radius = math.Sqrt(size.X*size.X + size.Y*size.Y + size.Z*size.Z)
 	}
 	hits, err := s.World.OverlapSphere(d.Position, radius, physics.QueryFilter{LayerMask: ^uint32(0), IncludeSensors: true})
 	if err != nil {

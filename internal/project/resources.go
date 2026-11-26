@@ -79,6 +79,9 @@ func (p *Project) SaveResource(path string, r Resource) error {
 	if err := r.Validate(); err != nil {
 		return err
 	}
+	if err := r.Scene.validateVisualFiles(p.Root); err != nil {
+		return err
+	}
 	old, err := p.LoadResource(path)
 	if err != nil {
 		return err
