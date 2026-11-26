@@ -35,6 +35,10 @@
 // for contact. A zero mask suppresses all contacts. Layer zero also excludes
 // the collider from layer-based spatial queries. Enter default for layer 1 or
 // mask 0xFFFFFFFF. Sensor contacts follow the same filtering rules.
+// Linear and angular damping control how quickly motion and spin decay.
+// Zero disables that damping term. Enter default to restore the physics value.
+// Set Sphere CCD to on for a fast dynamic sphere to sweep against supported
+// static colliders, off to disable it, or default to inherit the scene policy.
 // These properties support linked-instance overrides and undo like mass.
 //
 // R extracts the selection as a resource. A browses resources. Enter instantiates

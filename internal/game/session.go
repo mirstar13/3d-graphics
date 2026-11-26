@@ -156,6 +156,14 @@ func (s *Session) spawn(d project.Entity) (EntityID, error) {
 		desc.Collider.Restitution = d.Restitution.Resolve(desc.Collider.Restitution)
 		desc.Collider.Layer = d.CollisionLayer.Resolve(desc.Collider.Layer)
 		desc.Collider.Mask = d.CollisionMask.Resolve(desc.Collider.Mask)
+		desc.LinearDamping = d.LinearDamping.Resolve(desc.LinearDamping)
+		desc.AngularDamping = d.AngularDamping.Resolve(desc.AngularDamping)
+		switch d.SphereCCD {
+		case "on":
+			desc.CCDPolicy = physics.EnableCCD
+		case "off":
+			desc.CCDPolicy = physics.DisableCCD
+		}
 		desc.Collider.Sensor = d.Sensor
 		if kind == physics.Dynamic {
 			desc.Velocity = d.Velocity

@@ -15,7 +15,7 @@ type OptionalNumber[T float64 | uint32] struct {
 	set   bool
 }
 
-// Coefficient is an optional collider material coefficient.
+// Coefficient is an body damping or collider material coefficient with an inherited default.
 type Coefficient = OptionalNumber[float64]
 
 // CollisionBits is a 32-bit layer or mask override.

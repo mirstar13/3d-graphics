@@ -65,3 +65,29 @@ func TestAuthoredCollisionMaskFiltersContact(t *testing.T) {
 		})
 	}
 }
+
+func TestBodyCCDOverridesSceneDefault(t *testing.T) {
+	for _, tc := range []struct {
+		policy      string
+		scene, want bool
+	}{
+		{"", true, true}, {"", false, false}, {"off", true, false}, {"on", false, true},
+	} {
+		d := project.NewDocument()
+		d.Entities[1].Shape = "sphere"
+		d.Entities[1].SphereCCD = tc.policy
+		d.Simulation = &project.SimulationSettings{DefaultCCD: &tc.scene}
+		s, err := NewSession(d, physics.DefaultOptions())
+		if err != nil {
+			t.Fatal(err)
+		}
+		id, _ := s.Find("box")
+		info, err := s.Inspect(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Body.CCD != tc.want {
+			t.Errorf("scene CCD %t, body policy %q: got %t", tc.scene, tc.policy, info.Body.CCD)
+		}
+	}
+}

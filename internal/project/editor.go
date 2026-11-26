@@ -86,6 +86,22 @@ func properties() []Property {
 		coefficientProperty("restitution", "Restitution", func(e *Entity) *Coefficient { return &e.Restitution }),
 		bitsProperty("collision_layer", "Collision layer", func(e *Entity) *CollisionBits { return &e.CollisionLayer }),
 		bitsProperty("collision_mask", "Collision mask", func(e *Entity) *CollisionBits { return &e.CollisionMask }),
+		coefficientProperty("linear_damping", "Linear damping", func(e *Entity) *Coefficient { return &e.LinearDamping }),
+		coefficientProperty("angular_damping", "Angular damping", func(e *Entity) *Coefficient { return &e.AngularDamping }),
+		Property{Key: "sphere_ccd", Label: "Sphere CCD", Choices: []string{"default", "on", "off"},
+			Get: func(e Entity) string {
+				if e.SphereCCD == "" {
+					return "default"
+				}
+				return e.SphereCCD
+			},
+			Set: func(e *Entity, v string) error {
+				if v == "default" {
+					v = ""
+				}
+				e.SphereCCD = v
+				return nil
+			}},
 	)
 }
 

@@ -54,6 +54,12 @@ type Entity struct {
 	// authored values for a later switch to dynamic.
 	Velocity        engine.Point `yaml:"velocity,omitempty"`
 	AngularVelocity engine.Point `yaml:"angular_velocity,omitempty"`
+	// LinearDamping and AngularDamping control the decay of body velocity.
+	LinearDamping  Coefficient `yaml:"linear_damping,omitempty"`
+	AngularDamping Coefficient `yaml:"angular_damping,omitempty"`
+	// SphereCCD overrides continuous collision detection for a dynamic sphere.
+	// The empty policy inherits the scene setting.
+	SphereCCD string `yaml:"sphere_ccd,omitempty"`
 	// CollisionLayer defines membership bits. CollisionMask selects accepted layers.
 	CollisionLayer CollisionBits `yaml:"collision_layer,omitempty"`
 	CollisionMask  CollisionBits `yaml:"collision_mask,omitempty"`
@@ -162,6 +168,18 @@ func (d Document) Validate() error {
 			if !validPosition(v) {
 				return fmt.Errorf("entity %s: initial velocity components must be finite and within ±1e9", e.ID)
 			}
+		}
+		if !finiteRange(e.LinearDamping.Resolve(0), 0, math.MaxFloat64) || !finiteRange(e.AngularDamping.Resolve(0), 0, math.MaxFloat64) {
+			return fmt.Errorf("entity %s: damping must be finite and nonnegative", e.ID)
+		}
+		switch e.SphereCCD {
+		case "", "off":
+		case "on":
+			if e.Body != "dynamic" || e.Shape != "sphere" {
+				return fmt.Errorf("entity %s: CCD requires a dynamic sphere", e.ID)
+			}
+		default:
+			return fmt.Errorf("entity %s: unsupported sphere CCD policy %q", e.ID, e.SphereCCD)
 		}
 		if !finiteRange(e.Friction.Resolve(0), 0, math.Sqrt(math.MaxFloat64)) {
 			return fmt.Errorf("entity %s: friction must be nonnegative and small enough to combine with another collider", e.ID)

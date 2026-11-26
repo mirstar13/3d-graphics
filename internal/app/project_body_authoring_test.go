@@ -14,13 +14,13 @@ func TestBodyAuthoringReopenAndPlay(t *testing.T) {
 	if err := ed.Set("box", "velocity.x", "NaN"); err == nil || ed.Dirty() {
 		t.Fatal("invalid velocity changed document")
 	}
-	for key, value := range map[string]string{"friction": "-1", "restitution": "1.01", "collision_layer": "-1", "collision_mask": "4294967296"} {
+	for key, value := range map[string]string{"friction": "-1", "restitution": "1.01", "linear_damping": "NaN", "angular_damping": "-1", "sphere_ccd": "on", "collision_layer": "-1", "collision_mask": "4294967296"} {
 		if ed.Set("box", key, value) == nil || ed.Dirty() {
 			t.Fatal("invalid material changed document", key)
 		}
 	}
 	m.selectID("box")
-	values := map[string]string{"velocity.x": "4", "angular_velocity.z": "-2", "sensor": "true", "friction": "0", "restitution": "0.85", "collision_layer": "0x80000000", "collision_mask": "0"}
+	values := map[string]string{"shape": "sphere", "sphere_ccd": "on", "linear_damping": "0", "angular_damping": "0.7", "velocity.x": "4", "angular_velocity.z": "-2", "sensor": "true", "friction": "0", "restitution": "0.85", "collision_layer": "0x80000000", "collision_mask": "0"}
 	for i, prop := range project.Properties {
 		value, ok := values[prop.Key]
 		if !ok {
@@ -57,6 +57,9 @@ func TestBodyAuthoringReopenAndPlay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if !b.Body.CCD || b.Body.LinearDamping != 0 || b.Body.AngularDamping != .7 {
+		t.Fatalf("unexpected motion settings %+v", b.Body)
+	}
 	if b.Body.Velocity.X != 4 || b.Body.AngularVelocity.Z != -2 || !b.Body.Collider.Sensor || b.Body.Collider.Friction != 0 || b.Body.Collider.Restitution != .85 || b.Body.Collider.Layer != 1<<31 || b.Body.Collider.Mask != 0 {
 		t.Fatalf("unexpected initial body %+v", b.Body)
 	}
@@ -64,7 +67,7 @@ func TestBodyAuthoringReopenAndPlay(t *testing.T) {
 
 func TestColliderMaterialDefaults(t *testing.T) {
 	m := inputEditor(t)
-	for _, key := range []string{"friction", "restitution", "collision_layer", "collision_mask"} {
+	for _, key := range []string{"linear_damping", "angular_damping", "friction", "restitution", "collision_layer", "collision_mask"} {
 		if err := m.document.Set("box", key, "0"); err != nil {
 			t.Fatal(err)
 		}
@@ -80,6 +83,9 @@ func TestColliderMaterialDefaults(t *testing.T) {
 	info, err := m.play.Inspect(id)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if info.Body.LinearDamping != .02 || info.Body.AngularDamping != .05 {
+		t.Fatal("legacy damping changed")
 	}
 	if info.Body.Collider.Friction != .6 || info.Body.Collider.Restitution != .1 || info.Body.Collider.Layer != 1 || info.Body.Collider.Mask != ^uint32(0) {
 		t.Fatalf("legacy material changed: %+v", info.Body.Collider)
