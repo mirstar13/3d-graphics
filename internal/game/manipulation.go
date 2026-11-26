@@ -146,3 +146,14 @@ func (s *Session) QueueDeleteSpawned(id EntityID) error {
 	}
 	return s.QueueDestroy(id)
 }
+
+// SensorEvent records a successful impulse submission at the end of a physics tick.
+// Sensor and Recipient are snapshot entity IDs and remain readable after deletion.
+type SensorEvent struct {
+	Tick              uint64
+	Sensor, Recipient string
+	Impulse           engine.Point
+}
+
+// SensorEvents returns the three most recent sensor actions in chronological order.
+func (s *Session) SensorEvents() []SensorEvent { return append([]SensorEvent(nil), s.sensorEvents...) }

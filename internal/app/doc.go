@@ -48,6 +48,8 @@
 // With simultaneous entries, physics contact order chooses the recipient.
 // Select a sensor in the Play hierarchy to inspect its impulse status. A spent
 // one-shot pad has already submitted its impulse. Disabled means its vector is zero.
+// Ctrl+L shows the last three sensor impulses, with the contact tick, source
+// and recipient IDs, and world-space impulse. Resetting Play clears this history.
 // Resetting Play rearms each pad. Existing pads repeat by default.
 // These properties support linked-instance overrides and undo like mass.
 //

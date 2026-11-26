@@ -215,6 +215,9 @@ func (m projectEditorModel) toolsView() string {
 	magnitude := math.Sqrt(options.impulse.X*options.impulse.X + options.impulse.Y*options.impulse.Y + options.impulse.Z*options.impulse.Z)
 	fmt.Fprintf(&out, "Impulse (%g,%g,%g), |J|=%g at %s\n", options.impulse.X, options.impulse.Y, options.impulse.Z, magnitude, m.toolValues[3])
 	out.WriteString("Arrows choose | Enter edit | I impulse | G spawn preview\nD delete runtime | R reset | Esc close (stays paused)\n")
+	for _, e := range m.play.SensorEvents() {
+		fmt.Fprintf(&out, "Tick %d: %s -> %s impulse (%g,%g,%g)\n", e.Tick, e.Sensor, e.Recipient, e.Impulse.X, e.Impulse.Y, e.Impulse.Z)
+	}
 	return out.String()
 }
 func (m *projectEditorModel) reconcileRuntime() {

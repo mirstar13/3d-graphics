@@ -34,6 +34,7 @@ type sensorImpulse struct {
 
 // Session owns live entities and a world; all operations belong to the update goroutine.
 type Session struct {
+	sensorEvents  []SensorEvent
 	enterImpulses map[physics.BodyID]sensorImpulse
 	// InitialCamera holds the authored view used to restore transient editor navigation.
 	InitialCamera project.CameraSettings
@@ -333,7 +334,7 @@ func (s *Session) QueueDestroy(id EntityID) error {
 }
 
 // applyEnterImpulses submits each sensor's action once per new contact pair.
-func (s *Session) applyEnterImpulses() {
+func (s *Session) applyEnterImpulses(tick uint64) {
 	if len(s.enterImpulses) == 0 {
 		return
 	}
@@ -341,30 +342,46 @@ func (s *Session) applyEnterImpulses() {
 		if !event.Sensor || event.Phase != physics.ContactBegin {
 			continue
 		}
-		s.applySensorImpulse(event.A, event.B)
-		s.applySensorImpulse(event.B, event.A)
+		s.applySensorImpulse(tick, event.A, event.B)
+		s.applySensorImpulse(tick, event.B, event.A)
 	}
 }
 
-func (s *Session) applySensorImpulse(sensor, other physics.BodyID) {
+func (s *Session) applySensorImpulse(tick uint64, sensor, other physics.BodyID) {
 	action, ok := s.enterImpulses[sensor]
 	if !ok {
 		return
 	}
-	if action.once {
-		body, err := s.World.Body(other)
-		if err != nil {
-			s.lastError = err
-			return
-		}
-		if body.Type != physics.Dynamic {
-			return
-		}
+	body, err := s.World.Body(other)
+	if err != nil {
+		s.lastError = err
+		return
+	}
+	if body.Type != physics.Dynamic {
+		return
 	}
 	if err := s.World.AddImpulse(other, action.vector); err != nil {
 		s.lastError = err
 		return
 	}
+	event := SensorEvent{Tick: tick, Impulse: action.vector}
+	for i := range s.entities {
+		e := &s.entities[i]
+		if !e.active || e.description.Body == "none" {
+			continue
+		}
+		switch e.body {
+		case sensor:
+			event.Sensor = e.description.ID
+		case other:
+			event.Recipient = e.description.ID
+		}
+	}
+	if len(s.sensorEvents) == 3 {
+		copy(s.sensorEvents, s.sensorEvents[1:])
+		s.sensorEvents = s.sensorEvents[:2]
+	}
+	s.sensorEvents = append(s.sensorEvents, event)
 	if action.once {
 		delete(s.enterImpulses, sensor)
 	}
@@ -372,7 +389,7 @@ func (s *Session) applySensorImpulse(sensor, other physics.BodyID) {
 
 func (s *Session) hooks() physics.StepHooks {
 	return physics.StepHooks{AfterStep: func(t physics.Tick) {
-		s.applyEnterImpulses()
+		s.applyEnterImpulses(t.Index)
 		for i := range s.entities {
 			e := &s.entities[i]
 			if !e.active || e.description.Body == "none" {

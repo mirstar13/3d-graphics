@@ -151,6 +151,12 @@ func TestInspectOneShotPadAcrossReset(t *testing.T) {
 		t.Fatal(err)
 	}
 	check("spent")
+	if !strings.Contains(m.toolsView(), "Tick 1: floor -> box impulse (0,6,0)") {
+		t.Fatal(m.toolsView())
+	}
 	m.resetPlay()
+	if len(m.play.SensorEvents()) != 0 {
+		t.Fatal("reset retained sensor events")
+	}
 	check("armed (one-shot)")
 }
