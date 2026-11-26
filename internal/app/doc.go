@@ -46,6 +46,8 @@
 // mass gains less speed. A zero vector disables the action.
 // Enable One-shot sensor impulse to launch only the first dynamic entrant.
 // With simultaneous entries, physics contact order chooses the recipient.
+// Select a sensor in the Play hierarchy to inspect its impulse status. A spent
+// one-shot pad has already submitted its impulse. Disabled means its vector is zero.
 // Resetting Play rearms each pad. Existing pads repeat by default.
 // These properties support linked-instance overrides and undo like mass.
 //

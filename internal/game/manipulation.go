@@ -12,9 +12,11 @@ import (
 // Inspection is a read-only live snapshot; Spawned distinguishes disposable
 // runtime objects from authored scaffolding without relying on names.
 type Inspection struct {
-	Entity  project.Entity
-	Spawned bool
-	Body    *physics.BodyState
+	// EnterImpulseArmed reports whether this sensor can apply its configured impulse on entry.
+	EnterImpulseArmed bool
+	Entity            project.Entity
+	Spawned           bool
+	Body              *physics.BodyState
 }
 
 // Inspect returns live pose, ownership and an independent body-state snapshot.
@@ -33,6 +35,7 @@ func (s *Session) Inspect(id EntityID) (Inspection, error) {
 		if err != nil {
 			return Inspection{}, err
 		}
+		_, out.EnterImpulseArmed = s.enterImpulses[e.body]
 		out.Body = &b
 		out.Entity.Position = b.Position
 		pitch, yaw, roll := b.Rotation.ToEuler()

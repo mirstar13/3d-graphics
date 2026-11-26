@@ -128,3 +128,29 @@ func TestToolValidationHitModeAndModalFocus(t *testing.T) {
 		t.Fatal("narrow tools", m.View())
 	}
 }
+
+func TestInspectOneShotPadAcrossReset(t *testing.T) {
+	m := inputEditor(t)
+	for _, edit := range [][3]string{{"floor", "sensor", "true"}, {"floor", "enter_once", "true"}, {"floor", "enter_impulse.y", "6"}, {"box", "position.y", "0.25"}} {
+		if err := m.document.Set(edit[0], edit[1], edit[2]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m.startPlay()
+	m.play.World.SetPaused(true)
+	check := func(want string) {
+		t.Helper()
+		m.runtimeSelection = "floor"
+		rows := strings.Join(m.inspectorRows(), "\n")
+		if !strings.Contains(rows, "Sensor impulse: "+want) {
+			t.Fatalf("wanted %s in %s", want, rows)
+		}
+	}
+	check("armed (one-shot)")
+	if err := m.play.Step(); err != nil {
+		t.Fatal(err)
+	}
+	check("spent")
+	m.resetPlay()
+	check("armed (one-shot)")
+}

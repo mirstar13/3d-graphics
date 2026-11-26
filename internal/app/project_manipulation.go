@@ -285,6 +285,19 @@ func (m *projectEditorModel) inspectorRows() []string {
 	r := inspection.Entity.Rotation
 	rows := []string{"Name: " + e.Name, "Body: " + e.Body, fmt.Sprintf("Runtime spawn: %t", inspection.Spawned), fmt.Sprintf("Position: %.2f %.2f %.2f", p.X, p.Y, p.Z), fmt.Sprintf("Rotation: %.2f %.2f %.2f", r.X, r.Y, r.Z)}
 	if b := inspection.Body; b != nil {
+		if b.Collider.Sensor {
+			status := "disabled"
+			if inspection.EnterImpulseArmed {
+				status = "armed (repeating)"
+				if e.EnterOnce {
+					status = "armed (one-shot)"
+				}
+			} else if e.EnterOnce && e.EnterImpulse != (engine.Point{}) {
+				status = "spent"
+			}
+			rows = append(rows, "Sensor impulse: "+status)
+		}
+
 		rows = append(rows, fmt.Sprintf("Mass: %.2f kg", b.Mass), fmt.Sprintf("Velocity: %.2f %.2f %.2f", b.Velocity.X, b.Velocity.Y, b.Velocity.Z), fmt.Sprintf("Angular: %.2f %.2f %.2f", b.AngularVelocity.X, b.AngularVelocity.Y, b.AngularVelocity.Z), fmt.Sprintf("Sleeping: %t", b.Sleeping), fmt.Sprintf("Sensor: %t", b.Collider.Sensor), fmt.Sprintf("Friction: %g", b.Collider.Friction), fmt.Sprintf("Restitution: %g", b.Collider.Restitution))
 		rows = append(rows, fmt.Sprintf("Linear damping: %g", b.LinearDamping), fmt.Sprintf("Angular damping: %g", b.AngularDamping), fmt.Sprintf("CCD: %t", b.CCD))
 		rows = append(rows, fmt.Sprintf("Collision layer: 0x%08X", b.Collider.Layer), fmt.Sprintf("Collision mask: 0x%08X", b.Collider.Mask))
