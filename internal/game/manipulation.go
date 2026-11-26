@@ -12,6 +12,8 @@ import (
 // Inspection is a read-only live snapshot; Spawned distinguishes disposable
 // runtime objects from authored scaffolding without relying on names.
 type Inspection struct {
+	// DoorOpeningRequested is the signal state submitted for the next fixed tick.
+	DoorOpeningRequested bool
 	// EnterImpulseArmed reports whether this sensor can apply its configured impulse on entry.
 	EnterImpulseArmed bool
 	Entity            project.Entity
@@ -29,7 +31,7 @@ func (s *Session) Inspect(id EntityID) (Inspection, error) {
 	if err != nil {
 		return Inspection{}, err
 	}
-	out := Inspection{Entity: state, Spawned: e.spawned}
+	out := Inspection{Entity: state, Spawned: e.spawned, DoorOpeningRequested: e.doorOpen}
 	if e.description.Body != "none" {
 		b, err := s.World.Body(e.body)
 		if err != nil {

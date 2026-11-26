@@ -17,6 +17,7 @@ type EntityID struct {
 	slot, generation uint32
 }
 type entity struct {
+	doorOpen    bool
 	description project.Entity
 	node        *engine.SceneNode
 	body        physics.BodyID
@@ -34,6 +35,8 @@ type sensorImpulse struct {
 
 // Session owns live entities and a world; all operations belong to the update goroutine.
 type Session struct {
+	plates        map[physics.BodyID]string
+	doorCount     int
 	projectRoot   string
 	sensorEvents  []SensorEvent
 	enterImpulses map[physics.BodyID]sensorImpulse
@@ -206,6 +209,15 @@ func (s *Session) spawn(d project.Entity) (EntityID, error) {
 			return EntityID{}, err
 		}
 		entry.body = id
+		if d.PlateSignal != "" {
+			if s.plates == nil {
+				s.plates = make(map[physics.BodyID]string)
+			}
+			s.plates[id] = d.PlateSignal
+		}
+		if d.DoorSignal != "" {
+			s.doorCount++
+		}
 		if d.Sensor && d.EnterImpulse != (engine.Point{}) {
 			if s.enterImpulses == nil {
 				s.enterImpulses = make(map[physics.BodyID]sensorImpulse)
@@ -348,6 +360,10 @@ func (s *Session) QueueDestroy(id EntityID) error {
 					return err
 				}
 				delete(s.enterImpulses, child.body)
+				delete(s.plates, child.body)
+				if child.description.DoorSignal != "" {
+					s.doorCount--
+				}
 			}
 			s.Scene.RemoveNode(child.node)
 			child.active = false
@@ -414,6 +430,7 @@ func (s *Session) applySensorImpulse(tick uint64, sensor, other physics.BodyID) 
 func (s *Session) hooks() physics.StepHooks {
 	return physics.StepHooks{AfterStep: func(t physics.Tick) {
 		s.applyEnterImpulses(t.Index)
+		s.updateDoors()
 		for i := range s.entities {
 			e := &s.entities[i]
 			if !e.active || e.description.Body == "none" {

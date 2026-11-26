@@ -60,6 +60,12 @@ type Entity struct {
 	// ColliderShape inherits Shape when empty. Zero collider dimensions inherit Size per axis.
 	ColliderShape string       `yaml:"collider_shape,omitempty"`
 	ColliderSize  engine.Point `yaml:"collider_size,omitempty"`
+	// PlateSignal names the signal held while this sensor overlaps a dynamic body.
+	PlateSignal string `yaml:"plate_signal,omitempty"`
+	// DoorSignal subscribes a static door to plates with the same project signal.
+	DoorSignal string `yaml:"door_signal,omitempty"`
+	// DoorLift is the upward opening distance in metres. Zero uses the collider height.
+	DoorLift float64 `yaml:"door_lift,omitempty"`
 	// EnterOnce consumes the impulse after its first dynamic recipient in a session.
 	EnterOnce bool `yaml:"enter_once,omitempty"`
 	// EnterImpulse is a world-space impulse delivered to a dynamic body when
@@ -185,6 +191,15 @@ func (d Document) Validate() error {
 			if !finiteRange(v, .05, 100) {
 				return fmt.Errorf("entity %s: size outside 0.05..100 m", e.ID)
 			}
+		}
+		if e.PlateSignal != "" && (!ValidText(e.PlateSignal, 80) || !e.Sensor || e.Body == "none") {
+			return fmt.Errorf("entity %s: plate signal requires a sensor body and a printable name", e.ID)
+		}
+		if e.DoorSignal != "" && (!ValidText(e.DoorSignal, 80) || e.Body != "static" || e.Sensor) {
+			return fmt.Errorf("entity %s: door signal requires a solid static body and a printable name", e.ID)
+		}
+		if !finiteRange(e.DoorLift, 0, 1000) {
+			return fmt.Errorf("entity %s: door lift must be 0..1000 m", e.ID)
 		}
 		if !validPosition(e.EnterImpulse) {
 			return fmt.Errorf("entity %s: invalid sensor enter impulse", e.ID)
