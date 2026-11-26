@@ -51,6 +51,14 @@
 // Zero disables that damping term. Enter default to restore the physics value.
 // Set Sphere CCD to on for a fast dynamic sphere to sweep against supported
 // static colliders, off to disable it, or default to inherit the scene policy.
+// To make a pressure plate, enable Sensor on a static box and set Plate signal
+// to a name such as entrance. On a separate solid static body, set Door signal
+// to entrance. Matching is case-sensitive and scene-wide, including instances.
+// Any dynamic body holding any matching plate keeps all matching doors open.
+// A door lifts along world Y by Door lift metres (zero uses its collider height).
+// Contact changes take effect at the next fixed tick. After the last occupant
+// leaves, the door returns to its authored position. Reset starts it closed.
+//
 // To build a launch pad, enable Sensor on a static box and set Sensor enter
 // impulse Y to 5 N·s. When a dynamic body enters, the pad applies that impulse
 // on the next fixed tick. Remaining inside does not retrigger it. Leaving and

@@ -287,6 +287,16 @@ func (m *projectEditorModel) inspectorRows() []string {
 	p := inspection.Entity.Position
 	r := inspection.Entity.Rotation
 	rows := []string{"Name: " + e.Name, "Body: " + e.Body, fmt.Sprintf("Runtime spawn: %t", inspection.Spawned), fmt.Sprintf("Position: %.2f %.2f %.2f", p.X, p.Y, p.Z), fmt.Sprintf("Rotation: %.2f %.2f %.2f", r.X, r.Y, r.Z)}
+	if e.PlateSignal != "" {
+		rows = append(rows, "Plate signal: "+e.PlateSignal)
+	}
+	if e.DoorSignal != "" {
+		status := "released"
+		if inspection.DoorOpeningRequested {
+			status = "held"
+		}
+		rows = append(rows, fmt.Sprintf("Door signal: %s (%s)", e.DoorSignal, status))
+	}
 	if b := inspection.Body; b != nil {
 		if b.Collider.Sensor {
 			status := "disabled"
