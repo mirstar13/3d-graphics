@@ -139,7 +139,12 @@ func (m *projectPlayer) View() string {
 		out.WriteString("Arrows move | Space jump | ")
 	}
 	out.WriteString("Q quit\n")
-	w, h := max(1, m.width-1), max(1, m.height-strings.Count(out.String(), "\n"))
+	hud := fitView(strings.TrimSuffix(out.String(), "\n"), m.width, m.height)
+	availableHeight := m.height - strings.Count(hud, "\n") - 1
+	if availableHeight <= 0 {
+		return hud
+	}
+	w, h := max(1, m.width-1), availableHeight
 	w, h = terminal.FitViewport(m.requestedWidth, m.requestedHeight, w, h)
 	if m.renderer == nil {
 		m.renderer = terminal.NewTerminalRenderer(bufio.NewWriter(io.Discard), h, w)
@@ -156,19 +161,28 @@ func (m *projectPlayer) View() string {
 		aimX, aimY = w/2, h/2
 		r.Surface[aimY][aimX] = '+'
 	}
+	var rows []string
 	if m.colorMode != "" && m.colorMode != "none" {
-		hud := fitView(strings.TrimSuffix(out.String(), "\n"), m.width, m.height)
-		count := max(0, m.height-1-strings.Count(hud, "\n"))
-		if count == 0 {
-			return hud
+		rows = coloredRows(r, aimX, aimY, m.colorMode)
+	} else {
+		rows = make([]string, h)
+		for i, row := range r.Surface {
+			rows[i] = string(row)
 		}
-		return hud + "\n" + strings.Join(coloredRows(r, aimX, aimY, m.colorMode)[:min(h, count)], "\n")
 	}
-	for _, row := range r.Surface {
-		out.WriteString(string(row))
-		out.WriteByte('\n')
+	left := strings.Repeat(" ", max(0, (m.width-1-w)/2))
+	out.Reset()
+	out.WriteString(hud)
+	out.WriteByte('\n')
+	out.WriteString(strings.Repeat("\n", (availableHeight-h)/2))
+	for i, row := range rows {
+		if i > 0 {
+			out.WriteByte('\n')
+		}
+		out.WriteString(left)
+		out.WriteString(row)
 	}
-	return fitView(out.String(), m.width, m.height)
+	return out.String()
 }
 func runProjectPlayer(root, id string, firstPerson bool, color string, options physics.Options, width, height int) error {
 	p, err := project.Open(root)

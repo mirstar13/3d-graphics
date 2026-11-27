@@ -27,6 +27,7 @@ type TerminalRenderer struct {
 	Writer                          *bufio.Writer
 	Height                          int
 	Width                           int
+	OffsetX, OffsetY                int
 	Surface                         [][]rune
 	ColorBuffer                     [][]engine.Color
 	ZBuffer                         [][]float64
@@ -176,6 +177,9 @@ func (r *TerminalRenderer) Present() {
 		clear(r.presentColors)
 		colorCodes := r.presentColors
 		for i := 0; i < r.Height; i++ {
+			if r.OffsetX != 0 || r.OffsetY != 0 {
+				fmt.Fprintf(builder, "\033[%d;%dH", r.OffsetY+i+1, r.OffsetX+1)
+			}
 			for j := 0; j < r.Width; j++ {
 				char := r.Surface[i][j]
 				color := r.ColorBuffer[i][j]
@@ -194,18 +198,21 @@ func (r *TerminalRenderer) Present() {
 			}
 
 			builder.WriteString("\033[K")
-			if i < r.Height-1 {
+			if i < r.Height-1 && r.OffsetX == 0 && r.OffsetY == 0 {
 				builder.WriteString("\r\n")
 			}
 		}
 		builder.WriteString(engine.ColorReset())
 	} else {
 		for i := 0; i < r.Height; i++ {
+			if r.OffsetX != 0 || r.OffsetY != 0 {
+				fmt.Fprintf(builder, "\033[%d;%dH", r.OffsetY+i+1, r.OffsetX+1)
+			}
 			for j := 0; j < r.Width; j++ {
 				builder.WriteRune(r.Surface[i][j])
 			}
 			builder.WriteString("\033[K")
-			if i < r.Height-1 {
+			if i < r.Height-1 && r.OffsetX == 0 && r.OffsetY == 0 {
 				builder.WriteString("\r\n")
 			}
 		}
@@ -628,7 +635,7 @@ func (r *TerminalRenderer) showDebugLine() {
 		line = line[:r.Width]
 	}
 	if line != r.lastDebugLine {
-		fmt.Fprintf(r.Writer, "\033[%d;1H\033[K%s", r.Height+1, line)
+		fmt.Fprintf(r.Writer, "\033[%d;%dH\033[K%s", r.OffsetY+r.Height+1, r.OffsetX+1, line)
 		r.Writer.Flush()
 		r.lastDebugLine = line
 	}

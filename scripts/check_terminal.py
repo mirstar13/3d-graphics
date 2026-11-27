@@ -157,7 +157,7 @@ for terminal in ["xterm", "linux", "vt100"]:
     s=Session(["-demo","1","-color","none"],terminal=terminal,color_term="",size=(121,321))
     s.wait(b"3D Graphics")
     s.output=b"";s.send(b"\r");s.wait(b"Kinetic gallery")
-    s.output=b"";s.send(b"\r");s.wait(b"\x1b[61;1H")
+    s.output=b"";s.send(b"\r");s.wait(b"\x1b[91;81H")
     s.output=b"";s.send(b"x");s.wait(b"3D Graphics")
     s.send(b"\x1b");s.exit()
 print("xterm/linux/vt100 profiles, large-grid viewport budget and exit PASS",flush=True)

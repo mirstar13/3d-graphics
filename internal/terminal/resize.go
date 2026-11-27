@@ -15,7 +15,15 @@ func (r *TerminalRenderer) SyncSize() {
 		return
 	}
 	width, height := terminalDimensions(r.RequestedWidth, r.RequestedHeight, columns, rows)
-	if r.Resize(width, height) {
+	r.fitTerminal(width, height, columns, rows)
+}
+
+func (r *TerminalRenderer) fitTerminal(width, height, columns, rows int) {
+	x, y := max(0, (columns-1-width)/2), max(0, (rows-1-height)/2)
+	moved := x != r.OffsetX || y != r.OffsetY
+	r.OffsetX, r.OffsetY = x, y
+	if r.Resize(width, height) || moved {
+		r.lastDebugLine = ""
 		fmt.Fprint(r.Writer, "\033[2J\033[H")
 	}
 }

@@ -1,13 +1,55 @@
 package app
 
 import (
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/mirstar13/go-3d-graphics/internal/physics"
 	"github.com/mirstar13/go-3d-graphics/internal/project"
 	"github.com/mirstar13/go-3d-graphics/internal/terminal"
 )
+
+func TestSwitchRoomCenteredFrame(t *testing.T) {
+	p, err := project.Open("../../examples/switch-room")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, mode := range []string{"none", "256", "truecolor"} {
+		m := projectPlayer{project: p, room: &switchRoom{}, playerID: "player", options: physics.DefaultOptions(), colorMode: mode}
+		if err := m.reset(); err != nil {
+			t.Fatal(err)
+		}
+		for _, size := range [][2]int{{321, 121}, {401, 151}, {80, 24}, {1, 1}} {
+			m.width, m.height = size[0], size[1]
+			lines := strings.Split(ansi.Strip(m.View()), "\n")
+			if len(lines) > m.height {
+				t.Fatal("frame scrolls past the terminal")
+			}
+			if m.width == 1 {
+				continue
+			}
+			headerRows := 0
+			for i, line := range lines {
+				if strings.Contains(line, "Q quit") {
+					headerRows = i + 1
+					break
+				}
+			}
+			w, h := m.renderer.GetDimensions()
+			x, y := (m.width-1-w)/2, headerRows+(m.height-headerRows-h)/2
+			if []rune(lines[y+h/2])[x+w/2] != '+' {
+				t.Fatalf("%s %v: reticle is not centred", mode, size)
+			}
+			for _, line := range lines {
+				if len([]rune(line)) >= m.width {
+					t.Fatal("frame wraps at the terminal edge")
+				}
+			}
+		}
+	}
+}
 
 func TestSwitchRoomViewportBudgetAndResize(t *testing.T) {
 	p, err := project.Open("../../examples/switch-room")

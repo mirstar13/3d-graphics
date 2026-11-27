@@ -197,7 +197,9 @@ the cell count, while SSAA multiplies the raster workload by four. Automatic
 viewports (`width: 0`, `height: 0`) therefore scale the available grid to at most
 160 columns and 60 rows, preserving its proportions. This applies to demos and
 the standalone project player, including Switch Room. The rendered area can be
-smaller than the window. Resizing or zooming recomputes that area between frames.
+smaller than the window and is centred horizontally and vertically. Demos reserve
+a row for status; the project player centres its frame below the HUD. Resizing
+or zooming recomputes that area and its margins between frames.
 An individually automatic axis is capped at 160 columns or 60 rows.
 
 Use Settings or explicit dimensions to choose the workload independently of font
