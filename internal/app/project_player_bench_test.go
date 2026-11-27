@@ -23,7 +23,7 @@ func BenchmarkPulseDockView(b *testing.B) {
 			}
 			b.ReportAllocs()
 			for b.Loop() {
-				m.View()
+				m.renderView()
 			}
 		})
 	}

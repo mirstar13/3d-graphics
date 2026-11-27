@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/mirstar13/go-3d-graphics/internal/physics"
 	"github.com/mirstar13/go-3d-graphics/internal/project"
@@ -144,5 +145,32 @@ func TestSwitchRoomInteractions(t *testing.T) {
 	step()
 	if _, exists := m.session.Find("gate"); exists {
 		t.Fatal("button did not open gate", m.room.message)
+	}
+}
+
+func TestSwitchRoomCoalescesMouseMotion(t *testing.T) {
+	p, err := project.Open("../../examples/switch-room")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := projectPlayer{project: p, room: &switchRoom{}, options: physics.DefaultOptions(), width: 80, height: 30}
+	if err = m.reset(); err != nil {
+		t.Fatal(err)
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	initial := m.View()
+	for _, x := range []int{1, 8, 20} {
+		m.Update(tea.MouseMsg{X: x, Y: 4, Action: tea.MouseActionMotion})
+		if m.View() != initial || m.room.yaw != 0 {
+			t.Fatal("rasterized or turned before tick")
+		}
+	}
+	m.Update(editorTick(m.last.Add(time.Second / 30)))
+	if m.room.yaw <= 0 || m.View() == initial {
+		t.Fatal("missing camera turn")
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.pointer.Captured {
+		t.Fatal("escape did not release capture")
 	}
 }

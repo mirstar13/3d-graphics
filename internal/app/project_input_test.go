@@ -248,3 +248,35 @@ func TestPlayControlsAndExpandedViewport(t *testing.T) {
 		t.Fatal("inspector focus lost")
 	}
 }
+
+func TestEditorButtonHitRegions(t *testing.T) {
+	m := inputEditor(t)
+	click := func(x, y int, action tea.MouseAction) {
+		next, _ := m.Update(tea.MouseMsg{X: x, Y: y, Action: action, Button: tea.MouseButtonLeft})
+		m = next.(projectEditorModel)
+	}
+	click(0, 1, tea.MouseActionRelease)
+	click(6, 1, tea.MouseActionPress) // gap after [Play]
+	if m.play != nil {
+		t.Fatal("unintended play")
+	}
+	m.modal = "property"
+	click(1, 1, tea.MouseActionPress)
+	if m.play != nil {
+		t.Fatal("button behind modal")
+	}
+	m.modal = ""
+	click(1, 1, tea.MouseActionPress)
+	if m.play == nil || !strings.Contains(m.View(), "[Stop]") {
+		t.Fatal("Play button")
+	}
+	row, _ := m.buttonBar()
+	click(1, row, tea.MouseActionPress)
+	if m.play != nil {
+		t.Fatal("Stop button")
+	}
+	m.width = 6
+	if m.buttonText() != "" {
+		t.Fatal("partial button visible")
+	}
+}

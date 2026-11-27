@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mirstar13/go-3d-graphics/internal/engine"
 	"github.com/mirstar13/go-3d-graphics/internal/game"
+	"github.com/mirstar13/go-3d-graphics/internal/input"
 	"github.com/mirstar13/go-3d-graphics/internal/physics"
 	"github.com/mirstar13/go-3d-graphics/internal/project"
 	"github.com/mirstar13/go-3d-graphics/internal/terminal"
@@ -17,6 +18,9 @@ import (
 
 // projectPlayer owns the terminal while a saved scene runs outside the editor.
 type projectPlayer struct {
+	frame                           string
+	frameLayout                     [4]int
+	pointer                         input.Pointer
 	room                            *switchRoom
 	renderer                        *terminal.TerminalRenderer
 	project                         *project.Project
@@ -58,13 +62,29 @@ func (m *projectPlayer) reset() error {
 }
 func (m *projectPlayer) Init() tea.Cmd { return nextEditorTick() }
 func (m *projectPlayer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Motion is accumulated until the next simulation tick. Bubble Tea may
+	// ask for View after every mouse report, so keep the completed frame.
+	if _, motion := msg.(tea.MouseMsg); !motion {
+		m.frame = ""
+	}
 	switch v := msg.(type) {
+	case tea.BlurMsg:
+		m.pointer.Reset(false)
+		return m, tea.DisableMouse
+	case tea.MouseMsg:
+		if m.room != nil && v.Action == tea.MouseActionMotion && m.pointer.Captured && !m.session.Objective().Finished() {
+			m.pointer.Motion(v.X, v.Y)
+		}
 	case tea.WindowSizeMsg:
+		m.pointer.Reset(m.pointer.Captured)
 		m.width = v.Width
 		m.height = v.Height
 	case editorTick:
 		now := time.Time(v)
 		if m.room != nil {
+			dx, dy := m.pointer.Take()
+			m.room.yaw += float64(dx) * .035
+			m.room.pitch = max(-1.1, min(1.1, m.room.pitch-float64(dy)*.06))
 			if err := m.room.tick(m.session, now.Sub(m.last), now); err != nil {
 				m.err = err
 				return m, tea.Quit
@@ -81,8 +101,17 @@ func (m *projectPlayer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.session.Objective().Finished() {
 			return m, nextEditorTick()
 		}
+		m.pointer.Reset(false)
+		return m, tea.DisableMouse
 	case tea.KeyMsg:
 		key := v.String()
+		if m.room != nil && ((key == "esc" && m.pointer.Captured) || (key == "m" && !m.session.Objective().Finished())) {
+			m.pointer.Reset(!m.pointer.Captured)
+			if m.pointer.Captured {
+				return m, tea.EnableMouseAllMotion
+			}
+			return m, tea.DisableMouse
+		}
 		if key == "esc" || key == "q" || key == "ctrl+c" {
 			return m, tea.Quit
 		}
@@ -130,9 +159,23 @@ func objectiveHUD(o game.ObjectiveStatus) string {
 	return "Objective: " + o.Text + "\n"
 }
 func (m *projectPlayer) View() string {
+	layout := [4]int{m.width, m.height, m.requestedWidth, m.requestedHeight}
+	if m.frame == "" || layout != m.frameLayout {
+		m.frame = m.renderView()
+		m.frameLayout = layout
+	}
+	return m.frame
+}
+
+func (m *projectPlayer) renderView() string {
 	var out strings.Builder
 	out.WriteString(objectiveHUD(m.session.Objective()))
 	if m.room != nil {
+		if m.pointer.Captured {
+			out.WriteString("Esc release | ")
+		} else {
+			out.WriteString("M mouse look | ")
+		}
 		out.WriteString("WASD walk | Arrows look | F push | G grab/drop | E button | ")
 		out.WriteString(m.room.message + "\n")
 	} else if m.playerID != "" {
@@ -170,29 +213,9 @@ func (m *projectPlayer) View() string {
 			rows[i] = string(row)
 		}
 	}
-	return centeredGameView(hud, rows, w, m.width, m.height)
+	return terminal.CenteredGameView(hud, rows, w, m.width, m.height)
 }
 
-func centeredGameView(hud string, rows []string, frameWidth, columns, height int) string {
-	available := max(0, height-1-strings.Count(hud, "\n"))
-	rows = rows[:min(len(rows), available)]
-	if len(rows) == 0 {
-		return hud
-	}
-	left := strings.Repeat(" ", max(0, (columns-1-frameWidth)/2))
-	var out strings.Builder
-	out.WriteString(hud)
-	out.WriteByte('\n')
-	out.WriteString(strings.Repeat("\n", (available-len(rows))/2))
-	for i, row := range rows {
-		if i > 0 {
-			out.WriteByte('\n')
-		}
-		out.WriteString(left)
-		out.WriteString(row)
-	}
-	return out.String()
-}
 func runProjectPlayer(root, id string, firstPerson bool, color string, options physics.Options, width, height int) error {
 	p, err := project.Open(root)
 	if err != nil {
@@ -207,7 +230,7 @@ func runProjectPlayer(root, id string, firstPerson bool, color string, options p
 	if err = m.reset(); err != nil {
 		return err
 	}
-	_, err = tea.NewProgram(m, tea.WithAltScreen()).Run()
+	_, err = tea.NewProgram(m, tea.WithAltScreen(), tea.WithReportFocus()).Run()
 	if err != nil {
 		return err
 	}

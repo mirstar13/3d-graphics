@@ -281,6 +281,9 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case tea.MouseMsg:
+		if next, cmd, ok := m.clickButton(msg); ok {
+			return next, cmd
+		}
 		m.viewportMouse(msg)
 		return m, nil
 	case tea.WindowSizeMsg:
@@ -673,7 +676,7 @@ func (m projectEditorModel) gameViewActive() bool {
 }
 func (m projectEditorModel) View() string {
 	if m.gameViewActive() {
-		hud := fitView(objectiveHUD(m.play.Objective())+"[PLAY]  Tab inspect | F8 stop", m.width, m.height)
+		hud := fitView(objectiveHUD(m.play.Objective())+m.buttonText()+" [PLAY]  Tab inspect | F8 stop", m.width, m.height)
 		rows := m.frame
 		if len(m.coloredFrame) > 0 {
 			rows = m.coloredFrame
@@ -681,7 +684,7 @@ func (m projectEditorModel) View() string {
 		if len(m.frame) == 0 {
 			return hud
 		}
-		return centeredGameView(hud, rows, len(m.frame[0]), m.width, m.height)
+		return terminal.CenteredGameView(hud, rows, len(m.frame[0]), m.width, m.height)
 	}
 
 	if m.modal == "build" || m.modal == "child" || m.modal == "export" {
@@ -695,7 +698,7 @@ func (m projectEditorModel) View() string {
 	}
 	var out strings.Builder
 	if m.project == nil {
-		out.WriteString("Project editor\n\nN New project | O Open project\n\nCreate a new directory or open one containing project.yaml.\nEsc returns to launcher.\n")
+		out.WriteString("Project editor\n\n" + m.buttonText() + " N New project | O Open project\n\nCreate a new directory or open one containing project.yaml.\nEsc returns to launcher.\n")
 	} else {
 		dirty := ""
 		if m.document.Dirty() {
@@ -716,7 +719,7 @@ func (m projectEditorModel) View() string {
 		if m.activeResource != nil {
 			path = m.resourcePath + " [SOURCE]"
 		}
-		fmt.Fprintf(&out, "Project editor - %s%s [%s]%s\nResource: %s\n", m.project.Manifest.Name, dirty, mode, runtimeStatus, path)
+		fmt.Fprintf(&out, "Project editor - %s%s [%s]%s\n%s Resource: %s\n", m.project.Manifest.Name, dirty, mode, runtimeStatus, m.buttonText(), path)
 		if m.play != nil {
 			out.WriteString(objectiveHUD(m.play.Objective()))
 		}
