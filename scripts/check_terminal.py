@@ -5,11 +5,11 @@ import os,pty,fcntl,termios,struct,select,time,signal,sys,re
 BINARY=os.path.abspath(sys.argv[1] if len(sys.argv)>1 else "/tmp/graphics")
 
 class Session:
-    def __init__(self,args):
+    def __init__(self,args,terminal="xterm-256color",color_term="truecolor",size=(30,100)):
         self.pid,self.fd=pty.fork()
         if self.pid==0:
-            os.environ.update(TERM="xterm-256color",COLORTERM="truecolor")
-            fcntl.ioctl(0,termios.TIOCSWINSZ,struct.pack("HHHH",30,100,0,0))
+            os.environ.update(TERM=terminal,COLORTERM=color_term)
+            fcntl.ioctl(0,termios.TIOCSWINSZ,struct.pack("HHHH",*size,0,0))
             os.execv(BINARY,[BINARY]+args)
         self.output=b""
     def send(self,data): os.write(self.fd,data)
@@ -151,3 +151,28 @@ with tempfile.TemporaryDirectory() as directory:
     s.output=b"";s.send(b"\r");s.wait(b"3D Graphics")
     s.send(b"\x1b");s.exit()
 print("Physics settings scroll/edit/save/apply PASS",flush=True)
+
+# A larger cell grid must stay bounded regardless of the terminal profile.
+for terminal in ["xterm", "linux", "vt100"]:
+    s=Session(["-demo","1","-color","none"],terminal=terminal,color_term="",size=(121,321))
+    s.wait(b"3D Graphics")
+    s.output=b"";s.send(b"\r");s.wait(b"Kinetic gallery")
+    s.output=b"";s.send(b"\r");s.wait(b"\x1b[61;1H")
+    s.output=b"";s.send(b"x");s.wait(b"3D Graphics")
+    s.send(b"\x1b");s.exit()
+print("xterm/linux/vt100 profiles, large-grid viewport budget and exit PASS",flush=True)
+
+# Select Switch Room, turn, resize, then return to the launcher.
+s=Session(["-demo","1"],size=(121,321))
+s.wait(b"3D Graphics")
+s.output=b"";s.send(b"\r");s.wait(b"Switch Room")
+s.output=b"";s.send(b"\x1b[B"*9+b"\r");s.wait(b"WASD walk")
+for rows,columns in [(24,80),(151,401)]:
+    s.output=b""
+    fcntl.ioctl(s.fd,termios.TIOCSWINSZ,struct.pack("HHHH",rows,columns,0,0))
+    os.kill(s.pid,signal.SIGWINCH)
+    s.send(b"\x1b[C")
+    s.wait(b"Q quit")
+s.output=b"";s.send(b"q");s.wait(b"3D Graphics")
+s.send(b"\x1b");s.exit()
+print("Switch Room launch/turn/resize/return/exit PASS",flush=True)

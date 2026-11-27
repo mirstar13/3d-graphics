@@ -6,7 +6,39 @@ import (
 
 	"github.com/mirstar13/go-3d-graphics/internal/physics"
 	"github.com/mirstar13/go-3d-graphics/internal/project"
+	"github.com/mirstar13/go-3d-graphics/internal/terminal"
 )
+
+func TestSwitchRoomViewportBudgetAndResize(t *testing.T) {
+	p, err := project.Open("../../examples/switch-room")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := projectPlayer{project: p, room: &switchRoom{}, playerID: "player", options: physics.DefaultOptions(), colorMode: "256"}
+	if err := m.reset(); err != nil {
+		t.Fatal(err)
+	}
+	for _, size := range [][2]int{{400, 150}, {80, 24}, {320, 100}} {
+		m.width, m.height = size[0], size[1]
+		if view := m.View(); view == "" {
+			t.Fatal("empty game view")
+		}
+		w, h := m.renderer.GetDimensions()
+		if w > 160 || h > 60 || w >= m.width || h >= m.height {
+			t.Fatalf("unbounded viewport %dx%d in %v", w, h, size)
+		}
+	}
+	m.requestedWidth, m.requestedHeight = 200, 70
+	m.View()
+	w, h := m.renderer.GetDimensions()
+	if w != 200 || h != 70 {
+		t.Fatalf("explicit viewport ignored: %dx%d", w, h)
+	}
+	// The game and demo use the same sizing policy.
+	if w, h := terminal.FitViewport(0, 0, 400, 150); w != 160 || h != 60 {
+		t.Fatalf("unexpected automatic budget: %dx%d", w, h)
+	}
+}
 
 func TestSwitchRoomInteractions(t *testing.T) {
 	p, err := project.Open("../../examples/switch-room")

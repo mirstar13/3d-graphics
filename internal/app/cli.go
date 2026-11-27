@@ -113,7 +113,7 @@ func Run() {
 		}()
 	}
 	if options.playProject != "" {
-		if err := runProjectPlayer(options.playProject, options.playerID, false, settings.Color, settings.Physics.WorldOptions()); err != nil {
+		if err := runProjectPlayer(options.playProject, options.playerID, false, settings.Color, settings.Physics.WorldOptions(), settings.Width, settings.Height); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 		}
 		return
@@ -154,7 +154,7 @@ func Run() {
 			path := sampleProjectPath(name)
 			if path == "" {
 				fmt.Fprintln(os.Stderr, "Cannot locate examples/"+name)
-			} else if err := runProjectPlayer(path, actor, menu.switchRoom, settings.Color, settings.Physics.WorldOptions()); err != nil {
+			} else if err := runProjectPlayer(path, actor, menu.switchRoom, settings.Color, settings.Physics.WorldOptions(), settings.Width, settings.Height); err != nil {
 				fmt.Fprintln(os.Stderr, err)
 			}
 			continue

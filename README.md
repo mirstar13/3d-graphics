@@ -32,9 +32,9 @@ and press F to push or G to grab. Press G again to release it. Approach the
 green button, aim at it and press E to open the gate. Reach the gold pad to
 finish. R restarts a completed round and Q returns to the launcher.
 
-For a finer grid, open [terminal-games.code-workspace](terminal-games.code-workspace)
-in VS Code. Its integrated terminal uses an 11 px font, so more rows and columns
-fit in the same window. Adjust `terminal.integrated.fontSize` to taste.
+Run in any terminal with ANSI cursor positioning and interactive input. Font size
+belongs to the terminal's preferences: the engine does not require VS Code or
+change your font. See [font size and performance](#font-size-and-performance).
 
 ## Project editor (prototype)
 
@@ -156,7 +156,7 @@ CLI overrides include `-demo`, `-mode`, `-aa`, `-workers`, `-tile-size`,
 
 ## Terminal compatibility
 
-The viewport fits the terminal size at startup, reserving space for the status
+The viewport fits within the terminal size at startup, reserving space for the status
 line and avoiding the last column's automatic wrapping. Buffers follow window
 resizing between completed frames. When size detection is unavailable, the fallback is 80 by 24.
 
@@ -174,6 +174,46 @@ go run . -width 60 -height 20 -fps 15 -workers 1 -color 16
 
 Explicit dimensions are capped to the terminal size. Worker count uses the YAML value or Go's available CPU parallelism when omitted.
 Single-threaded rendering remains the default.
+
+### Font size and performance
+
+There is no portable API for an application to change a terminal's font size.
+Use your terminal's font preferences or zoom controls. Font sizes in pixels and
+points differ between terminals and displays, so 11 is not a universal target.
+
+| Terminal | Font setting |
+| --- | --- |
+| Windows Terminal | Settings → profile → Appearance → Font size |
+| macOS Terminal | Settings → Profiles → Text → Font → Change |
+| iTerm2 | Settings → Profiles → Text → Font |
+| GNOME Terminal | Preferences → profile → Text → Custom font |
+| Konsole | Settings → Edit Current Profile → Appearance → Font |
+| kitty | `font_size` in `kitty.conf` |
+| Alacritty | `[font] size` in `alacritty.toml` |
+| VS Code | `terminal.integrated.fontSize` in user settings |
+
+Smaller fonts fit more cells into a window. Rendering and output costs grow with
+the cell count, while SSAA multiplies the raster workload by four. Automatic
+viewports (`width: 0`, `height: 0`) therefore scale the available grid to at most
+160 columns and 60 rows, preserving its proportions. This applies to demos and
+the standalone project player, including Switch Room. The rendered area can be
+smaller than the window. Resizing or zooming recomputes that area between frames.
+An individually automatic axis is capped at 160 columns or 60 rows.
+
+Use Settings or explicit dimensions to choose the workload independently of font
+size, including a larger viewport when your machine and terminal can handle it:
+
+```sh
+go run . -width 120 -height 40 -fps 30 -aa none
+go run . -width 240 -height 80 -mode tiles -workers 4 -aa none
+```
+
+These dimensions also apply when launching Switch Room or Pulse Dock from the
+launcher. Explicit dimensions still fit within the available terminal grid.
+The editor's authoring viewport follows its panel layout. For lag spikes, first
+try a smaller viewport with AA disabled; compare `single` and `tiles` on your
+scene. A 30 FPS target cannot guarantee 30 FPS on every machine or terminal.
+The workspace file preserves your own font preference.
 
 Windows consoles require virtual terminal processing, which is enabled and
 restored for the rendering session. Linux runtime tests exercise pseudo

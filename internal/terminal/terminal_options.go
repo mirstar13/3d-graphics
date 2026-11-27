@@ -34,13 +34,26 @@ func terminalDimensions(width, height, columns, rows int) (int, int) {
 		columns, rows = 80, 24
 	}
 	// Leave a column to avoid automatic wrapping, and a row for status.
-	if width == 0 || width > columns-1 {
-		width = columns - 1
+	return FitViewport(width, height, columns-1, rows-1)
+}
+
+// FitViewport fits requested dimensions into available cells. Automatic axes
+// are limited to 160 columns and 60 rows to bound work after font/window changes.
+// With both axes automatic, scaling preserves the terminal grid's proportions.
+// Explicit dimensions bypass the automatic limits, but still fit the terminal.
+func FitViewport(width, height, columns, rows int) (int, int) {
+	columns, rows = max(1, columns), max(1, rows)
+	if width == 0 && height == 0 {
+		scale := min(1., 160./float64(columns), 60./float64(rows))
+		return max(1, int(float64(columns)*scale)), max(1, int(float64(rows)*scale))
 	}
-	if height == 0 || height > rows-1 {
-		height = rows - 1
+	if width == 0 {
+		width = min(columns, 160)
 	}
-	return width, height
+	if height == 0 {
+		height = min(rows, 60)
+	}
+	return max(1, min(width, columns)), max(1, min(height, rows))
 }
 
 func ConfigureTerminal(config *engine.EngineConfig, colorMode string) error {

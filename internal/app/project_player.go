@@ -17,16 +17,17 @@ import (
 
 // projectPlayer owns the terminal while a saved scene runs outside the editor.
 type projectPlayer struct {
-	room          *switchRoom
-	renderer      *terminal.TerminalRenderer
-	project       *project.Project
-	options       physics.Options
-	colorMode     string
-	playerID      string
-	session       *game.Session
-	last          time.Time
-	width, height int
-	err           error
+	room                            *switchRoom
+	renderer                        *terminal.TerminalRenderer
+	project                         *project.Project
+	options                         physics.Options
+	colorMode                       string
+	playerID                        string
+	session                         *game.Session
+	last                            time.Time
+	width, height                   int
+	requestedWidth, requestedHeight int
+	err                             error
 }
 
 func (m *projectPlayer) reset() error {
@@ -139,6 +140,7 @@ func (m *projectPlayer) View() string {
 	}
 	out.WriteString("Q quit\n")
 	w, h := max(1, m.width-1), max(1, m.height-strings.Count(out.String(), "\n"))
+	w, h = terminal.FitViewport(m.requestedWidth, m.requestedHeight, w, h)
 	if m.renderer == nil {
 		m.renderer = terminal.NewTerminalRenderer(bufio.NewWriter(io.Discard), h, w)
 		m.renderer.UseColor = false
@@ -168,13 +170,14 @@ func (m *projectPlayer) View() string {
 	}
 	return fitView(out.String(), m.width, m.height)
 }
-func runProjectPlayer(root, id string, firstPerson bool, color string, options physics.Options) error {
+func runProjectPlayer(root, id string, firstPerson bool, color string, options physics.Options, width, height int) error {
 	p, err := project.Open(root)
 	if err != nil {
 		return err
 	}
 	mode, _ := terminal.ResolveColorMode(color)
 	m := &projectPlayer{colorMode: mode, project: p, options: options, playerID: id, width: 80, height: 24}
+	m.requestedWidth, m.requestedHeight = width, height
 	if firstPerson {
 		m.room = &switchRoom{}
 	}

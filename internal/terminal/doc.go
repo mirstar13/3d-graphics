@@ -47,6 +47,13 @@
 // one follow-up observation. Repeat extended rendering in the same terminal
 // session to investigate recurrence. The cause remains unconfirmed.
 //
+// Font size is controlled by the terminal, not by a portable escape sequence.
+// Automatic demo and project-player viewports are bounded at 160x60 cells;
+// explicit width/height settings override the automatic limits. Smaller fonts
+// should not be used as an implicit rendering-quality setting. See README.md
+// for font controls in common terminals. Native console behavior still needs
+// testing on each platform; cross-compilation alone does not validate it.
+//
 // # Pulse Dock frame benchmark
 //
 //	go test ./internal/app -run '^$' -bench BenchmarkPulseDockView -benchmem -count=3 -cpu=1
