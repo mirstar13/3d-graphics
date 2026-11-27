@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"runtime"
 	"testing"
 
 	"github.com/mirstar13/go-3d-graphics/internal/demo"
@@ -81,8 +82,9 @@ func TestOpenGLRasterDemoParity(t *testing.T) {
 func BenchmarkOpenGLSceneRaster(b *testing.B) {
 	for _, index := range []int{0, 5, 6} {
 		for _, size := range [][2]int{{160, 60}, {320, 120}} {
-			for _, useGL := range []bool{false, true} {
-				b.Run(fmt.Sprintf("scene%d/%dx%d/gl_%t", index+1, size[0], size[1], useGL), func(b *testing.B) {
+			for _, method := range []string{"gl_false", "batched", "gl_true"} {
+				b.Run(fmt.Sprintf("scene%d/%dx%d/%s", index+1, size[0], size[1], method), func(b *testing.B) {
+					useGL := method == "gl_true"
 					scene, lighting := presetScene(index, 1.25, true)
 					r := demoRenderer(index, size[0], size[1], useGL, scene, lighting)
 					if useGL {
@@ -91,13 +93,22 @@ func BenchmarkOpenGLSceneRaster(b *testing.B) {
 						}
 						defer r.Shutdown()
 					}
-					r.RenderScene(scene)
+					var renderer engine.Renderer = r
+					if method == "batched" {
+						renderer = terminal.ComposeRenderer(r, engine.EngineConfig{
+							RenderMode: engine.RenderModeParallelBatched, NumWorkers: runtime.GOMAXPROCS(0), TileSize: 32,
+						})
+					}
+					renderer.RenderScene(scene)
 					if useGL && !r.UsedOpenGLRaster() {
 						b.Skip("OpenGL raster unavailable or scene uses CPU coverage")
 					}
 					b.ReportAllocs()
 					for b.Loop() {
-						r.RenderScene(scene)
+						renderer.RenderScene(scene)
+					}
+					if useGL && !r.UsedOpenGLRaster() {
+						b.Fatal("OpenGL raster fell back to CPU during the timed run")
 					}
 				})
 			}

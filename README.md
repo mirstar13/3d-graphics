@@ -292,6 +292,24 @@ initialization and shutdown. An adapter named example can be selected with
 A renderer that needs drawing calls on the calling thread implements
 `engine.MainThreadRenderer`.
 
+### Benchmark OpenGL on your machine
+
+On Linux amd64 or arm64 with Python 3, Go 1.24.6 or newer, and surfaceless EGL
+with OpenGL 3.3, run the headless comparison with:
+
+```sh
+python3 scripts/benchmark_opengl.py
+```
+
+The script reports the active EGL renderers and checks CPU/OpenGL image
+agreement before timing. It compares scene rasterization with single and
+batched CPU modes and compares the CPU and OpenGL FXAA filters separately.
+It writes raw logs and a `summary.csv` under the ignored `.cache/` directory.
+Use `--cpu` to set the Go CPU budget and batched worker count, `--output` for
+a new results directory, or `--help` for timing options. Recognized software
+renderers require `--allow-software`. On a multi-GPU Mesa system, you can use
+`DRI_PRIME=1` and check the reported renderer to confirm which GPU was used.
+
 ### Experimental offscreen triangle rendering
 
 On Linux amd64 or arm64 with surfaceless EGL and OpenGL 3.3, try:

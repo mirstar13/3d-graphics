@@ -39,7 +39,7 @@ func TestOpenGLFXAAMatchesCPU(t *testing.T) {
 		t.Skip(err)
 	}
 	defer device.close()
-	t.Log(device.name())
+	t.Logf("OpenGL FXAA device: %s", device.name())
 	for _, dim := range [][2]int{{3, 7}, {160, 60}, {320, 120}, {9, 12}, {160, 60}} {
 		original, got := fxaaFixture(dim[0], dim[1])
 		_, want := fxaaFixture(dim[0], dim[1])
