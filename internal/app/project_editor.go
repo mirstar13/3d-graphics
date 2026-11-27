@@ -2,6 +2,7 @@ package app
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -23,6 +24,8 @@ func nextEditorTick() tea.Cmd {
 }
 
 type projectEditorModel struct {
+	lifetime                                       context.Context
+	restartChild                                   bool
 	build                                          buildPanel
 	sceneField                                     int
 	settings                                       config.Settings
@@ -52,7 +55,7 @@ type projectEditorModel struct {
 }
 
 func newProjectEditor(settings config.Settings) projectEditorModel {
-	return projectEditorModel{settings: settings, width: 80, height: 30, zoom: 1, reticleU: .5, reticleV: .5, toolValues: defaultToolValues}
+	return projectEditorModel{lifetime: context.Background(), settings: settings, width: 80, height: 30, zoom: 1, reticleU: .5, reticleV: .5, toolValues: defaultToolValues}
 }
 func (m projectEditorModel) Init() tea.Cmd { return nil }
 func (m *projectEditorModel) install(p *project.Project) error {
@@ -220,6 +223,14 @@ func (m *projectEditorModel) startPlay() tea.Cmd {
 }
 func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := message.(type) {
+	case childResult:
+		m.build.cancel()
+		m.build.cancel = nil
+		if m.restartChild {
+			return m.startChild()
+		}
+		m.build.output = msg.status()
+		return m, nil
 	case projectBuildResult:
 		if m.build.cancel != nil {
 			m.build.cancel()
@@ -265,7 +276,7 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		key := msg.String()
-		if m.modal == "build" {
+		if m.modal == "build" || m.modal == "child" {
 			return m.buildKey(key)
 		}
 		if m.modal == "scene" || m.modal == "scene_edit" {
@@ -380,6 +391,11 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		switch key {
+		case "f6":
+			if m.project != nil && m.activeResource == nil && m.play == nil {
+				return m.startChild()
+			}
+			return m, nil
 		case "ctrl+b":
 			if m.project != nil && m.activeResource == nil && m.play == nil {
 				return m.startBuild()
@@ -583,7 +599,7 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 func (m projectEditorModel) View() string {
-	if m.modal == "build" {
+	if m.modal == "build" || m.modal == "child" {
 		return m.buildView()
 	}
 	if m.modal == "scene" || m.modal == "scene_edit" {
@@ -697,7 +713,7 @@ func (m projectEditorModel) View() string {
 		if m.focus == 2 {
 			out.WriteString(input.Help(bindings, input.AimUp, input.AimDown, input.AimLeft, input.AimRight) + "\n")
 		} else {
-			out.WriteString("Ctrl+B build | Ctrl+E scene settings | H parent | 1/2/3 camera | +/- zoom | Q exit editor\n")
+			out.WriteString("F6 run build | Ctrl+B build | Ctrl+E scene settings | H parent | 1/2/3 camera | +/- zoom | Q exit editor\n")
 		}
 		if m.play != nil {
 			fmt.Fprintf(&out, "Ctrl+L tools | Impulse (%s,%s,%s) %s\n", m.toolValues[0], m.toolValues[1], m.toolValues[2], m.toolValues[3])
@@ -762,6 +778,9 @@ func (m projectEditorModel) View() string {
 }
 func runProjectEditor(settings config.Settings, path string) error {
 	m := newProjectEditor(settings)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m.lifetime = ctx
 	if path != "" {
 		p, err := project.Open(path)
 		if err != nil {

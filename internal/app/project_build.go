@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"unicode"
 
@@ -20,7 +21,7 @@ type projectBuildResult struct {
 }
 
 func (m projectEditorModel) startBuild() (tea.Model, tea.Cmd) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(m.lifetime)
 	m.build = buildPanel{cancel: cancel, output: "Compiling project…"}
 	m.modal = "build"
 	p := m.project
@@ -37,10 +38,23 @@ func (m projectEditorModel) buildLines() []string {
 }
 func (m projectEditorModel) buildKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
+	case "f6":
+		if m.build.cancel == nil {
+			return m.startChild()
+		}
+		if m.modal == "child" {
+			m.restartChild = true
+			m.build.cancel()
+			m.build.output = "Restarting game…"
+		}
 	case "esc", "ctrl+c":
 		if m.build.cancel != nil {
 			m.build.cancel()
 			m.build.output = "Canceling build…"
+			if m.modal == "child" {
+				m.restartChild = false
+				m.build.output = "Stopping game…"
+			}
 		} else {
 			m.modal = ""
 		}
@@ -63,5 +77,41 @@ func (m projectEditorModel) buildView() string {
 	if m.build.cancel != nil {
 		help = "Esc cancel"
 	}
-	return fitView("Project build\n"+help+"\n"+strings.Join(lines[first:min(len(lines), first+rows)], "\n"), m.width, m.height)
+	title := "Project build"
+	if m.modal == "child" {
+		title = "Project game"
+		help = "Up/Down scroll | F6 restart | Ctrl+B build | Esc close"
+		if m.build.cancel != nil {
+			help = "F6 restart | Esc stop"
+		}
+	} else if m.build.cancel == nil {
+		help = "Up/Down scroll | Ctrl+B rebuild | F6 run | Esc close"
+	}
+	return fitView(title+"\n"+help+"\n"+strings.Join(lines[first:min(len(lines), first+rows)], "\n"), m.width, m.height)
+}
+
+type childResult struct {
+	output string
+	err    error
+}
+
+func (r childResult) status() string {
+	status := "Game exited successfully"
+	if errors.Is(r.err, context.Canceled) {
+		status = "Game stopped"
+	} else if r.err != nil {
+		status = "Game failed: " + r.err.Error()
+	}
+	if r.output != "" {
+		status += "\n" + r.output
+	}
+	return status
+}
+func (m projectEditorModel) startChild() (tea.Model, tea.Cmd) {
+	ctx, cancel := context.WithCancel(m.lifetime)
+	m.restartChild = false
+	m.modal = "child"
+	m.build = buildPanel{cancel: cancel, output: "Running last build with saved project files…"}
+	p := m.project
+	return m, func() tea.Msg { output, err := p.RunBuilt(ctx); return childResult{output, err} }
 }

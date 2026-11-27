@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
 // New projects use the public API revision that introduced fixed-tick behaviors.
@@ -92,10 +93,7 @@ func (p *Project) Build(ctx context.Context) (string, error) {
 		return "", err
 	}
 	defer os.RemoveAll(stage)
-	name := "game"
-	if runtime.GOOS == "windows" {
-		name += ".exe"
-	}
+	name := gameExecutable()
 	tmp := filepath.Join(stage, name)
 	cmd := exec.CommandContext(ctx, "go", "build", "-mod=mod", "-buildmode=exe", "-buildvcs=false", "-o", tmp, ".")
 	cmd.Dir = p.Root
@@ -121,4 +119,39 @@ func (p *Project) Build(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return filepath.Join("build", name), nil
+}
+
+func gameExecutable() string {
+	if runtime.GOOS == "windows" {
+		return "game.exe"
+	}
+	return "game"
+}
+
+// RunBuilt starts the last successful host build in the project directory. It
+// waits for exit, returning bounded stdout/stderr and the process error. Cancel
+// the context to stop the game. The editor retains ownership of terminal input.
+func (p *Project) RunBuilt(ctx context.Context) (string, error) {
+	path, err := scenePath(p.Root, filepath.Join("build", gameExecutable()))
+	if err != nil {
+		return "", err
+	}
+	if _, err = os.Stat(path); os.IsNotExist(err) {
+		return "", fmt.Errorf("build the project with Ctrl+B first")
+	}
+	cmd := exec.CommandContext(ctx, path)
+	cmd.Dir = p.Root
+	cmd.WaitDelay = time.Second
+	var output compilerOutput
+	cmd.Stdout = &output
+	cmd.Stderr = &output
+	err = cmd.Run()
+	if ctx.Err() != nil {
+		err = ctx.Err()
+	}
+	text := strings.TrimSpace(output.data.String())
+	if output.truncated {
+		text += "\n(game output truncated)"
+	}
+	return text, err
 }
