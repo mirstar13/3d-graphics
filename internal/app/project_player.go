@@ -17,6 +17,7 @@ import (
 
 // projectPlayer owns the terminal while a saved scene runs outside the editor.
 type projectPlayer struct {
+	renderer      *terminal.TerminalRenderer
 	project       *project.Project
 	options       physics.Options
 	playerID      string
@@ -124,9 +125,14 @@ func (m *projectPlayer) View() string {
 	}
 	out.WriteString("Q quit\n")
 	w, h := max(1, min(120, m.width-1)), max(1, min(40, m.height-4))
-	r := terminal.NewTerminalRenderer(bufio.NewWriter(io.Discard), h, w)
-	r.UseColor = false
-	r.ShadowRenderer = nil
+	if m.renderer == nil {
+		m.renderer = terminal.NewTerminalRenderer(bufio.NewWriter(io.Discard), h, w)
+		m.renderer.UseColor = false
+		m.renderer.ShadowRenderer = nil
+	} else {
+		m.renderer.Resize(w, h)
+	}
+	r := m.renderer
 	r.SetLightingSystem(m.session.Lighting)
 	r.RenderScene(m.session.Scene)
 	for _, row := range r.Surface {
