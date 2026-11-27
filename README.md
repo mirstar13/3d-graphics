@@ -55,6 +55,22 @@ During Play, **Ctrl+L** opens tools for configurable impulses, checked spawning,
 runtime deletion, reset and physics inspection. Run `go doc ./internal/app` for
 the editor controls and `go doc ./internal/project` for scene storage and links.
 
+Press **Ctrl+X** to browse OBJ and GLB meshes under `assets/`. Use **I** in
+the browser to copy in a self-contained Blender-exported GLB, then **Enter**
+to assign it to the selected entity. Static triangle meshes use the default
+glTF scene's transforms, per-face materials and embedded PNG/JPEG base color
+textures. The inspector still controls the physics collider. Animated or
+skinned models, transparency, external glTF dependencies and native
+`.blend` files are outside this importer.
+
+The **Behavior** and **Behavior parameters (JSON)** inspector fields attach a
+named behavior to an entity. Set `behavior_worker` in `project.yaml` to a
+project executable under `assets/`, then use **Ctrl+W** for Scripted Play.
+The [Behavior Workshop](examples/behavior-workshop/README.md) demonstrates
+two crates with different settings and includes C# and C++ implementations
+of the same worker protocol.
+
+
 ## Start menu
 
 `go run .` opens the launcher. Use Up/Down and Enter.

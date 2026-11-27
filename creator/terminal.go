@@ -2,6 +2,7 @@ package creator
 
 import (
 	"bufio"
+	"context"
 	"io"
 	"strings"
 	"time"
@@ -32,6 +33,8 @@ type TerminalOptions struct {
 func (g *Game) RunTerminalWithOptions(o TerminalOptions) error {
 	m := &terminalGame{game: g, options: o}
 	defer g.world.CaptureMouse(false)
+	defer g.Close()
+	g.world.session.EnableBehaviors(context.Background(), g.project)
 	_, err := tea.NewProgram(m, tea.WithAltScreen(), tea.WithReportFocus()).Run()
 	if err != nil {
 		return err

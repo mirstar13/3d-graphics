@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/mirstar13/go-3d-graphics/internal/engine"
-	"github.com/mirstar13/go-3d-graphics/internal/game"
 	"github.com/mirstar13/go-3d-graphics/internal/project"
 )
 
@@ -185,7 +184,7 @@ func (m *projectEditorModel) confirmSpawn() error {
 }
 func (m *projectEditorModel) resetPlay() {
 	paused := m.play.World.Stats().Paused
-	session, err := game.NewProjectSession(m.project.Root, m.document.Document(), m.settings.Physics.WorldOptions())
+	session, err := m.newPlaySession()
 	if err != nil {
 		m.message = err.Error()
 		return
@@ -193,6 +192,7 @@ func (m *projectEditorModel) resetPlay() {
 	session.World.SetPaused(paused)
 	m.view, m.zoom = 0, 1
 	m.lookDrag.Reset(false)
+	m.play.CloseBehaviors()
 	m.play = session
 	m.runtimeSelection = ""
 	m.pendingSpawn = ""

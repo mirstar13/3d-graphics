@@ -101,6 +101,9 @@ func Open(root string) (*Project, error) {
 	if e = input.Validate(p.Manifest.Bindings); e != nil {
 		return nil, e
 	}
+	if worker := p.Manifest.BehaviorWorker; worker != "" && !validWorkerPath(worker) {
+		return nil, fmt.Errorf("behavior_worker must be a path inside assets/")
+	}
 	if !p.Manifest.MouseLook.Valid() {
 		return nil, fmt.Errorf("mouse look sensitivity must be finite and nonnegative")
 	}

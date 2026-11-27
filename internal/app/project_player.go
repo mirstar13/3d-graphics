@@ -2,6 +2,7 @@ package app
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -53,6 +54,10 @@ func (m *projectPlayer) reset() error {
 			return fmt.Errorf("player entity %q must be dynamic", m.playerID)
 		}
 	}
+	if m.session != nil {
+		m.session.CloseBehaviors()
+	}
+	s.EnableBehaviors(context.Background(), m.project)
 	m.session = s
 	if m.room != nil {
 		*m.room = switchRoom{}
@@ -127,6 +132,7 @@ func (m *projectPlayer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		m.session.BehaviorInput(key)
 		if m.room != nil {
 			m.err = m.room.key(m.session, key)
 			if m.err != nil {
@@ -230,6 +236,7 @@ func runProjectPlayer(root, id string, firstPerson bool, color string, options p
 	if err = m.reset(); err != nil {
 		return err
 	}
+	defer func() { m.session.CloseBehaviors() }()
 	_, err = tea.NewProgram(m, tea.WithAltScreen(), tea.WithReportFocus()).Run()
 	if err != nil {
 		return err

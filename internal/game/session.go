@@ -35,12 +35,13 @@ type sensorImpulse struct {
 
 // Session owns live entities and a world; all operations belong to the update goroutine.
 type Session struct {
-	objective     ObjectiveStatus
-	plates        map[physics.BodyID]string
-	doorCount     int
-	projectRoot   string
-	sensorEvents  []SensorEvent
-	enterImpulses map[physics.BodyID]sensorImpulse
+	behaviorWorker *behaviorWorker
+	objective      ObjectiveStatus
+	plates         map[physics.BodyID]string
+	doorCount      int
+	projectRoot    string
+	sensorEvents   []SensorEvent
+	enterImpulses  map[physics.BodyID]sensorImpulse
 	// InitialCamera holds the authored view used to restore transient editor navigation.
 	InitialCamera project.CameraSettings
 	Scene         *engine.Scene
@@ -435,7 +436,7 @@ func (s *Session) applySensorImpulse(tick uint64, sensor, other physics.BodyID) 
 }
 
 func (s *Session) hooks() physics.StepHooks {
-	return physics.StepHooks{StopAfterStep: func() bool { return s.objective.Finished() }, AfterStep: func(t physics.Tick) {
+	hooks := physics.StepHooks{StopAfterStep: func() bool { return s.objective.Finished() }, AfterStep: func(t physics.Tick) {
 		s.applyEnterImpulses(t.Index)
 		s.updateSignals(t.Index)
 		for i := range s.entities {
@@ -452,6 +453,16 @@ func (s *Session) hooks() physics.StepHooks {
 		}
 		s.Scene.UpdateVisuals(t.Delta)
 	}}
+	if s.behaviorWorker != nil {
+		hooks.PrepareStep = func(t physics.Tick) error {
+			if err := s.runBehaviors(t); err != nil {
+				return err
+			}
+			s.applyCommands()
+			return s.lastError
+		}
+	}
+	return hooks
 }
 
 // Advance runs fixed updates; commands stay pending while paused.
@@ -461,7 +472,7 @@ func (s *Session) Advance(elapsed time.Duration) error {
 	}
 	s.lastError = nil
 	stats := s.World.Stats()
-	if elapsed > 0 && !stats.Paused && elapsed >= stats.FixedStep-stats.Remainder {
+	if s.behaviorWorker == nil && elapsed > 0 && !stats.Paused && elapsed >= stats.FixedStep-stats.Remainder {
 		s.applyCommands()
 	}
 	if err := s.World.AdvanceWithHooks(elapsed, s.hooks()); err != nil {
@@ -474,7 +485,7 @@ func (s *Session) Step() error {
 		return nil
 	}
 	s.lastError = nil
-	if s.World.Stats().Paused {
+	if s.behaviorWorker == nil && s.World.Stats().Paused {
 		s.applyCommands()
 	}
 	if err := s.World.StepOnceWithHooks(s.hooks()); err != nil {

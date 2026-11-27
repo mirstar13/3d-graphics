@@ -15,6 +15,8 @@ type Tick struct {
 // StepHooks separate commands/kinematic targets from post-solve scene synchronization.
 // StopAfterStep ends a catch-up batch after the current tick (for example on victory).
 type StepHooks struct {
+	// PrepareStep may reject a tick before world integration and pending mutations.
+	PrepareStep           func(Tick) error
 	BeforeStep, AfterStep func(Tick)
 	StopAfterStep         func() bool
 }
@@ -51,7 +53,11 @@ func (w *World) AdvanceWithHooks(elapsed time.Duration, hooks StepHooks) error {
 	defer func() { w.advancing = false }()
 	for w.remainder >= w.options.FixedStep && w.substeps < w.options.MaxSubsteps {
 		w.remainder -= w.options.FixedStep
-		w.tick(hooks)
+		if err := w.tick(hooks); err != nil {
+			// Keep fractional time without building a catch-up backlog while paused.
+			w.remainder %= w.options.FixedStep
+			return err
+		}
 		if hooks.StopAfterStep != nil && hooks.StopAfterStep() {
 			break
 		}
@@ -79,10 +85,16 @@ func (w *World) StepOnceWithHooks(hooks StepHooks) error {
 	w.substeps = 0
 	w.advancing = true
 	defer func() { w.advancing = false }()
-	w.tick(hooks)
-	return nil
+	return w.tick(hooks)
 }
-func (w *World) tick(hooks StepHooks) {
+func (w *World) tick(hooks StepHooks) error {
+	index := w.ticks + 1
+	tick := Tick{Index: index, Time: float64(index) * w.options.FixedStep.Seconds(), Delta: w.options.FixedStep.Seconds()}
+	if hooks.PrepareStep != nil {
+		if err := hooks.PrepareStep(tick); err != nil {
+			return err
+		}
+	}
 	pending := w.pending
 	w.pending = nil
 	for _, apply := range pending {
@@ -90,7 +102,6 @@ func (w *World) tick(hooks StepHooks) {
 	}
 	w.ticks++
 	w.substeps++
-	tick := Tick{Index: w.ticks, Time: float64(w.ticks) * w.options.FixedStep.Seconds(), Delta: w.options.FixedStep.Seconds()}
 	if hooks.BeforeStep != nil {
 		hooks.BeforeStep(tick)
 	}
@@ -98,6 +109,7 @@ func (w *World) tick(hooks StepHooks) {
 	if hooks.AfterStep != nil {
 		hooks.AfterStep(tick)
 	}
+	return nil
 }
 func (w *World) discard(duration time.Duration) {
 	// Saturate the diagnostic counter instead of wrapping after repeated stalls.

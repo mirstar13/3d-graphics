@@ -37,8 +37,8 @@ func validAsset(name, ext string) bool {
 }
 
 func (e Entity) validateAssets() error {
-	if e.MeshAsset != "" && !validAsset(e.MeshAsset, ".obj") {
-		return fmt.Errorf("mesh must be assets/path.obj")
+	if e.MeshAsset != "" && !validMeshAsset(e.MeshAsset) {
+		return fmt.Errorf("mesh must be assets/path.obj or assets/path.glb")
 	}
 	if e.MaterialAsset != "" {
 		file, name, ok := strings.Cut(e.MaterialAsset, "#")
@@ -61,7 +61,11 @@ func (e Entity) LoadVisualAssets(root string) (*engine.Mesh, *engine.Material, e
 	var mesh *engine.Mesh
 	if e.MeshAsset != "" {
 		var err error
-		mesh, err = engine.LoadProjectOBJ(root, e.MeshAsset)
+		if strings.EqualFold(path.Ext(e.MeshAsset), ".glb") {
+			mesh, err = engine.LoadProjectGLB(root, e.MeshAsset)
+		} else {
+			mesh, err = engine.LoadProjectOBJ(root, e.MeshAsset)
+		}
 		if err != nil {
 			return nil, nil, err
 		}

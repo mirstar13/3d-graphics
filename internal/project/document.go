@@ -30,6 +30,7 @@ const MaxEntities = 128
 
 // Manifest identifies a project and its initial scene. Version is the file schema.
 type Manifest struct {
+	BehaviorWorker   string             `yaml:"behavior_worker,omitempty"`
 	TerminalArgs     []string           `yaml:"terminal_args,omitempty"`
 	MouseLook        input.LookSettings `yaml:"mouse_look,omitempty"`
 	GameplayBindings map[string]string  `yaml:"gameplay_bindings,omitempty"`
@@ -43,21 +44,23 @@ type Manifest struct {
 // Position and Rotation are local to the parent. Size contains
 // box half extents or the sphere radius in X; Rotation is Euler degrees.
 type Entity struct {
-	ID       string       `yaml:"id"`
-	Parent   string       `yaml:"parent,omitempty"`
-	Name     string       `yaml:"name"`
-	Shape    string       `yaml:"shape"`
-	Body     string       `yaml:"body"`
-	Position engine.Point `yaml:"position"`
-	Rotation engine.Point `yaml:"rotation"`
-	Size     engine.Point `yaml:"size"`
-	Mass     float64      `yaml:"mass"`
+	Behavior     string       `yaml:"behavior,omitempty"`
+	BehaviorArgs string       `yaml:"behavior_args,omitempty"`
+	ID           string       `yaml:"id"`
+	Parent       string       `yaml:"parent,omitempty"`
+	Name         string       `yaml:"name"`
+	Shape        string       `yaml:"shape"`
+	Body         string       `yaml:"body"`
+	Position     engine.Point `yaml:"position"`
+	Rotation     engine.Point `yaml:"rotation"`
+	Size         engine.Point `yaml:"size"`
+	Mass         float64      `yaml:"mass"`
 	// Velocity and AngularVelocity initialize dynamic bodies in world coordinates
 	// (metres per second and radians per second). Other body types retain these
 	// authored values for a later switch to dynamic.
 	Velocity        engine.Point `yaml:"velocity,omitempty"`
 	AngularVelocity engine.Point `yaml:"angular_velocity,omitempty"`
-	// MeshAsset selects an OBJ. MaterialAsset selects a named MTL entry (path#name).
+	// MeshAsset selects an OBJ or GLB. MaterialAsset selects a named MTL entry (path#name).
 	MeshAsset     string `yaml:"mesh_asset,omitempty"`
 	MaterialAsset string `yaml:"material_asset,omitempty"`
 	// ColliderShape inherits Shape when empty. Zero collider dimensions inherit Size per axis.
@@ -162,6 +165,9 @@ func (d Document) Validate() error {
 		seen[e.ID] = true
 		if !ValidText(e.Name, 80) {
 			return fmt.Errorf("entity %s: invalid name", e.ID)
+		}
+		if err := e.validateBehavior(); err != nil {
+			return fmt.Errorf("entity %s: %w", e.ID, err)
 		}
 		if err := e.validateAssets(); err != nil {
 			return fmt.Errorf("entity %s: %w", e.ID, err)

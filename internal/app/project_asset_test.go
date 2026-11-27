@@ -1,6 +1,12 @@
 package app
 
 import (
+	"bytes"
+	"github.com/qmuntal/gltf"
+	"github.com/qmuntal/gltf/modeler"
+	"image"
+	"image/color"
+	"image/png"
 	"os"
 	"path/filepath"
 	"testing"
@@ -73,4 +79,66 @@ func TestAssetInspectorToPlay(t *testing.T) {
 	check(m.play)
 	m.resetPlay()
 	check(m.play)
+}
+
+func TestImportTexturedGLBIntoEditor(t *testing.T) {
+	m := inputEditor(t)
+	doc := gltf.NewDocument()
+	position := modeler.WritePosition(doc, [][3]float32{{0, 0, 0}, {1, 0, 0}, {0, 1, 0}})
+	uv := modeler.WriteTextureCoord(doc, [][2]float32{{0, 0}, {1, 0}, {0, 1}})
+	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	for y := 0; y < 2; y++ {
+		for x := 0; x < 2; x++ {
+			img.SetRGBA(x, y, color.RGBA{R: 255, A: 255})
+		}
+	}
+	var pngData bytes.Buffer
+	if err := png.Encode(&pngData, img); err != nil {
+		t.Fatal(err)
+	}
+	imageIndex, err := modeler.WriteImage(doc, "red", "image/png", &pngData)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc.Textures = []*gltf.Texture{{Source: gltf.Index(imageIndex)}}
+	doc.Materials = []*gltf.Material{{PBRMetallicRoughness: &gltf.PBRMetallicRoughness{BaseColorTexture: &gltf.TextureInfo{Index: 0}}}}
+	doc.Meshes = []*gltf.Mesh{{Primitives: []*gltf.Primitive{{Attributes: gltf.PrimitiveAttributes{"POSITION": position, "TEXCOORD_0": uv}, Material: gltf.Index(0)}}}}
+	doc.Nodes = []*gltf.Node{{Translation: [3]float64{2, 0, -1}, Children: []int{1}}, {Mesh: gltf.Index(0), Translation: [3]float64{0, 3, 0}}}
+	doc.Scenes[0].Nodes = []int{0}
+	var model bytes.Buffer
+	if err = gltf.NewEncoder(&model).Encode(doc); err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(t.TempDir(), "crate.glb")
+	if err = os.WriteFile(source, model.Bytes(), 0600); err != nil {
+		t.Fatal(err)
+	}
+	m.selectID("box")
+	m = resourceKey(m, tea.KeyCtrlX)
+	m, _ = editorRune(m, "i")
+	m.draft = source
+	m = resourceKey(m, tea.KeyEnter)
+	if m.modal != "mesh_assets" || len(m.meshPaths) != 1 {
+		t.Fatal(m.modal, m.message)
+	}
+	m = resourceKey(m, tea.KeyEnter)
+	if m.modal != "" {
+		t.Fatal(m.message)
+	}
+	m.save()
+	if _, err = project.Open(m.project.Root); err != nil {
+		t.Fatal(err)
+	}
+	m.startPlay()
+	mesh := m.play.Scene.FindNode("entity:box").Object.(*engine.Mesh)
+	if len(mesh.Indices) != 3 || mesh.Indices[1] != 2 || mesh.MaterialForFace(0).GetDiffuseColor(.2, .2) != (engine.Color{R: 255}) {
+		t.Fatal("GLB lost winding or texture", mesh.Indices)
+	}
+	entity, _ := m.selectedEntity()
+	if mesh.Vertices[0] != (engine.Point{X: 2 * entity.Size.X, Y: 3 * entity.Size.Y, Z: entity.Size.Z}) {
+		t.Fatal("GLB lost the node transforms", mesh.Vertices[0])
+	}
+	if _, err = m.project.ImportGLB(source); err == nil {
+		t.Fatal("import overwrote existing asset")
+	}
 }

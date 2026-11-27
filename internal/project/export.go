@@ -19,6 +19,11 @@ func (p *Project) Export(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if saved.Manifest.BehaviorWorker != "" {
+		if _, err = saved.WorkerExecutable(); err != nil {
+			return "", fmt.Errorf("behavior worker: %w", err)
+		}
+	}
 	build, err := scenePath(saved.Root, "build")
 	if err != nil {
 		return "", err
@@ -104,7 +109,11 @@ func (p *Project) Export(ctx context.Context) (string, error) {
 			if rel == entry {
 				return nil
 			}
-			return copyFile(rel, rel, 0644)
+			mode := os.FileMode(0644)
+			if filepath.ToSlash(rel) == saved.Manifest.BehaviorWorker {
+				mode = 0755
+			}
+			return copyFile(rel, rel, mode)
 		})
 		if err != nil {
 			return "", err

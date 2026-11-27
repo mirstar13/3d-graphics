@@ -105,8 +105,10 @@ func properties() []Property {
 				e.SphereCCD = v
 				return nil
 			}},
-		text("mesh_asset", "Mesh OBJ", func(e *Entity) *string { return &e.MeshAsset }),
+		text("mesh_asset", "Mesh OBJ/GLB", func(e *Entity) *string { return &e.MeshAsset }),
 		text("material_asset", "Material MTL#name", func(e *Entity) *string { return &e.MaterialAsset }),
+		text("behavior", "Behavior", func(e *Entity) *string { return &e.Behavior }),
+		text("behavior_args", "Behavior parameters (JSON)", func(e *Entity) *string { return &e.BehaviorArgs }),
 		text("collider_shape", "Collider shape", func(e *Entity) *string { return &e.ColliderShape }, "", "box", "sphere"),
 		number("collider_size.x", "Collider half X", "m", func(e *Entity) *float64 { return &e.ColliderSize.X }),
 		number("collider_size.y", "Collider half Y", "m", func(e *Entity) *float64 { return &e.ColliderSize.Y }),

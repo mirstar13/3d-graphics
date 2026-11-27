@@ -1,0 +1,38 @@
+version: 1
+name: Impulse workshop
+camera:
+  position: {x: 6, y: 4, z: -8}
+  target: {y: 1}
+  fovx: 60
+  fovy: 40
+  near: 0.1
+  far: 100
+entities:
+  - id: floor
+    name: Floor
+    shape: box
+    body: static
+    position: {y: -0.5}
+    size: {x: 8, y: 0.5, z: 8}
+    mass: 1
+    color: {r: 120, g: 130, b: 140}
+  - id: left
+    name: Orange crate
+    shape: box
+    body: dynamic
+    position: {x: -1.2, y: 0.5}
+    size: {x: 0.5, y: 0.5, z: 0.5}
+    mass: 1
+    color: {r: 245, g: 115, b: 40}
+    behavior: launch
+    behavior_args: '{"height_impulse": 3}'
+  - id: right
+    name: Blue crate
+    shape: box
+    body: dynamic
+    position: {x: 1.2, y: 0.5}
+    size: {x: 0.5, y: 0.5, z: 0.5}
+    mass: 1
+    color: {r: 45, g: 155, b: 245}
+    behavior: launch
+    behavior_args: '{"height_impulse": 6}'

@@ -1,0 +1,6 @@
+version: 1
+name: Behavior Workshop
+entry_scene: scenes/workshop.yaml
+behavior_worker: assets/worker/behavior-worker
+gameplay_bindings:
+  e: launch

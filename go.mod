@@ -8,6 +8,7 @@ require (
 	github.com/ebitengine/purego v0.10.1
 	github.com/eiannone/keyboard v0.0.0-20220611211555-0d226195f203
 	github.com/mattn/go-runewidth v0.0.16
+	github.com/qmuntal/gltf v0.28.0
 	golang.org/x/sys v0.30.0
 	golang.org/x/term v0.29.0
 	gopkg.in/yaml.v3 v3.0.1

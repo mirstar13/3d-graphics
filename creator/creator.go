@@ -8,6 +8,7 @@
 package creator
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -158,7 +159,7 @@ type Game struct {
 }
 
 // Open loads the project's saved scene, resolves linked assets and applies scene
-// physics overrides to the engine defaults. A nil behavior runs physics alone.
+// physics overrides to the engine defaults. A nil callback still runs any attached project behaviors.
 func Open(root string, b Behavior) (*Game, error) {
 	p, err := project.Open(root)
 	if err != nil {
@@ -177,6 +178,7 @@ func newSession(p *project.Project, scene project.Document) (*game.Session, erro
 	s, err := game.NewProjectSession(p.Root, scene, physics.DefaultOptions())
 	if err == nil {
 		s.World.SetPaused(true)
+		s.EnableBehaviors(context.Background(), p)
 	}
 	return s, err
 }
@@ -204,10 +206,15 @@ func (g *Game) restart(path string, b Behavior) error {
 	if err != nil {
 		return err
 	}
+	g.world.session.CloseBehaviors()
 	g.world.session, g.behavior, g.failure, g.scenePath = s, b, nil, path
 	g.capture = false
 	return nil
 }
+
+// Close releases the project's external behavior worker. Use it when finished
+// with the game. RunTerminal closes the worker when the terminal session exits.
+func (g *Game) Close() { g.world.session.CloseBehaviors() }
 
 // World returns the live scene, including before the first tick.
 func (g *Game) World() *World { return &g.world }
@@ -288,8 +295,10 @@ func (g *Game) StepWithInput(in Input) error {
 			return g.failure
 		}
 	}
+	s.BehaviorInput(in.Keys...)
 	g.failure = s.Step()
 	if g.failure == nil && g.nextSession != nil {
+		s.CloseBehaviors()
 		g.world.session, g.scenePath = g.nextSession, g.nextPath
 		g.capture = false
 	}

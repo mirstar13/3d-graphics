@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -26,6 +27,7 @@ func nextEditorTick() tea.Cmd {
 }
 
 type projectEditorModel struct {
+	scriptedPlay                                   bool
 	lookDrag                                       input.Pointer
 	lifetime                                       context.Context
 	restartChild                                   bool
@@ -48,6 +50,8 @@ type projectEditorModel struct {
 	resourcePath                                   string
 	assets                                         []project.ResourceInfo
 	assetSelected                                  int
+	meshPaths                                      []string
+	meshSelection                                  int
 	assetTarget                                    string
 	bindingSelected                                int
 	reticleU, reticleV                             float64
@@ -215,11 +219,30 @@ func (m *projectEditorModel) begin(action string) tea.Cmd {
 	}
 	return m.finishAction(action)
 }
+func (m *projectEditorModel) newPlaySession() (*game.Session, error) {
+	s, err := game.NewProjectSession(m.project.Root, m.document.Document(), m.settings.Physics.WorldOptions())
+	if err == nil && m.scriptedPlay {
+		s.EnableBehaviors(m.lifetime, m.project)
+	}
+	return s, err
+}
+
+func (m *projectEditorModel) stopPlay() {
+	if m.play != nil {
+		m.play.CloseBehaviors()
+		m.focus = m.editFocus
+		m.play = nil
+	}
+	m.scriptedPlay = false
+	m.renderPreview()
+	m.message = "Stopped; authored scene preserved"
+}
+
 func (m *projectEditorModel) startPlay() tea.Cmd {
 	if m.document == nil {
 		return nil
 	}
-	session, err := game.NewProjectSession(m.project.Root, m.document.Document(), m.settings.Physics.WorldOptions())
+	session, err := m.newPlaySession()
 	if err != nil {
 		m.message = err.Error()
 		return nil
@@ -243,6 +266,9 @@ func (m *projectEditorModel) startPlay() tea.Cmd {
 		}
 	}
 	m.lookDrag.Reset(false)
+	if m.play != nil {
+		m.play.CloseBehaviors()
+	}
 	m.play = session
 	m.lastTick = time.Now()
 	m.message = "Playing a copy; Stop preserves authored edits"
@@ -328,6 +354,7 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.lookDrag.Reset(false)
 		}
 		if err := m.play.Advance(elapsed); err != nil {
+			m.play.World.SetPaused(true)
 			m.message = err.Error()
 		}
 		m.renderPreview()
@@ -372,6 +399,10 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				m.modal = ""
 				return m, nil
 			}
+			if m.modal == "mesh_assets" {
+				m.updateMeshBrowser(key)
+				return m, nil
+			}
 			if m.modal == "tools" {
 				m.updateTools(key)
 				return m, nil
@@ -401,6 +432,14 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			case "enter":
 				var err error
 				switch m.modal {
+				case "mesh_import":
+					var name string
+					name, err = m.project.ImportGLB(strings.TrimSpace(m.draft))
+					if err == nil {
+						m.browseMeshes()
+						m.meshSelection = max(0, slices.Index(m.meshPaths, name))
+						m.message = "Imported " + name
+					}
 				case "new", "open":
 					var p *project.Project
 					path := strings.TrimSpace(m.draft)
@@ -472,6 +511,9 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
+		if m.play != nil && m.focus == 2 {
+			m.play.BehaviorInput(key)
+		}
 		if m.play != nil && m.focus == 2 && m.playActor != "" {
 			if impulse, ok := playerImpulse(key); ok {
 				if id, exists := m.play.Find(m.playActor); exists && !m.play.Objective().Finished() {
@@ -488,6 +530,20 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				cmd := m.startPlay()
 				return m, cmd
 			}
+		case "ctrl+w":
+			if m.project != nil && m.play == nil {
+				if _, err := m.project.WorkerExecutable(); err != nil {
+					m.message = err.Error()
+					return m, nil
+				}
+				m.scriptedPlay = true
+				cmd := m.startPlay()
+				if m.play == nil {
+					m.scriptedPlay = false
+				}
+				return m, cmd
+			}
+			return m, nil
 		case "ctrl+g":
 			if m.project != nil && m.play == nil && m.activeResource == nil {
 				return m.startInteractiveChild()
@@ -532,10 +588,7 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "esc", "q", "ctrl+c":
 			if m.play != nil {
-				m.focus = m.editFocus
-				m.play = nil
-				m.renderPreview()
-				m.message = "Stopped; authored scene preserved"
+				m.stopPlay()
 				return m, nil
 			}
 			cmd := m.begin("quit")
@@ -615,12 +668,7 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				return m, cmd
 			}
 		case "f8":
-			if m.play != nil {
-				m.focus = m.editFocus
-			}
-			m.play = nil
-			m.renderPreview()
-			m.message = "Stopped; authored scene preserved"
+			m.stopPlay()
 		case input.Pause:
 			if m.play != nil {
 				m.play.World.SetPaused(!m.play.World.Stats().Paused)
@@ -642,6 +690,8 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			switch key {
+			case "ctrl+x":
+				m.browseMeshes()
 			case "k":
 				m.modal = "bindings"
 				m.bindingSelected = 0
@@ -821,6 +871,10 @@ func (m projectEditorModel) View() string {
 			out.WriteString(m.bindingsView())
 		} else if m.modal == "binding" {
 			fmt.Fprintf(&out, "\nBind %s: %s_\nComma-separated keys | Enter save | Esc cancel\n", input.Definitions()[m.bindingSelected].Label, m.draft)
+		} else if m.modal == "mesh_assets" {
+			out.WriteString(m.meshBrowser())
+		} else if m.modal == "mesh_import" {
+			fmt.Fprintf(&out, "\nImport GLB file: %s_\nEnter import | Esc close\n", m.draft)
 		} else if m.modal == "assets" {
 			out.WriteString(m.resourceBrowser())
 		} else if m.modal == "extract" {
@@ -878,7 +932,10 @@ func runProjectEditor(settings config.Settings, path, action string) error {
 			return err
 		}
 	}
-	_, err := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion(), tea.WithReportFocus()).Run()
+	final, err := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion(), tea.WithReportFocus()).Run()
+	if editor, ok := final.(projectEditorModel); ok && editor.play != nil {
+		editor.play.CloseBehaviors()
+	}
 	return err
 }
 
@@ -953,7 +1010,7 @@ func (m projectEditorModel) shortcutView() string {
 	if m.focus == 2 {
 		out.WriteString(input.Help(bindings, input.AimUp, input.AimDown, input.AimLeft, input.AimRight) + "\n")
 	} else {
-		out.WriteString("F9 export | F6 run build | Ctrl+G run in terminal | Ctrl+B build | Ctrl+E scene settings | H parent | 1/2/3 camera | +/- zoom | Q exit editor\n")
+		out.WriteString("Ctrl+X mesh assets | Ctrl+W scripted Play | F9 export | F6 run build | Ctrl+G run in terminal | Ctrl+B build | Ctrl+E scene settings | H parent | 1/2/3 camera | +/- zoom | Q exit editor\n")
 	}
 	if m.play != nil {
 		fmt.Fprintf(&out, "Ctrl+L tools | Impulse (%s,%s,%s) %s\n", m.toolValues[0], m.toolValues[1], m.toolValues[2], m.toolValues[3])
