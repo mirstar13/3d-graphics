@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/mirstar13/go-3d-graphics/internal/audio"
 	"github.com/mirstar13/go-3d-graphics/internal/engine"
 	"github.com/mirstar13/go-3d-graphics/internal/game"
 	"github.com/mirstar13/go-3d-graphics/internal/physics"
@@ -124,6 +125,14 @@ func (w *World) Impulse(e Entity, j Vec3) error {
 	return w.session.QueueImpulse(e.handle, engine.Point(j))
 }
 
+// PlaySound requests a named project cue during the current behavior tick.
+func (w *World) PlaySound(cue string) error {
+	if !w.owner.inBehavior {
+		return fmt.Errorf("PlaySound requires an active behavior tick")
+	}
+	return w.session.QueueSound(cue)
+}
+
 // Contacts returns a detached list of the preceding tick's contact transitions.
 func (w *World) Contacts() []Contact {
 	events := w.session.World.ContactEvents()
@@ -144,6 +153,8 @@ func (w *World) Contacts() []Contact {
 
 // Game owns one isolated runtime and its behavior.
 type Game struct {
+	audio       *audio.Manager
+	sounds      map[string]*audio.Clip
 	world       World
 	behavior    Behavior
 	failure     error
@@ -165,17 +176,24 @@ func Open(root string, b Behavior) (*Game, error) {
 	if err != nil {
 		return nil, err
 	}
-	s, err := newSession(p, p.Scene)
+	sounds, err := p.LoadSounds()
 	if err != nil {
 		return nil, err
 	}
-	g := &Game{project: p, scenePath: p.Manifest.EntryScene, behavior: b}
+	s, err := newSession(p, p.Scene, sounds)
+	if err != nil {
+		return nil, err
+	}
+	g := &Game{project: p, sounds: sounds, scenePath: p.Manifest.EntryScene, behavior: b}
 	g.world = World{session: s, owner: g}
 	return g, nil
 }
 
-func newSession(p *project.Project, scene project.Document) (*game.Session, error) {
+func newSession(p *project.Project, scene project.Document, sounds map[string]*audio.Clip) (*game.Session, error) {
 	s, err := game.NewProjectSession(p.Root, scene, physics.DefaultOptions())
+	if err == nil {
+		err = s.ConfigureAudio(sounds)
+	}
 	if err == nil {
 		s.World.SetPaused(true)
 		s.EnableBehaviors(context.Background(), p)
@@ -188,7 +206,7 @@ func (g *Game) loadScene(path string) (*game.Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newSession(g.project, scene)
+	return newSession(g.project, scene, g.sounds)
 }
 
 // Scene returns the project-relative path of the current room.
@@ -206,7 +224,8 @@ func (g *Game) restart(path string, b Behavior) error {
 	if err != nil {
 		return err
 	}
-	g.world.session.CloseBehaviors()
+	g.world.session.Close()
+	s.AttachAudio(g.audio)
 	g.world.session, g.behavior, g.failure, g.scenePath = s, b, nil, path
 	g.capture = false
 	return nil
@@ -214,7 +233,13 @@ func (g *Game) restart(path string, b Behavior) error {
 
 // Close releases the project's external behavior worker. Use it when finished
 // with the game. RunTerminal closes the worker when the terminal session exits.
-func (g *Game) Close() { g.world.session.CloseBehaviors() }
+func (g *Game) Close() {
+	g.world.session.Close()
+	if g.audio != nil {
+		g.audio.Close()
+		g.audio = nil
+	}
+}
 
 // World returns the live scene, including before the first tick.
 func (g *Game) World() *World { return &g.world }
@@ -285,6 +310,7 @@ func (g *Game) StepWithInput(in Input) error {
 		g.keys, g.nextSession, g.nextPath = nil, nil, ""
 	}()
 	s := g.world.session
+	defer s.DiscardSounds()
 	if g.behavior != nil {
 		stats := s.World.Stats()
 		g.inBehavior, g.keys = true, in.Keys
@@ -298,7 +324,8 @@ func (g *Game) StepWithInput(in Input) error {
 	s.BehaviorInput(in.Keys...)
 	g.failure = s.Step()
 	if g.failure == nil && g.nextSession != nil {
-		s.CloseBehaviors()
+		s.Close()
+		g.nextSession.AttachAudio(g.audio)
 		g.world.session, g.scenePath = g.nextSession, g.nextPath
 		g.capture = false
 	}

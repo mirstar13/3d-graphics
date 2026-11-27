@@ -30,6 +30,7 @@ const MaxEntities = 128
 
 // Manifest identifies a project and its initial scene. Version is the file schema.
 type Manifest struct {
+	Sounds           map[string]string  `yaml:"sounds,omitempty"`
 	BehaviorWorker   string             `yaml:"behavior_worker,omitempty"`
 	TerminalArgs     []string           `yaml:"terminal_args,omitempty"`
 	MouseLook        input.LookSettings `yaml:"mouse_look,omitempty"`
@@ -68,6 +69,7 @@ type Entity struct {
 	ColliderSize  engine.Point `yaml:"collider_size,omitempty"`
 	// PlateSignal names the signal held while this sensor overlaps a dynamic body.
 	PlateSignal string `yaml:"plate_signal,omitempty"`
+	PlateSound  string `yaml:"plate_sound,omitempty"`
 	// DoorSignal subscribes a static door to plates with the same project signal.
 	DoorSignal string `yaml:"door_signal,omitempty"`
 	// DoorLift is the upward opening distance in metres. Zero uses the collider height.
@@ -203,6 +205,9 @@ func (d Document) Validate() error {
 		}
 		if e.PlateSignal != "" && (!ValidText(e.PlateSignal, 80) || !e.Sensor || e.Body == "none") {
 			return fmt.Errorf("entity %s: plate signal requires a sensor body and a printable name", e.ID)
+		}
+		if e.PlateSound != "" && (!validCue(e.PlateSound) || e.PlateSignal == "") {
+			return fmt.Errorf("entity %s: plate sound requires a plate signal and valid cue ID", e.ID)
 		}
 		if e.DoorSignal != "" && (!ValidText(e.DoorSignal, 80) || e.Body != "static" || e.Sensor) {
 			return fmt.Errorf("entity %s: door signal requires a solid static body and a printable name", e.ID)

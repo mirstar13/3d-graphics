@@ -9,6 +9,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/mirstar13/go-3d-graphics/internal/audio"
+	"github.com/mirstar13/go-3d-graphics/internal/config"
 	"github.com/mirstar13/go-3d-graphics/internal/engine"
 	"github.com/mirstar13/go-3d-graphics/internal/game"
 	"github.com/mirstar13/go-3d-graphics/internal/input"
@@ -19,6 +21,9 @@ import (
 
 // projectPlayer owns the terminal while a saved scene runs outside the editor.
 type projectPlayer struct {
+	audio                           *audio.Manager
+	sounds                          map[string]*audio.Clip
+	audioStatus                     string
 	frame                           string
 	glyphRows                       []string
 	frameLayout                     [4]int
@@ -54,9 +59,19 @@ func (m *projectPlayer) reset() error {
 			return fmt.Errorf("player entity %q must be dynamic", m.playerID)
 		}
 	}
-	if m.session != nil {
-		m.session.CloseBehaviors()
+	if m.sounds == nil && len(m.project.Manifest.Sounds) > 0 {
+		m.sounds, err = m.project.LoadSounds()
+		if err != nil {
+			return err
+		}
 	}
+	if err := s.ConfigureAudio(m.sounds); err != nil {
+		return err
+	}
+	if m.session != nil {
+		m.session.Close()
+	}
+	s.AttachAudio(m.audio)
 	s.EnableBehaviors(context.Background(), m.project)
 	m.session = s
 	if m.room != nil {
@@ -66,7 +81,7 @@ func (m *projectPlayer) reset() error {
 	m.last = time.Now()
 	return nil
 }
-func (m *projectPlayer) Init() tea.Cmd { return nextEditorTick() }
+func (m *projectPlayer) Init() tea.Cmd { return tea.Batch(nextEditorTick(), waitAudio(m.audio)) }
 func (m *projectPlayer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Motion is accumulated until the next simulation tick. Bubble Tea may
 	// ask for View after every mouse report, so keep the completed frame.
@@ -74,6 +89,10 @@ func (m *projectPlayer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.frame = ""
 	}
 	switch v := msg.(type) {
+	case audioFailure:
+		if v.err != nil {
+			m.audioStatus = v.err.Error()
+		}
 	case tea.BlurMsg:
 		m.pointer.Reset(false)
 		return m, tea.DisableMouse
@@ -112,6 +131,13 @@ func (m *projectPlayer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.DisableMouse
 	case tea.KeyMsg:
 		key := v.String()
+		if key == "ctrl+y" && m.audio != nil && len(m.sounds) > 0 {
+			m.audioStatus = "Audio on"
+			if m.audio.ToggleMute() {
+				m.audioStatus = "Audio muted"
+			}
+			return m, nil
+		}
 		if m.room != nil && ((key == "esc" && m.pointer.Captured) || (key == "m" && !m.session.Objective().Finished())) {
 			m.pointer.Reset(!m.pointer.Captured)
 			if m.pointer.Captured {
@@ -189,7 +215,14 @@ func (m *projectPlayer) renderView() string {
 	} else if m.playerID != "" {
 		out.WriteString("Arrows move | Space jump | ")
 	}
-	out.WriteString("Q quit\n")
+	out.WriteString("Q quit")
+	if len(m.sounds) > 0 {
+		out.WriteString(" | Ctrl+Y mute")
+	}
+	if m.audioStatus != "" {
+		out.WriteString(" | " + m.audioStatus)
+	}
+	out.WriteByte('\n')
 	hud := fitView(strings.TrimSuffix(out.String(), "\n"), m.width, m.height)
 	availableHeight := m.height - strings.Count(hud, "\n") - 1
 	if availableHeight <= 0 {
@@ -229,6 +262,8 @@ func runProjectPlayer(root, id string, firstPerson bool, color string, options p
 	}
 	mode, _ := terminal.ResolveColorMode(color)
 	m := &projectPlayer{colorMode: mode, project: p, options: options, playerID: id, width: 80, height: 24}
+	m.audio = audio.NewNative()
+	defer m.audio.Close()
 	m.requestedWidth, m.requestedHeight = width, height
 	if firstPerson {
 		m.room = &switchRoom{}
@@ -236,7 +271,7 @@ func runProjectPlayer(root, id string, firstPerson bool, color string, options p
 	if err = m.reset(); err != nil {
 		return err
 	}
-	defer func() { m.session.CloseBehaviors() }()
+	defer func() { m.session.Close() }()
 	_, err = tea.NewProgram(m, tea.WithAltScreen(), tea.WithReportFocus()).Run()
 	if err != nil {
 		return err
@@ -261,4 +296,10 @@ func playerImpulse(key string) (engine.Point, bool) {
 		return j, false
 	}
 	return j, true
+}
+
+// RunSwitchRoom runs a packaged Switch Room project with first-person controls.
+func RunSwitchRoom(root string) error {
+	settings := config.Default()
+	return runProjectPlayer(root, "player", true, settings.Color, settings.Physics.WorldOptions(), settings.Width, settings.Height)
 }

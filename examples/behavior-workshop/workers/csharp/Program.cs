@@ -22,12 +22,16 @@ while (Console.ReadLine() is { } line)
         string entity = actor.GetProperty("id").GetString() ?? throw new InvalidDataException("Invalid actor ID");
         impulses.Add(new Impulse(entity, [0, strength, 0]));
     }
-    Console.WriteLine(JsonSerializer.Serialize(new
+    var reply = new Dictionary<string, object>
     {
-        version = 1,
-        tick = request.GetProperty("tick").GetUInt64(),
-        impulses,
-    }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
+        ["version"] = 1,
+        ["tick"] = request.GetProperty("tick").GetUInt64(),
+        ["impulses"] = impulses,
+    };
+    if (launched && request.TryGetProperty("sound_cues", out var cues)
+        && cues.EnumerateArray().Any(cue => cue.GetString() == "launch"))
+        reply["sounds"] = new[] { "launch" };
+    Console.WriteLine(JsonSerializer.Serialize(reply, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
 }
 
 record Impulse(string Entity, double[] Vector);

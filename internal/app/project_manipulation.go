@@ -52,7 +52,7 @@ func (m *projectEditorModel) openTools() {
 		m.message = "Start Play before opening manipulation tools"
 		return
 	}
-	m.play.World.SetPaused(true)
+	m.play.SetPaused(true)
 	m.lastTick = time.Now()
 	m.modal = "tools"
 	m.toolField = 0
@@ -189,10 +189,12 @@ func (m *projectEditorModel) resetPlay() {
 		m.message = err.Error()
 		return
 	}
-	session.World.SetPaused(paused)
+
 	m.view, m.zoom = 0, 1
 	m.lookDrag.Reset(false)
-	m.play.CloseBehaviors()
+	m.play.Close()
+	session.AttachAudio(m.audio)
+	session.SetPaused(paused)
 	m.play = session
 	m.runtimeSelection = ""
 	m.pendingSpawn = ""

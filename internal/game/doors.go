@@ -5,7 +5,7 @@ import "github.com/mirstar13/go-3d-graphics/internal/physics"
 // updateSignals samples the tick's sensor pairs together. Combining them before
 // changing a door handles simultaneous exits and entries and removed bodies.
 func (s *Session) updateSignals(tick uint64) {
-	if s.doorCount == 0 && s.objective.Outcome != Playing {
+	if s.doorCount == 0 && s.objective.Outcome != Playing && (s.audiblePlates == 0 || s.soundScope == nil) {
 		return
 	}
 	held := map[string]bool{}
@@ -13,8 +13,8 @@ func (s *Session) updateSignals(tick uint64) {
 		if !event.Sensor || event.Phase == physics.ContactEnd {
 			continue
 		}
-		s.holdPlate(held, event.A, event.B)
-		s.holdPlate(held, event.B, event.A)
+		s.holdPlate(held, tick, event.A, event.B)
+		s.holdPlate(held, tick, event.B, event.A)
 	}
 	if s.objective.Outcome == Playing {
 		s.objective.Tick = tick
@@ -27,7 +27,17 @@ func (s *Session) updateSignals(tick uint64) {
 	for i := range s.entities {
 		e := &s.entities[i]
 		d := &e.description
-		if !e.active || d.DoorSignal == "" {
+		if !e.active {
+			continue
+		}
+		if d.PlateSound != "" && s.soundScope != nil {
+			occupied := e.plateTick == tick
+			if occupied && !e.plateHeld && len(s.pendingSounds) < maxTickSounds {
+				_ = s.QueueSound(d.PlateSound)
+			}
+			e.plateHeld = occupied
+		}
+		if d.DoorSignal == "" {
 			continue
 		}
 		open := held[d.DoorSignal]
@@ -58,13 +68,18 @@ func (s *Session) updateSignals(tick uint64) {
 	}
 }
 
-func (s *Session) holdPlate(held map[string]bool, plate, other physics.BodyID) {
-	signal, ok := s.plates[plate]
-	if !ok || held[signal] {
+func (s *Session) holdPlate(held map[string]bool, tick uint64, plate, other physics.BodyID) {
+	slot, ok := s.plates[plate]
+	if !ok {
+		return
+	}
+	e := &s.entities[slot]
+	if e.plateTick == tick {
 		return
 	}
 	body, err := s.World.Body(other)
 	if err == nil && body.Type == physics.Dynamic {
-		held[signal] = true
+		e.plateTick = tick
+		held[e.description.PlateSignal] = true
 	}
 }

@@ -28,7 +28,7 @@ esac
 printf '%s\n' '{"version":1,"tick":1,"impulses":[{"entity":"crate","vector":[0,3,0]}]}'
 IFS= read -r second || exit 1
 case "$second" in *'"tick":2'*'"start":false'*'"actions":[]'*) ;; *) exit 1 ;; esac
-printf '%s\n' '{"version":1,"tick":2,"impulses":[{"entity":"crate","vector":[0,3,0]},{"entity":"missing","vector":[0,7,0]}]}'
+printf '%s\n' '{"version":1,"tick":2,"impulses":[{"entity":"crate","vector":[0,3,0]},{"entity":"crate","vector":[0,7,0]}],"sounds":["undeclared"]}'
 `
 	if err := os.WriteFile(filepath.Join(projectRoot, "assets", "worker"), []byte(program), 0755); err != nil {
 		t.Fatal(err)

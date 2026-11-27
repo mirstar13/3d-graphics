@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattn/go-runewidth"
+	"github.com/mirstar13/go-3d-graphics/internal/audio"
 	"github.com/mirstar13/go-3d-graphics/internal/input"
 	"github.com/mirstar13/go-3d-graphics/internal/terminal"
 )
@@ -22,10 +23,11 @@ func (g *Game) RunTerminal(help string) error {
 
 // TerminalOptions configures the HUD and the optional entry-scene restart.
 type TerminalOptions struct {
-	Help    string
-	Status  func() string
-	Restart func() Behavior
-	Reticle bool
+	Help      string
+	Status    func() string
+	Restart   func() Behavior
+	Reticle   bool
+	MuteAudio bool
 }
 
 // RunTerminalWithOptions runs the terminal host with an optional status line,
@@ -34,6 +36,10 @@ func (g *Game) RunTerminalWithOptions(o TerminalOptions) error {
 	m := &terminalGame{game: g, options: o}
 	defer g.world.CaptureMouse(false)
 	defer g.Close()
+	if !o.MuteAudio && len(g.sounds) > 0 {
+		g.audio = audio.NewNative()
+		g.world.session.AttachAudio(g.audio)
+	}
 	g.world.session.EnableBehaviors(context.Background(), g.project)
 	_, err := tea.NewProgram(m, tea.WithAltScreen(), tea.WithReportFocus()).Run()
 	if err != nil {
@@ -49,6 +55,7 @@ type terminalGame struct {
 	options       TerminalOptions
 	dragging      bool
 	ticking       bool
+	audioStatus   string
 	columns, rows int
 	keys          []string
 	pointer       input.Pointer
@@ -77,7 +84,20 @@ func (m *terminalGame) syncCapture() tea.Cmd {
 	return tea.DisableMouse
 }
 
+type terminalAudioFailure struct{ err error }
+
 func (m *terminalGame) Init() tea.Cmd {
+	if m.game.audio != nil {
+		manager := m.game.audio
+		return tea.Batch(m.initFrame(), func() tea.Msg {
+			<-manager.Finished()
+			return terminalAudioFailure{manager.Err()}
+		})
+	}
+	return m.initFrame()
+}
+
+func (m *terminalGame) initFrame() tea.Cmd {
 	m.last = time.Now()
 	m.ticking = true
 	return tea.Batch(m.syncCapture(), nextFrame())
@@ -85,6 +105,11 @@ func (m *terminalGame) Init() tea.Cmd {
 
 func (m *terminalGame) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch v := msg.(type) {
+	case terminalAudioFailure:
+		if v.err != nil {
+			m.audioStatus = v.err.Error()
+			m.draw()
+		}
 	case tea.WindowSizeMsg:
 		m.columns, m.rows = v.Width, v.Height
 		m.pointer.Reset(m.pointer.Captured)
@@ -102,6 +127,14 @@ func (m *terminalGame) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch v.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
+		case "ctrl+y":
+			if m.game.audio != nil {
+				m.audioStatus = "Audio on"
+				if m.game.audio.ToggleMute() {
+					m.audioStatus = "Audio muted"
+				}
+				m.draw()
+			}
 		case "r":
 			if m.options.Restart == nil {
 				if !m.game.world.session.Objective().Finished() {
@@ -203,6 +236,12 @@ func (m *terminalGame) draw() {
 	}
 	if m.options.Restart != nil {
 		hud += "R restart | "
+	}
+	if m.audioStatus != "" {
+		hud += m.audioStatus + " | "
+	}
+	if m.game.audio != nil {
+		hud += "Ctrl+Y mute | "
 	}
 	if m.options.Status != nil {
 		hud += strings.ReplaceAll(m.options.Status(), "\n", " ") + " | "

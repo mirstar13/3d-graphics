@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/mirstar13/go-3d-graphics/internal/audio"
 	"github.com/mirstar13/go-3d-graphics/internal/engine"
 	"github.com/mirstar13/go-3d-graphics/internal/physics"
 	"github.com/mirstar13/go-3d-graphics/internal/project"
@@ -18,6 +19,8 @@ type EntityID struct {
 }
 type entity struct {
 	doorOpen    bool
+	plateHeld   bool
+	plateTick   uint64
 	description project.Entity
 	node        *engine.SceneNode
 	body        physics.BodyID
@@ -37,7 +40,12 @@ type sensorImpulse struct {
 type Session struct {
 	behaviorWorker *behaviorWorker
 	objective      ObjectiveStatus
-	plates         map[physics.BodyID]string
+	plates         map[physics.BodyID]int
+	audiblePlates  int
+	sounds         map[string]*audio.Clip
+	soundScope     *audio.Scope
+	pendingSounds  []*audio.Clip
+	soundCues      []string
 	doorCount      int
 	projectRoot    string
 	sensorEvents   []SensorEvent
@@ -216,9 +224,11 @@ func (s *Session) spawn(d project.Entity) (EntityID, error) {
 		entry.body = id
 		if d.PlateSignal != "" {
 			if s.plates == nil {
-				s.plates = make(map[physics.BodyID]string)
+				s.plates = make(map[physics.BodyID]int)
 			}
-			s.plates[id] = d.PlateSignal
+			if d.PlateSound != "" {
+				s.audiblePlates++
+			}
 		}
 		if d.DoorSignal != "" {
 			s.doorCount++
@@ -242,6 +252,9 @@ func (s *Session) spawn(d project.Entity) (EntityID, error) {
 		s.entities = append(s.entities, entry)
 	} else {
 		s.entities[slot] = entry
+	}
+	if d.PlateSignal != "" {
+		s.plates[entry.body] = slot
 	}
 	return EntityID{s.id, uint32(slot), entry.generation}, nil
 }
@@ -369,6 +382,9 @@ func (s *Session) QueueDestroy(id EntityID) error {
 				}
 				delete(s.enterImpulses, child.body)
 				delete(s.plates, child.body)
+				if child.description.PlateSound != "" {
+					s.audiblePlates--
+				}
 				if child.description.DoorSignal != "" {
 					s.doorCount--
 				}
@@ -452,6 +468,7 @@ func (s *Session) hooks() physics.StepHooks {
 			e.node.Transform.SetRotationQuaternion(state.Rotation)
 		}
 		s.Scene.UpdateVisuals(t.Delta)
+		s.publishSounds()
 	}}
 	if s.behaviorWorker != nil {
 		hooks.PrepareStep = func(t physics.Tick) error {
@@ -476,11 +493,13 @@ func (s *Session) Advance(elapsed time.Duration) error {
 		s.applyCommands()
 	}
 	if err := s.World.AdvanceWithHooks(elapsed, s.hooks()); err != nil {
+		s.DiscardSounds()
 		return err
 	}
 	return s.lastError
 }
 func (s *Session) Step() error {
+	defer s.DiscardSounds()
 	if s.objective.Finished() {
 		return nil
 	}

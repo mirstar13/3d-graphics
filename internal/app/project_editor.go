@@ -12,6 +12,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/mirstar13/go-3d-graphics/internal/audio"
 	"github.com/mirstar13/go-3d-graphics/internal/config"
 	"github.com/mirstar13/go-3d-graphics/internal/engine"
 	"github.com/mirstar13/go-3d-graphics/internal/game"
@@ -27,6 +28,10 @@ func nextEditorTick() tea.Cmd {
 }
 
 type projectEditorModel struct {
+	audio          *audio.Manager
+	audition       *audio.Scope
+	soundSelection int
+
 	scriptedPlay                                   bool
 	lookDrag                                       input.Pointer
 	lifetime                                       context.Context
@@ -67,9 +72,9 @@ type projectEditorModel struct {
 
 func newProjectEditor(settings config.Settings) projectEditorModel {
 	mode, _ := terminal.ResolveColorMode(settings.Color)
-	return projectEditorModel{colorMode: mode, lifetime: context.Background(), settings: settings, width: 80, height: 30, zoom: 1, reticleU: .5, reticleV: .5, toolValues: defaultToolValues}
+	return projectEditorModel{audio: audio.NewNative(), colorMode: mode, lifetime: context.Background(), settings: settings, width: 80, height: 30, zoom: 1, reticleU: .5, reticleV: .5, toolValues: defaultToolValues}
 }
-func (m projectEditorModel) Init() tea.Cmd { return nil }
+func (m projectEditorModel) Init() tea.Cmd { return waitAudio(m.audio) }
 func (m *projectEditorModel) install(p *project.Project) error {
 	ed, err := project.NewEditor(p.Scene)
 	if err != nil {
@@ -79,6 +84,7 @@ func (m *projectEditorModel) install(p *project.Project) error {
 	if err != nil {
 		return err
 	}
+	m.audition.Close()
 	m.activeResource = nil
 	m.resourcePath = ""
 	m.project = p
@@ -221,6 +227,13 @@ func (m *projectEditorModel) begin(action string) tea.Cmd {
 }
 func (m *projectEditorModel) newPlaySession() (*game.Session, error) {
 	s, err := game.NewProjectSession(m.project.Root, m.document.Document(), m.settings.Physics.WorldOptions())
+	if err == nil {
+		var clips map[string]*audio.Clip
+		clips, err = m.project.LoadSounds()
+		if err == nil {
+			err = s.ConfigureAudio(clips)
+		}
+	}
 	if err == nil && m.scriptedPlay {
 		s.EnableBehaviors(m.lifetime, m.project)
 	}
@@ -229,7 +242,7 @@ func (m *projectEditorModel) newPlaySession() (*game.Session, error) {
 
 func (m *projectEditorModel) stopPlay() {
 	if m.play != nil {
-		m.play.CloseBehaviors()
+		m.play.Close()
 		m.focus = m.editFocus
 		m.play = nil
 	}
@@ -267,8 +280,10 @@ func (m *projectEditorModel) startPlay() tea.Cmd {
 	}
 	m.lookDrag.Reset(false)
 	if m.play != nil {
-		m.play.CloseBehaviors()
+		m.play.Close()
 	}
+	m.audition.Close()
+	session.AttachAudio(m.audio)
 	m.play = session
 	m.lastTick = time.Now()
 	m.message = "Playing a copy; Stop preserves authored edits"
@@ -310,10 +325,19 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.build.output = "Build failed\n" + msg.err.Error()
 		}
 		return m, nil
+	case audioFailure:
+		if msg.err != nil {
+			m.message = msg.err.Error()
+		}
+		return m, nil
 	case tea.BlurMsg:
 		m.lookDrag.Reset(false)
 		return m, nil
 	case tea.MouseMsg:
+		if m.modal == "sound_assets" {
+			m.updateSoundBrowser(m.soundClick(msg))
+			return m, nil
+		}
 		if m.gameViewActive() {
 			switch {
 			case msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonRight:
@@ -354,7 +378,7 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.lookDrag.Reset(false)
 		}
 		if err := m.play.Advance(elapsed); err != nil {
-			m.play.World.SetPaused(true)
+			m.play.SetPaused(true)
 			m.message = err.Error()
 		}
 		m.renderPreview()
@@ -396,7 +420,14 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.modal != "" {
 			if key == "esc" || key == "ctrl+c" {
+				if m.modal == "sound_assets" || m.modal == "sound_import" {
+					m.audition.Close()
+				}
 				m.modal = ""
+				return m, nil
+			}
+			if m.modal == "sound_assets" {
+				m.updateSoundBrowser(key)
 				return m, nil
 			}
 			if m.modal == "mesh_assets" {
@@ -432,6 +463,14 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			case "enter":
 				var err error
 				switch m.modal {
+				case "sound_import":
+					var cue string
+					cue, err = m.project.ImportSound(strings.TrimSpace(m.draft))
+					if err == nil {
+						m.modal = "sound_assets"
+						m.soundSelection = slices.Index(m.soundCues(), cue)
+						m.message = "Imported " + cue
+					}
 				case "mesh_import":
 					var name string
 					name, err = m.project.ImportGLB(strings.TrimSpace(m.draft))
@@ -669,9 +708,20 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "f8":
 			m.stopPlay()
+		case "ctrl+y":
+			if m.play != nil {
+				m.toggleAudioMute()
+				return m, nil
+			}
+			e, _ := m.selectedEntity()
+			if m.document.Redo() {
+				m.selectID(e.ID)
+				m.refresh()
+				m.message = "Redo"
+			}
 		case input.Pause:
 			if m.play != nil {
-				m.play.World.SetPaused(!m.play.World.Stats().Paused)
+				m.play.SetPaused(!m.play.World.Stats().Paused)
 				m.renderPreview()
 				m.lastTick = time.Now()
 			}
@@ -690,6 +740,8 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			switch key {
+			case "ctrl+k":
+				m.soundSelection, m.modal = 0, "sound_assets"
 			case "ctrl+x":
 				m.browseMeshes()
 			case "k":
@@ -753,13 +805,6 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 					m.selectID(e.ID)
 					m.refresh()
 					m.message = "Undo"
-				}
-			case "ctrl+y":
-				e, _ := m.selectedEntity()
-				if m.document.Redo() {
-					m.selectID(e.ID)
-					m.refresh()
-					m.message = "Redo"
 				}
 			}
 		}
@@ -871,6 +916,10 @@ func (m projectEditorModel) View() string {
 			out.WriteString(m.bindingsView())
 		} else if m.modal == "binding" {
 			fmt.Fprintf(&out, "\nBind %s: %s_\nComma-separated keys | Enter save | Esc cancel\n", input.Definitions()[m.bindingSelected].Label, m.draft)
+		} else if m.modal == "sound_assets" {
+			out.WriteString(m.soundBrowser())
+		} else if m.modal == "sound_import" {
+			fmt.Fprintf(&out, "\nWAV file path  %s_\nEnter import | Esc close\n", m.draft)
 		} else if m.modal == "mesh_assets" {
 			out.WriteString(m.meshBrowser())
 		} else if m.modal == "mesh_import" {
@@ -932,9 +981,10 @@ func runProjectEditor(settings config.Settings, path, action string) error {
 			return err
 		}
 	}
+	defer m.audio.Close()
 	final, err := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion(), tea.WithReportFocus()).Run()
 	if editor, ok := final.(projectEditorModel); ok && editor.play != nil {
-		editor.play.CloseBehaviors()
+		editor.play.Close()
 	}
 	return err
 }
@@ -1010,7 +1060,7 @@ func (m projectEditorModel) shortcutView() string {
 	if m.focus == 2 {
 		out.WriteString(input.Help(bindings, input.AimUp, input.AimDown, input.AimLeft, input.AimRight) + "\n")
 	} else {
-		out.WriteString("Ctrl+X mesh assets | Ctrl+W scripted Play | F9 export | F6 run build | Ctrl+G run in terminal | Ctrl+B build | Ctrl+E scene settings | H parent | 1/2/3 camera | +/- zoom | Q exit editor\n")
+		out.WriteString("Ctrl+K audio | Ctrl+X mesh assets | Ctrl+W scripted Play | F9 export | F6 run build | Ctrl+G run in terminal | Ctrl+B build | Ctrl+E scene settings | H parent | 1/2/3 camera | +/- zoom | Q exit editor\n")
 	}
 	if m.play != nil {
 		fmt.Fprintf(&out, "Ctrl+L tools | Impulse (%s,%s,%s) %s\n", m.toolValues[0], m.toolValues[1], m.toolValues[2], m.toolValues[3])

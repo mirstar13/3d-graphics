@@ -27,7 +27,8 @@ c++ -std=c++17 -O2 -I /path/to/json-header workers/cpp/main.cpp -o assets/worker
 ## Use it
 
 - Run `go run .` in this example directory and press **E**. The blue crate gets
-  a stronger impulse than the orange crate.
+  a stronger impulse than the orange crate. Both workers request the `launch`
+  sound once per press when the engine advertises it.
 - Open the example from the engine with
   `go run . -project examples/behavior-workshop`. Edit **Behavior parameters
   (JSON)** on either crate and press **Ctrl+W** for Scripted Play. Press **E**
@@ -56,7 +57,10 @@ coordinates. Contacts describe the preceding tick and contain `a`, `b`,
 
 Echo the version and tick. A response can carry an empty impulse list or an
 `error` string. Impulses target live dynamic entities using scene IDs. The
-first protocol version supports impulses in newton-seconds. Each exchange has a
+first protocol version supports impulses in newton-seconds. When the request
+includes `sound_cues`, the reply may also include `"sounds":["launch"]` using
+cue IDs from that list. The host accepts up to 32 sounds per tick and publishes
+them after the tick succeeds. Workers can omit the field. Each exchange has a
 one-second deadline and a 256 KiB message limit. A failed response stops
 scripted advancement at that tick. Stopping or restarting closes the old worker.
 

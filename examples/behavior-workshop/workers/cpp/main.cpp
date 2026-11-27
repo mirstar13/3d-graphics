@@ -25,8 +25,12 @@ int main() {
                     impulses.push_back({{"entity", actor.at("id")}, {"vector", {0, strength, 0}}});
                 }
             }
-            std::cout << json({{"version", 1}, {"tick", request.at("tick")}, {"impulses", impulses}})
-                             .dump() << std::endl;
+            const auto cues = request.value("sound_cues", json::array());
+            json reply = {{"version", 1}, {"tick", request.at("tick")}, {"impulses", impulses}};
+            if (launched && std::find(cues.begin(), cues.end(), "launch") != cues.end()) {
+                reply["sounds"] = {"launch"};
+            }
+            std::cout << reply.dump() << std::endl;
         } catch (const std::exception &error) {
             std::cerr << error.what() << '\n';
             return 1;

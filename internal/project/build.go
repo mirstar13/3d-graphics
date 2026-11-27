@@ -11,6 +11,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/mirstar13/go-3d-graphics/internal/audio"
 )
 
 // The starter pins the creator API by its repository URL.
@@ -105,7 +107,11 @@ func (p *Project) compile(ctx context.Context, tmp string) error {
 	if _, err = os.Stat(module); err != nil {
 		return fmt.Errorf("project requires go.mod and a root main package: %w", err)
 	}
-	cmd := exec.CommandContext(ctx, "go", "build", "-mod=mod", "-buildmode=exe", "-buildvcs=false", "-o", tmp, ".")
+	args := []string{"build", "-mod=mod", "-buildmode=exe", "-buildvcs=false", "-o", tmp}
+	if audio.BuildTag != "" {
+		args = append(args, "-tags", audio.BuildTag)
+	}
+	cmd := exec.CommandContext(ctx, "go", append(args, ".")...)
 	cmd.Dir = p.Root
 	cmd.Env = append(os.Environ(), "GOWORK=off", "GOOS="+runtime.GOOS, "GOARCH="+runtime.GOARCH)
 	var output compilerOutput

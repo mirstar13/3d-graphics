@@ -64,21 +64,28 @@ func (p *Project) ImportGLB(source string) (string, error) {
 		return "", err
 	}
 	defer root.Close()
-	if err = root.Mkdir("assets", 0755); err != nil && !os.IsExist(err) {
+	if err := writeImportedAsset(root, name, data); err != nil {
 		return "", err
+	}
+	return name, nil
+}
+
+func writeImportedAsset(root *os.Root, name string, data []byte) error {
+	if err := root.Mkdir("assets", 0755); err != nil && !os.IsExist(err) {
+		return err
 	}
 	dest, err := root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
 	if err != nil {
-		return "", err
+		return err
 	}
 	_, writeErr := dest.Write(data)
 	closeErr := dest.Close()
 	if writeErr != nil || closeErr != nil {
 		_ = root.Remove(name)
 		if writeErr != nil {
-			return "", writeErr
+			return writeErr
 		}
-		return "", closeErr
+		return closeErr
 	}
-	return name, nil
+	return nil
 }

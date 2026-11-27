@@ -24,6 +24,27 @@ cockpit directly, run `go run .` inside `examples/pulse-dock`. Copy the sample
 directory to customize it. Its Go package guide (`go doc .` in that directory)
 covers editing, play and standalone export.
 
+## Project audio
+
+In the editor, press **Ctrl+K** to open audio cues. Use **Import** to add a 16-bit
+PCM WAV file in mono or stereo at 44.1 or 48 kHz. Give the file a name such as
+`plate_down.wav` using letters, numbers, underscores or hyphens. Select the cue
+and use **Audition** or **Stop**. To assign a cue, first select an entity with a
+**Plate signal**, open the cue browser and press **Enter** on the cue. Save the
+scene with **Ctrl+S**. To clear the assignment, empty **Plate sound** in the
+inspector.
+
+Use **Ctrl+Y** during Play, at the audio cue browser, or in an interactive game
+to toggle mute. A pressure plate plays once when it becomes occupied. Go game
+behaviors can call `world.PlaySound("plate_down")` during a tick. Export includes
+the project's WAV assets.
+
+Windows and macOS builds include the native audio backend. On Linux, install
+the ALSA development files and enable the backend with `go run -tags audio .`.
+An editor built this way also enables audio in its project builds and exports.
+Use `-tags audio_disabled` for a device-free build. Audio comes from the machine
+running the game.
+
 ## First-person example
 
 Run `go run .`, choose **Load scene / project**, and select **Switch Room**.

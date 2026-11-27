@@ -114,6 +114,7 @@ func properties() []Property {
 		number("collider_size.y", "Collider half Y", "m", func(e *Entity) *float64 { return &e.ColliderSize.Y }),
 		number("collider_size.z", "Collider half Z", "m", func(e *Entity) *float64 { return &e.ColliderSize.Z }),
 		text("plate_signal", "Plate signal", func(e *Entity) *string { return &e.PlateSignal }),
+		text("plate_sound", "Plate sound", func(e *Entity) *string { return &e.PlateSound }),
 		text("door_signal", "Door signal", func(e *Entity) *string { return &e.DoorSignal }),
 		number("door_lift", "Door lift", "m", func(e *Entity) *float64 { return &e.DoorLift }),
 		boolean("enter_once", "One-shot sensor impulse", func(e *Entity) *bool { return &e.EnterOnce }),

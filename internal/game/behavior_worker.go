@@ -37,19 +37,21 @@ type behaviorContact struct {
 }
 
 type behaviorRequest struct {
-	Version  int               `json:"version"`
-	Tick     uint64            `json:"tick"`
-	Delta    float64           `json:"delta"`
-	Start    bool              `json:"start"`
-	Actions  []string          `json:"actions"`
-	Actors   []behaviorActor   `json:"actors"`
-	Contacts []behaviorContact `json:"contacts"`
+	Version   int               `json:"version"`
+	Tick      uint64            `json:"tick"`
+	Delta     float64           `json:"delta"`
+	Start     bool              `json:"start"`
+	Actions   []string          `json:"actions"`
+	Actors    []behaviorActor   `json:"actors"`
+	SoundCues []string          `json:"sound_cues,omitempty"`
+	Contacts  []behaviorContact `json:"contacts"`
 }
 
 type behaviorReply struct {
 	Version  int               `json:"version"`
 	Tick     uint64            `json:"tick"`
 	Impulses []behaviorImpulse `json:"impulses"`
+	Sounds   []string          `json:"sounds,omitempty"`
 	Error    string            `json:"error,omitempty"`
 }
 
@@ -224,6 +226,7 @@ func (s *Session) runBehaviors(t physics.Tick) error {
 	r := behaviorRequest{Version: behaviorProtocol, Tick: t.Index, Delta: t.Delta, Start: w.command == nil,
 		Actions: append([]string{}, w.actions...), Actors: []behaviorActor{}, Contacts: []behaviorContact{}}
 	w.actions = w.actions[:0]
+	r.SoundCues = s.soundCues
 	ids := make(map[physics.BodyID]string)
 	for i := range s.entities {
 		e := &s.entities[i]
@@ -302,6 +305,14 @@ func (s *Session) requestBehaviors(w *behaviorWorker, r behaviorRequest) error {
 		}
 		return fmt.Errorf("worker: %s", reply.Error)
 	}
+	if len(reply.Sounds) > maxTickSounds-len(s.pendingSounds) {
+		return fmt.Errorf("too many worker sounds")
+	}
+	for _, cue := range reply.Sounds {
+		if s.sounds[cue] == nil {
+			return fmt.Errorf("unknown worker audio cue %q", cue)
+		}
+	}
 	handles := make([]EntityID, len(reply.Impulses))
 	for i, command := range reply.Impulses {
 		id, ok := s.Find(command.Entity)
@@ -322,6 +333,9 @@ func (s *Session) requestBehaviors(w *behaviorWorker, r behaviorRequest) error {
 			s.pending = s.pending[:initial]
 			return err
 		}
+	}
+	for _, cue := range reply.Sounds {
+		s.pendingSounds = append(s.pendingSounds, s.sounds[cue])
 	}
 	return nil
 }

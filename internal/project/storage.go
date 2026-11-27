@@ -113,6 +113,9 @@ func Open(root string) (*Project, error) {
 			return nil, fmt.Errorf("invalid gameplay binding %q", key)
 		}
 	}
+	if e = validateSounds(p.Manifest.Sounds); e != nil {
+		return nil, e
+	}
 	p.Scene, e = p.LoadScene(p.Manifest.EntryScene)
 	if e != nil {
 		return nil, e
@@ -135,6 +138,9 @@ func (p *Project) LoadScene(entry string) (Document, error) {
 		return Document{}, err
 	}
 	if err := resolved.validateVisualFiles(p.Root); err != nil {
+		return Document{}, err
+	}
+	if err := p.ValidateSoundReferences(resolved); err != nil {
 		return Document{}, err
 	}
 	return resolved, nil
@@ -222,6 +228,9 @@ func (p *Project) Save(d Document) error {
 		return e
 	}
 	if e = resolved.validateVisualFiles(p.Root); e != nil {
+		return e
+	}
+	if e = p.ValidateSoundReferences(resolved); e != nil {
 		return e
 	}
 	if e = writeAtomic(path, serialized); e != nil {

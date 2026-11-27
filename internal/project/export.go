@@ -119,8 +119,12 @@ func (p *Project) Export(ctx context.Context) (string, error) {
 			return "", err
 		}
 	}
-	if _, err = Open(tree); err != nil {
+	packaged, err := Open(tree)
+	if err != nil {
 		return "", fmt.Errorf("exported scene: %w", err)
+	}
+	if _, err := packaged.LoadSounds(); err != nil {
+		return "", fmt.Errorf("exported audio: %w", err)
 	}
 
 	launcher, script := "play.sh", "#!/bin/sh\ncd -- \"$(dirname -- \"$0\")\" || exit 1\nexec ./game \"$@\"\n"

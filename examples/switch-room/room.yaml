@@ -104,3 +104,4 @@ entities:
     mass: 1
     sensor: true
     plate_signal: exit
+    plate_sound: plate_down
