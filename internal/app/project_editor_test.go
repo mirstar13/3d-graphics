@@ -122,7 +122,7 @@ func TestSelectableEditorMenuAndWrap(t *testing.T) {
 	m := newMenuModel(config.Default(), "unused", false)
 	m, _ = pressMenu(m, tea.KeyDown)
 	m, _ = pressMenu(m, tea.KeyDown)
-	if !strings.Contains(m.View(), "> Project editor") {
+	if !strings.Contains(m.View(), "> New scene / project") {
 		t.Fatal(m.View())
 	}
 	opened, cmd := pressMenu(m, tea.KeyEnter)

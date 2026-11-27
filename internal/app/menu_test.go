@@ -19,7 +19,7 @@ func TestStartMenuSceneSelection(t *testing.T) {
 	settings := config.Default()
 	settings.Demo = 3
 	m := newMenuModel(settings, "unused.yaml", false)
-	if !strings.Contains(m.View(), "> New scene") {
+	if !strings.Contains(m.View(), "> Load scene") {
 		t.Fatal("launcher missing default selection")
 	}
 	m, _ = pressMenu(m, tea.KeyEnter)
@@ -86,5 +86,22 @@ func TestMenuEscapeCancelsNumberEdit(t *testing.T) {
 	m, cmd := pressMenu(m, tea.KeyEsc)
 	if cmd != nil || m.page != settingsPage || m.editor.editing {
 		t.Fatal("escape closed form while editing number")
+	}
+}
+
+func TestLauncherProjectRoutes(t *testing.T) {
+	m := newMenuModel(config.Default(), "", false)
+	m.selected = 2
+	created, cmd := pressMenu(m, tea.KeyEnter)
+	if cmd == nil || !created.projectEditor || created.editorAction != "new" {
+		t.Fatal("new project route")
+	}
+	m.page = scenePage
+	for i, action := range []string{"sample", "open"} {
+		m.scene = len(demo.Names) + i
+		loaded, cmd := pressMenu(m, tea.KeyEnter)
+		if cmd == nil || !loaded.projectEditor || loaded.editorAction != action || loaded.start {
+			t.Fatalf("load %s route", action)
+		}
 	}
 }

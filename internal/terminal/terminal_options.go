@@ -50,7 +50,7 @@ func ConfigureTerminal(config *engine.EngineConfig, colorMode string) error {
 	if os.Getenv("TERM") == "dumb" {
 		return fmt.Errorf("terminal renderer requires cursor-addressing support; TERM=dumb is unsupported")
 	}
-	mode, err := terminalColorMode(colorMode, os.Getenv("TERM"), os.Getenv("COLORTERM"), os.Getenv("NO_COLOR") != "")
+	mode, err := ResolveColorMode(colorMode)
 	if err != nil {
 		return err
 	}
@@ -62,8 +62,8 @@ func ConfigureTerminal(config *engine.EngineConfig, colorMode string) error {
 	return nil
 }
 
-// terminalForeground maps RGB colors into the selected terminal palette.
-func terminalForeground(c engine.Color, mode string) string {
+// Foreground maps RGB colors into the selected terminal palette.
+func Foreground(c engine.Color, mode string) string {
 	if mode == "truecolor" || mode == "" {
 		return c.ToANSI()
 	}
@@ -102,4 +102,9 @@ func terminalForeground(c engine.Color, mode string) string {
 		return fmt.Sprintf("\033[%dm", 30+best)
 	}
 	return fmt.Sprintf("\033[%dm", 90+best-8)
+}
+
+// ResolveColorMode resolves a configured palette using the current terminal environment.
+func ResolveColorMode(requested string) (string, error) {
+	return terminalColorMode(requested, os.Getenv("TERM"), os.Getenv("COLORTERM"), os.Getenv("NO_COLOR") != "")
 }

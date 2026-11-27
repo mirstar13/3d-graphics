@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -35,7 +37,8 @@ type projectEditorModel struct {
 	width, height, selected, property, focus, view int
 	zoom                                           float64
 	modal, draft, pendingAction, message           string
-	frame                                          []string
+	frame, coloredFrame                            []string
+	colorMode                                      string
 	lastTick                                       time.Time
 	timerScheduled                                 bool
 	parentChoice                                   int
@@ -55,7 +58,8 @@ type projectEditorModel struct {
 }
 
 func newProjectEditor(settings config.Settings) projectEditorModel {
-	return projectEditorModel{lifetime: context.Background(), settings: settings, width: 80, height: 30, zoom: 1, reticleU: .5, reticleV: .5, toolValues: defaultToolValues}
+	mode, _ := terminal.ResolveColorMode(settings.Color)
+	return projectEditorModel{colorMode: mode, lifetime: context.Background(), settings: settings, width: 80, height: 30, zoom: 1, reticleU: .5, reticleV: .5, toolValues: defaultToolValues}
 }
 func (m projectEditorModel) Init() tea.Cmd { return nil }
 func (m *projectEditorModel) install(p *project.Project) error {
@@ -119,10 +123,10 @@ func (m *projectEditorModel) renderPreview() {
 		m.frame = nil
 		return
 	}
-	w, h := max(12, min(70, (m.width-3)/2)), max(1, min(26, m.height-11))
+	w, h := max(12, min(70, (m.width-3)/2)), m.contentHeight()
 	if m.width < 65 {
-		w = max(1, m.width)
-		h = max(1, min(26, m.height-12))
+		w = max(1, m.width-1)
+		h = max(1, m.contentHeight()-1)
 	}
 	renderer := terminal.NewTerminalRenderer(bufio.NewWriter(io.Discard), h, w)
 	renderer.UseColor = false
@@ -156,7 +160,7 @@ func (m *projectEditorModel) renderPreview() {
 	row := []rune(m.frame[y])
 	row[x] = '+'
 	m.frame[y] = string(row)
-
+	m.colorPreview(renderer, x, y)
 }
 func (m *projectEditorModel) save() {
 	if m.document == nil {
@@ -249,6 +253,9 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.build.output = "Build failed\n" + msg.err.Error()
 		}
 		return m, nil
+	case tea.MouseMsg:
+		m.viewportMouse(msg)
+		return m, nil
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.renderPreview()
@@ -284,6 +291,16 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		key := msg.String()
+		if m.modal == "shortcuts" {
+			if key == "esc" || key == "?" || key == "q" {
+				m.modal = ""
+			}
+			return m, nil
+		}
+		if m.project != nil && m.modal == "" && key == "?" {
+			m.modal = "shortcuts"
+			return m, nil
+		}
 		if m.modal == "build" || m.modal == "child" || m.modal == "export" {
 			return m.buildKey(key)
 		}
@@ -623,6 +640,9 @@ func (m projectEditorModel) View() string {
 	if m.modal == "scene" || m.modal == "scene_edit" {
 		return m.scenePanel()
 	}
+	if m.modal == "shortcuts" {
+		return m.shortcutView()
+	}
 	var out strings.Builder
 	if m.project == nil {
 		out.WriteString("Project editor\n\nN New project | O Open project\n\nCreate a new directory or open one containing project.yaml.\nEsc returns to launcher.\n")
@@ -650,7 +670,10 @@ func (m projectEditorModel) View() string {
 		if m.play != nil {
 			out.WriteString(objectiveHUD(m.play.Objective()))
 		}
-		side := []string{"Hierarchy (Tab switches focus)"}
+		if m.width >= 65 {
+			out.WriteString("── Viewport · click to pick · wheel to zoom ──\n")
+		}
+		side := []string{"── Hierarchy (Tab switches focus)"}
 		entities := m.hierarchy()
 		selected := m.selectionIndex()
 		for i := range entities {
@@ -682,7 +705,7 @@ func (m projectEditorModel) View() string {
 		}
 		side = append(side, "", "Inspector ("+modeLabel+") - focus: "+focus)
 		side = append(side, m.inspectorSlice(max(2, len(m.frame)-len(side)))...)
-		contentHeight := max(1, m.height-11)
+		contentHeight := m.contentHeight()
 		if m.width < 65 || contentHeight < 10 {
 			side = nil
 			if m.focus == 0 {
@@ -723,24 +746,13 @@ func (m projectEditorModel) View() string {
 				out.WriteString(line + "\n")
 			}
 		}
-		bindings := m.project.Manifest.Bindings
-		out.WriteString(input.Help(bindings, input.Play, input.Pause, input.Step, input.Impulse) + " | F8/Esc Stop\n")
-		out.WriteString(input.Help(bindings, input.Pick, input.Clear, input.Previous, input.Next) + " | K bindings\n")
+		playKey := input.Help(m.project.Manifest.Bindings, input.Play)
 		if m.play != nil {
-			out.WriteString("Live hierarchy/inspector | Tab focus | Ctrl+L tools\nCtrl+S saves authored scene | Stop discards runtime changes\n")
+			fmt.Fprintf(&out, "? shortcuts | F8 stop | Ctrl+L tools | %s\n", input.Help(m.project.Manifest.Bindings, input.Pause, input.Step))
 		} else {
-			out.WriteString("B box / G sphere | E edit | Del delete | Ctrl+D duplicate\nCtrl+S save | Ctrl+Z/Y undo/redo | Ctrl+N/O new/open\n")
+			fmt.Fprintf(&out, "? shortcuts | %s | E edit | Ctrl+S save | Tab focus\n", playKey)
 		}
-		if m.focus == 2 {
-			out.WriteString(input.Help(bindings, input.AimUp, input.AimDown, input.AimLeft, input.AimRight) + "\n")
-		} else {
-			out.WriteString("F9 export | F6 run build | Ctrl+B build | Ctrl+E scene settings | H parent | 1/2/3 camera | +/- zoom | Q exit editor\n")
-		}
-		if m.play != nil {
-			fmt.Fprintf(&out, "Ctrl+L tools | Impulse (%s,%s,%s) %s\n", m.toolValues[0], m.toolValues[1], m.toolValues[2], m.toolValues[3])
-		} else {
-			out.WriteString("A assets | R extract | Ctrl+R refresh | Ctrl+U unpack | Ctrl+T reset\n")
-		}
+
 	}
 	if m.modal != "" {
 		if m.modal == "discard" {
@@ -795,13 +807,22 @@ func (m projectEditorModel) View() string {
 			view = strings.Join(lines[len(lines)-m.height:], "\n")
 		}
 	}
-	return fitView(view, m.width, m.height)
+	view = fitView(view, m.width, m.height)
+	return m.stylePreview(view)
 }
-func runProjectEditor(settings config.Settings, path string) error {
+func runProjectEditor(settings config.Settings, path, action string) error {
 	m := newProjectEditor(settings)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	m.lifetime = ctx
+	if action == "sample" {
+		path = sampleProjectPath()
+		if path == "" {
+			m.modal, m.message = "open", "Locate the examples/pulse-dock project directory."
+		}
+	} else {
+		m.modal = action
+	}
 	if path != "" {
 		p, err := project.Open(path)
 		if err != nil {
@@ -811,7 +832,7 @@ func runProjectEditor(settings config.Settings, path string) error {
 			return err
 		}
 	}
-	_, err := tea.NewProgram(m, tea.WithAltScreen()).Run()
+	_, err := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion()).Run()
 	return err
 }
 
@@ -858,4 +879,64 @@ func (m *projectEditorModel) updateParentPicker(key string) {
 		m.refresh()
 		m.message = "Parent updated; local pose preserved"
 	}
+}
+
+// sampleProjectPath finds the editable example in a checkout or alongside the executable.
+func sampleProjectPath() string {
+	executable, _ := os.Executable()
+	for _, base := range []string{".", filepath.Dir(executable)} {
+		path := filepath.Join(base, "examples", "pulse-dock")
+		if info, err := os.Stat(filepath.Join(path, "project.yaml")); err == nil && info.Mode().IsRegular() {
+			return path
+		}
+	}
+	return ""
+}
+
+func (m projectEditorModel) shortcutView() string {
+	var out strings.Builder
+	out.WriteString("Editor shortcuts · Esc close\n\n")
+	bindings := m.project.Manifest.Bindings
+	out.WriteString(input.Help(bindings, input.Play, input.Pause, input.Step, input.Impulse) + " | F8/Esc Stop\n")
+	out.WriteString(input.Help(bindings, input.Pick, input.Clear, input.Previous, input.Next) + " | K bindings\n")
+	if m.play != nil {
+		out.WriteString("Live hierarchy/inspector | Tab focus | Ctrl+L tools\nCtrl+S saves authored scene | Stop discards runtime changes\n")
+	} else {
+		out.WriteString("B box / G sphere | E edit | Del delete | Ctrl+D duplicate\nCtrl+S save | Ctrl+Z/Y undo/redo | Ctrl+N/O new/open\n")
+	}
+	if m.focus == 2 {
+		out.WriteString(input.Help(bindings, input.AimUp, input.AimDown, input.AimLeft, input.AimRight) + "\n")
+	} else {
+		out.WriteString("F9 export | F6 run build | Ctrl+B build | Ctrl+E scene settings | H parent | 1/2/3 camera | +/- zoom | Q exit editor\n")
+	}
+	if m.play != nil {
+		fmt.Fprintf(&out, "Ctrl+L tools | Impulse (%s,%s,%s) %s\n", m.toolValues[0], m.toolValues[1], m.toolValues[2], m.toolValues[3])
+	} else {
+		out.WriteString("A assets | R extract | Ctrl+R refresh | Ctrl+U unpack | Ctrl+T reset\n")
+	}
+	rows := strings.Split(strings.TrimSpace(out.String()), "\n")
+	var wrapped []string
+	for _, row := range rows {
+		line := ""
+		for _, item := range strings.Split(row, " | ") {
+			if line != "" && len(line)+3+len(item) >= m.width {
+				wrapped = append(wrapped, line)
+				line = ""
+			}
+			if line != "" {
+				line += " | "
+			}
+			line += item
+		}
+		wrapped = append(wrapped, line)
+	}
+	return fitView(strings.Join(wrapped, "\n"), m.width, m.height)
+}
+
+func (m projectEditorModel) contentHeight() int {
+	extra := 0
+	if m.play != nil {
+		extra = strings.Count(objectiveHUD(m.play.Objective()), "\n")
+	}
+	return max(1, min(60, m.height-7-extra))
 }

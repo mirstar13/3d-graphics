@@ -129,7 +129,8 @@ func TestViewportReticlePickingClearingAndResize(t *testing.T) {
 	}
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 40, Height: 14})
 	m = next.(projectEditorModel)
-	if len(m.frame)+1 > max(1, m.height-11) {
+	top, visible := m.viewportRows()
+	if visible != len(m.frame) || top+visible > m.height {
 		t.Fatal("viewport reticle can be clipped")
 	}
 	if !strings.Contains(m.View(), "Viewport") {
@@ -163,5 +164,52 @@ func TestBatchedActionsAndPasteIsolation(t *testing.T) {
 	m, _ = editorRune(m, "n")
 	if m.play.PendingCommands() != 0 || m.play.World.Stats().Tick != 1 {
 		t.Fatal("queued batch not consumed once")
+	}
+}
+
+func TestViewportMouseMatchesVisibleCells(t *testing.T) {
+	m := inputEditor(t)
+	for _, width := range []int{100, 40} {
+		updated, _ := m.Update(tea.WindowSizeMsg{Width: width, Height: 30})
+		m = updated.(projectEditorModel)
+		m.focus = 2
+		top, visible := m.viewportRows()
+		x, y := 4, visible-1
+		msg := tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: x, Y: top + y}
+		updated, _ = m.Update(msg)
+		m = updated.(projectEditorModel)
+		col, row := m.reticleCell(len(m.frame[0]), len(m.frame))
+		if col != x || row != y {
+			t.Fatal("mouse coordinates", col, row, x, y)
+		}
+		msg.Button = tea.MouseButtonWheelUp
+		before := m.zoom
+		updated, _ = m.Update(msg)
+		m = updated.(projectEditorModel)
+		if m.zoom >= before {
+			t.Fatal("wheel did not zoom")
+		}
+		m.modal = "shortcuts"
+		before = m.zoom
+		updated, _ = m.Update(msg)
+		m = updated.(projectEditorModel)
+		if m.zoom != before {
+			t.Fatal("wheel leaked through dialog")
+		}
+		m.modal = ""
+	}
+}
+
+func TestPreviewRespectsColorMode(t *testing.T) {
+	m := inputEditor(t)
+	m.colorMode = "truecolor"
+	m.renderPreview()
+	if view := m.View(); !strings.Contains(view, "\x1b[38;2;") || !strings.Contains(view, "█") {
+		t.Fatal("missing colored geometry")
+	}
+	m.colorMode = "none"
+	m.renderPreview()
+	if strings.Contains(m.View(), "\x1b[") {
+		t.Fatal("monochrome view contains color escapes")
 	}
 }

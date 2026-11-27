@@ -124,7 +124,7 @@ func Run() {
 			fmt.Fprintln(os.Stderr, err)
 			return
 		}
-		if err := runProjectEditor(settings, options.projectPath); err != nil {
+		if err := runProjectEditor(settings, options.projectPath, ""); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 		}
 		return
@@ -139,20 +139,20 @@ func Run() {
 				return
 			}
 		}
-		updated, start, openProject, err := showStartMenu(settings, options.path, openSettings)
+		menu, err := showStartMenu(settings, options.path, openSettings)
 		openSettings = false
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return
 		}
-		settings = updated
-		if openProject {
-			if err := runProjectEditor(settings, ""); err != nil {
+		settings = menu.settings
+		if menu.projectEditor {
+			if err := runProjectEditor(settings, "", menu.editorAction); err != nil {
 				fmt.Fprintln(os.Stderr, err)
 			}
 			continue
 		}
-		if !start {
+		if !menu.start {
 			return
 		}
 		for {

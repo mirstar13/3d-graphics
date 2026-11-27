@@ -26,7 +26,7 @@ covers editing, play and standalone export.
 
 ## Project editor (prototype)
 
-Run `go run . -editor`, select **Project editor** (or press **E**) in the start menu, or open an existing project
+Run `go run . -editor`, select **New scene / project** (or press **E**) in the start menu, or open an existing project
 with `go run . -project /path/to/MyGame`. Create a project, add boxes/spheres, edit
 properties, save, and Play/Stop without changing the authored scene. The workspace
 includes nested visual hierarchies, reparenting, subtree duplication/deletion,
@@ -41,8 +41,8 @@ the editor controls and `go doc ./internal/project` for scene storage and links.
 
 ## Start menu
 
-`go run .` opens New scene, Settings, and Exit. Use Up/Down and Enter.
-New scene opens seven curated terminal scenes, with descriptions and the configured scene selected.
+`go run .` opens the launcher. Use Up/Down and Enter.
+Load scene / project lists the demo scenes, the editable Pulse Dock example, and an option to open a project directory. New scene / project opens the editor’s project creation form. Click geometry in the viewport to select it and use the mouse wheel to zoom.
 Enter starts that scene. Escape returns from the picker to the start menu.
 Leaving a running scene with X, Escape, or Ctrl+C returns to the start menu.
 Choose Exit, or press Escape or Ctrl+C in the start menu, to close the application.
@@ -252,7 +252,7 @@ their advertised behavior in the terminal.
 
 Scene numbers now refer to this catalog. Existing `demo: 1` remains the default;
 values 2–7 select the new scenes, and 8–13 must be changed to a valid number before
-startup. Use New scene to choose again. All scenes work without auto orbit and
+startup. Use Load scene / project to choose again. All scenes work without auto orbit and
 in monochrome. Only Lantern courtyard generates shadow maps. Builders use no
 external assets or randomness, and each preset stays below 5,000 triangles,
 counting all LOD meshes and rendered instances.

@@ -308,8 +308,16 @@ print("Project create/edit/save/play/pause/impulse/step/stop/discard/reopen/resi
 s=Session([])
 try:
     s.wait(b"3D Graphics")
-    s.send(b"\x1b[B\x1b[B");s.wait(b"> Project editor")
-    s.send(b"\r");s.wait(b"N New project")
+    s.send(b"\x1b[B\x1b[B");s.wait(b"> New scene / project")
+    s.send(b"\r");s.wait(b"new project directory")
+    s.send(b"\x1b");time.sleep(.2)
+    s.send(b"q");s.wait(b"3D Graphics")
+    s.send(b"\r");s.wait(b"Kinetic gallery")
+    s.send(b"\x1b[A\x1b[A");s.wait(b"> Pulse Dock")
+    s.send(b"\r");s.wait(b"Opened Pulse Dock")
+    s.send(b"?");s.wait(b"Editor shortcuts")
+    s.send(b"\x1b");s.wait(b"Hierarchy")
+    s.send(b"\x1b[<0;1;4M");s.wait(b"selection cleared")
     s.send(b"q");s.wait(b"3D Graphics")
     s.send(b"\x1b");s.close()
 finally:

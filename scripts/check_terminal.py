@@ -51,7 +51,7 @@ s.send(b"\x1b[B\x1b[C")
 time.sleep(.15)
 s.output=b"";s.send(b"\r")
 s.wait(b"3D Graphics")
-# Return to New scene, open and cancel the picker.
+# Return to Load scene, open and cancel the picker.
 s.output=b"";s.send(b"\x1b[A\r")
 s.wait(b"Kinetic gallery")
 s.output=b"";s.send(b"\x1b")

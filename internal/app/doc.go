@@ -1,6 +1,7 @@
 // Package app composes backends, loads settings, and runs the terminal UI.
 //
-// Run opens the start menu. New scene selects a demo, Settings edits the
+// Run opens the start menu. Load scene / project lists the demos, Pulse Dock and the project directory prompt.
+// New scene / project opens the creation form in the editor. Settings edits the
 // current configuration, and Exit closes the application. Rendering and
 // Bubble Tea never own keyboard input simultaneously. Returning to settings
 // shuts down the renderer and its keyboard manager before opening the editor.
@@ -21,7 +22,8 @@
 //
 // Launch with -editor or open a project using -project DIRECTORY. N creates a
 // project in a new directory. O opens an existing one. Tab cycles hierarchy,
-// inspector and viewport focus. B and G add primitives. H reparents a subtree.
+// inspector and viewport focus. The viewport uses the configured terminal color mode.
+// Click a viewport cell to pick geometry or scroll to zoom. Press ? for editor shortcuts. B and G add primitives. H reparents a subtree.
 // Ctrl+D duplicates it. Delete removes it. E edits an inspector property.
 // Ctrl+Z and Ctrl+Y navigate history. Ctrl+S saves authored data during Edit or Play.
 //

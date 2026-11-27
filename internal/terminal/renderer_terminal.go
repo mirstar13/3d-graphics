@@ -175,7 +175,7 @@ func (r *TerminalRenderer) Present() {
 					firstColor = false
 					code, ok := colorCodes[color]
 					if !ok {
-						code = terminalForeground(color, r.ColorMode)
+						code = Foreground(color, r.ColorMode)
 						colorCodes[color] = code
 					}
 					builder.WriteString(code)
