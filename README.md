@@ -19,7 +19,7 @@ YAML reports an error. Unknown keys and invalid values are rejected.
 
 ## Example games
 
-Open **Load scene / project** to play these games. Select **Play** with the mouse
+Open **Load project** to play these games. Select **Play** with the mouse
 or press **Enter**. Win and game-over screens let you replay, return to the game
 menu, or quit to the launcher.
 
@@ -66,7 +66,7 @@ running the game.
 
 ## First-person example
 
-Run `go run .`, choose **Load scene / project**, and select **Switch Room**.
+Run `go run .`, choose **Load project**, and select **Switch Room**.
 Walk with **WASD**. Hold the right mouse button and drag to turn and look up
 or down. Press **M** for free look and **Esc** to release it. The arrow keys
 also turn the camera. Aim at the crate and press **F** to push or **G** to
@@ -79,7 +79,7 @@ change your font. See [font size and performance](#font-size-and-performance).
 
 ## Project editor (prototype)
 
-Run `go run . -editor`, select **New scene / project** (or press **E**) in the start menu, or open an existing project
+Run `go run . -editor`, select **New project** (or press **E**) in the start menu, or open an existing project
 with `go run . -project /path/to/MyGame`. Create a project, add boxes/spheres, edit
 properties, save, and Play/Stop without changing the authored scene. The workspace
 has clickable New, Open, Save, Play, Pause, Step, and Stop controls. Use
@@ -119,7 +119,7 @@ view through **Ctrl+G** after building.
 ## Start menu
 
 `go run .` opens the launcher. Click an item or use Up/Down and Enter.
-Load scene / project lists the demo scenes and games. Choose Open project directory to edit an existing project, including the example. New scene / project opens the editor’s project creation form. Click geometry in the viewport to select it and use the mouse wheel to zoom.
+Load project lists the demo scenes and games. Choose Open project directory to edit an existing project, including the example. New project opens the editor’s project creation form. Click geometry in the viewport to select it and use the mouse wheel to zoom.
 Enter starts that scene. Escape returns from the picker to the start menu.
 Leaving a running scene with X, Escape, or Ctrl+C returns to the start menu.
 Choose Exit, or press Escape or Ctrl+C in the start menu, to close the application.
@@ -452,7 +452,7 @@ their advertised behavior in the terminal.
 
 Scene numbers now refer to this catalog. Existing `demo: 1` remains the default;
 values 2–7 select the new scenes, and 8–13 must be changed to a valid number before
-startup. Use Load scene / project to choose again. All scenes work without auto orbit and
+startup. Use Load project to choose again. All scenes work without auto orbit and
 in monochrome. Only Lantern courtyard generates shadow maps. Builders use no
 external assets or randomness, and each preset stays below 5,000 triangles,
 counting all LOD meshes and rendered instances.

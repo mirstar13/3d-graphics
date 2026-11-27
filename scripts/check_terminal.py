@@ -45,15 +45,15 @@ class Session:
 
 s=Session([])
 s.wait(b"3D Graphics")
-assert b"New scene" in s.output and b"Settings" in s.output and b"Exit" in s.output
-s.output=b"";s.send(b"\x1b[B\r")
+assert b"New project" in s.output and b"Settings" in s.output and b"Exit" in s.output
+s.output=b"";s.send(b"\x1b[B\x1b[B\r")
 s.wait(b"Renderer settings")
 s.send(b"\x1b[B\x1b[C")
 time.sleep(.15)
 s.output=b"";s.send(b"\r")
 s.wait(b"3D Graphics")
 # Return to Load scene, open and cancel the picker.
-s.output=b"";s.send(b"\x1b[A\r")
+s.output=b"";s.send(b"\x1b[A\x1b[A\r")
 s.wait(b"Kinetic gallery")
 s.output=b"";s.send(b"\x1b")
 s.wait(b"3D Graphics")
@@ -167,7 +167,7 @@ print("xterm/linux/vt100 profiles, large-grid viewport budget and exit PASS",flu
 s=Session(["-demo","1"],size=(121,321))
 s.wait(b"3D Graphics")
 s.output=b"";s.send(b"\r");s.wait(b"Switch Room")
-s.output=b"";s.send(b"\x1b[B"*9+b"\r");s.wait(b"[Play]")
+s.output=b"";s.send(b"\x1b[B"*8+b"\r");s.wait(b"[Play]")
 s.output=b"";s.send(b"\r");s.wait(b"WASD walk")
 for rows,columns in [(24,80),(151,401)]:
     s.output=b""

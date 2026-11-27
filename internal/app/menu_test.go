@@ -19,7 +19,7 @@ func TestStartMenuSceneSelection(t *testing.T) {
 	settings := config.Default()
 	settings.Demo = 3
 	m := newMenuModel(settings, "unused.yaml", false)
-	if !strings.Contains(m.View(), "> Load scene") {
+	if !strings.Contains(m.View(), "> Load project") {
 		t.Fatal("launcher missing default selection")
 	}
 	m, _ = pressMenu(m, tea.KeyEnter)
@@ -43,7 +43,7 @@ func TestStartMenuSettingsApplyAndBack(t *testing.T) {
 	if cmd != nil || m.page != homePage || m.settings.FOVX != 85 || m.start {
 		t.Fatal("apply should return to menu")
 	}
-	m.selected = 1
+	m.selected = 2
 	m, _ = pressMenu(m, tea.KeyEnter)
 	m.editor.fields[9].value = "100"
 	m, cmd = pressMenu(m, tea.KeyEsc)
@@ -91,14 +91,20 @@ func TestMenuEscapeCancelsNumberEdit(t *testing.T) {
 
 func TestLauncherProjectRoutes(t *testing.T) {
 	m := newMenuModel(config.Default(), "", false)
-	m.selected = 2
+	m.selected = 1
 	created, cmd := pressMenu(m, tea.KeyEnter)
 	if cmd == nil || !created.projectEditor || created.editorAction != "new" {
 		t.Fatal("new project route")
 	}
 	m.page = scenePage
-	for i, action := range []string{"sample", "open"} {
-		m.scene = len(demo.Names) + i
+	for _, action := range []string{"sample", "open"} {
+		m.scene = len(demo.Names)
+		if action == "open" {
+			m.scene = catalogSize() - 1
+			if !strings.Contains(m.View(), "> Open project directory") {
+				t.Fatal(m.View())
+			}
+		}
 		loaded, cmd := pressMenu(m, tea.KeyEnter)
 		if action == "sample" {
 			if !loaded.playSample || loaded.projectEditor || cmd == nil {

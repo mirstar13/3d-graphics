@@ -309,7 +309,7 @@ print("Project create/edit/save/play/pause/impulse/step/stop/discard/reopen/resi
 s=Session([])
 try:
     s.wait(b"3D Graphics")
-    s.send(b"\x1b[B\x1b[B");s.wait(b"> New scene / project")
+    s.send(b"\x1b[B");s.wait(b"> New project")
     s.send(b"\r");s.wait(b"new project directory")
     s.send(b"\x1b");time.sleep(.2)
     s.send(b"q");s.wait(b"3D Graphics")
@@ -319,7 +319,7 @@ try:
     s.send(b"\r");s.wait(b"Arrows move | Space jump")
     s.send(b"q");s.wait(b"3D Graphics")
     s.send(b"\r");s.wait(b"Kinetic gallery")
-    s.send(b"\x1b[B"*9);s.wait(b"> Switch Room")
+    s.send(b"\x1b[B"*8);s.wait(b"> Switch Room")
     s.send(b"\r");s.wait(b"[Play]")
     s.send(b"\r");s.wait(b"WASD walk")
     s.send(b"g");s.wait(b"Holding crate")

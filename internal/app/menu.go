@@ -125,13 +125,13 @@ func (m menuModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.scene {
 			case len(demo.Names):
 				m.playSample = true
-			case len(demo.Names) + 2:
-				m.switchRoom = true
 			case len(demo.Names) + 1:
+				m.switchRoom = true
+			case catalogSize() - 1:
 				m.projectEditor, m.editorAction = true, "open"
 			default:
-				if m.scene >= len(demo.Names)+3 {
-					m.example = extraExamples[m.scene-len(demo.Names)-3].folder
+				if m.scene >= len(demo.Names)+2 {
+					m.example = extraExamples[m.scene-len(demo.Names)-2].folder
 				} else {
 					m.settings.Demo, m.start = m.scene+1, true
 				}
@@ -154,9 +154,9 @@ func (m menuModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		switch m.selected {
 		case 0:
 			m.scene, m.page = m.settings.Demo-1, scenePage
-		case 1:
-			m.openSettings()
 		case 2:
+			m.openSettings()
+		case 1:
 			m.projectEditor, m.editorAction = true, "new"
 			return m, tea.Quit
 		case 3:
@@ -171,14 +171,15 @@ func (m menuModel) View() string {
 		return m.editor.View()
 	}
 	title, help := "3D Graphics", "Up/Down select | Enter open | E project editor | Esc exit"
-	items := []string{"Load scene / project", "Settings", "New scene / project", "Exit"}
+	items := []string{"Load project", "New project", "Settings", "Exit"}
 	selected := m.selected
 	if m.page == scenePage {
-		title, help = "Load scene / project", "[Back] | Up/Down select | Enter load | Esc back"
-		items, selected = append(append([]string{}, demo.Names...), "Pulse Dock (example game)", "Open project directory…", "Switch Room (first-person game)"), m.scene
+		title, help = "Load project", "[Back] | Up/Down select | Enter load | Esc back"
+		items, selected = append(append([]string{}, demo.Names...), "Pulse Dock (example game)", "Switch Room (first-person game)"), m.scene
 		for _, example := range extraExamples {
 			items = append(items, example.label)
 		}
+		items = append(items, "Open project directory…")
 	}
 	var out strings.Builder
 	out.WriteString(title + "\n\n")
@@ -192,14 +193,14 @@ func (m menuModel) View() string {
 	}
 	if m.page == scenePage && m.height >= 9 {
 		description := "Open an existing project in the editor."
-		if selected == len(demo.Names)+2 {
+		if selected == len(demo.Names)+1 {
 			description = "Explore a physics room, move crates and operate the gate."
 		} else if selected < len(demo.Names) {
 			description = demo.PresetAt(selected).Description
 		} else if selected == len(demo.Names) {
 			description = "Play Pulse Dock. Steer the tug with the arrow keys."
-		} else if selected >= len(demo.Names)+3 {
-			description = extraExamples[selected-len(demo.Names)-3].description
+		} else if selected >= len(demo.Names)+2 && selected < catalogSize()-1 {
+			description = extraExamples[selected-len(demo.Names)-2].description
 		}
 		out.WriteString("\n" + description + "\n")
 	}

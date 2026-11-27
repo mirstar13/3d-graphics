@@ -1,7 +1,7 @@
 // Package app composes backends, loads settings, and runs the terminal UI.
 //
-// Run opens the start menu. Load scene / project lists the demos, Pulse Dock and the project directory prompt.
-// New scene / project opens the creation form in the editor. Settings edits the
+// Run opens the start menu. Load project lists the demos, Pulse Dock and the project directory prompt.
+// New project opens the creation form in the editor. Settings edits the
 // current configuration, and Exit closes the application. Rendering and
 // Bubble Tea never own keyboard input simultaneously. Returning to settings
 // shuts down the renderer and its keyboard manager before opening the editor.
@@ -24,7 +24,7 @@
 // project in a new directory. O opens an existing one. Tab cycles hierarchy,
 // inspector and viewport focus. The viewport uses the configured terminal color mode.
 // Click a viewport cell to pick geometry or scroll to zoom. Press ? for editor shortcuts. B and G add primitives. H reparents a subtree.
-// Switch Room is a first-person physics game in Load scene / project. WASD walks,
+// Switch Room is a first-person physics game in Load project. WASD walks,
 // arrows look, F pushes, G grabs or releases the crate, and E operates the green
 // gate button. Reach the gold pad to finish, then press R to restart.
 // Terminal font size follows terminal preferences. Terminal resize events

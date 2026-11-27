@@ -121,14 +121,14 @@ func TestEditorUnicodeLayout(t *testing.T) {
 func TestSelectableEditorMenuAndWrap(t *testing.T) {
 	m := newMenuModel(config.Default(), "unused", false)
 	m, _ = pressMenu(m, tea.KeyDown)
-	m, _ = pressMenu(m, tea.KeyDown)
-	if !strings.Contains(m.View(), "> New scene / project") {
+	if !strings.Contains(m.View(), "> New project") {
 		t.Fatal(m.View())
 	}
 	opened, cmd := pressMenu(m, tea.KeyEnter)
 	if cmd == nil || !opened.projectEditor || opened.start {
 		t.Fatal("menu did not open editor")
 	}
+	m, _ = pressMenu(m, tea.KeyDown)
 	m, _ = pressMenu(m, tea.KeyDown)
 	if !strings.Contains(m.View(), "> Exit") {
 		t.Fatal(m.View())
