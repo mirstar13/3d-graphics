@@ -25,6 +25,7 @@ const starterMain = `package main
 
 import (
 	"log"
+	"os"
 
 	"github.com/mirstar13/go-3d-graphics/creator"
 )
@@ -38,6 +39,13 @@ func main() {
 	game, err := creator.Open(".", update)
 	if err != nil {
 		log.Fatal(err)
+	}
+	defer game.Close()
+	if len(os.Args) == 2 && os.Args[1] == "-view" {
+		if err := game.RunTerminal("Q quit"); err != nil {
+			log.Fatal(err)
+		}
+		return
 	}
 	if err := game.Step(); err != nil {
 		log.Fatal(err)

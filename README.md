@@ -68,7 +68,9 @@ named behavior to an entity. Set `behavior_worker` in `project.yaml` to a
 project executable under `assets/`, then use **Ctrl+W** for Scripted Play.
 The [Behavior Workshop](examples/behavior-workshop/README.md) demonstrates
 two crates with different settings and includes C# and C++ implementations
-of the same worker protocol.
+of the same worker protocol. In newly created projects, add
+`terminal_args: [-view]` to `project.yaml` to open the interactive terminal
+view through **Ctrl+G** after building.
 
 
 ## Start menu
