@@ -53,8 +53,8 @@ inspector.
 Use **Ctrl+Y** during Play, at the audio cue browser, or in an interactive game
 to toggle mute. A pressure plate plays once when it becomes occupied. Go game
 behaviors can call `world.PlaySound("plate_down")` during a tick. Set
-`win_sound` and `loss_sound` in `project.yaml` to registered cue IDs for round
-results. Go behaviors can call `world.FinishRound(true)` to win or
+`win_sound` and `loss_sound` in `project.yaml` or use **Use on win** and
+**Use on loss** in the editor cue browser to select round result sounds. Go behaviors can call `world.FinishRound(true)` to win or
 `world.FinishRound(false)` to lose after the current tick succeeds. Export
 includes the project's WAV assets.
 

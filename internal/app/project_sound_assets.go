@@ -46,10 +46,33 @@ func (m *projectEditorModel) soundBrowser() string {
 		if i == m.soundSelection {
 			prefix = "> "
 		}
-		fmt.Fprintln(&out, prefix+cues[i])
+		label := cues[i]
+		if label == m.project.Manifest.WinSound {
+			label += " · Win"
+		}
+		if cues[i] == m.project.Manifest.LossSound {
+			label += " · Loss"
+		}
+		fmt.Fprintln(&out, prefix+label)
 	}
 	out.WriteString("Arrows choose | Enter assign to plate | I import | A audition | S stop | Esc close\n")
 	return out.String()
+}
+
+func (m *projectEditorModel) setResultCue(won bool, cue string) {
+	if err := m.project.SaveResultSound(won, cue); err != nil {
+		m.message = err.Error()
+		return
+	}
+	kind := "Loss"
+	if won {
+		kind = "Win"
+	}
+	if cue == "" {
+		m.message = kind + " cue cleared"
+	} else {
+		m.message = kind + " cue set to " + cue
+	}
 }
 
 func (m *projectEditorModel) updateSoundBrowser(key string) {
@@ -63,6 +86,9 @@ func (m *projectEditorModel) updateSoundBrowser(key string) {
 		m.audition.Close()
 		m.message = "Audition stopped"
 		return
+	case "clear-win", "clear-loss":
+		m.setResultCue(key == "clear-win", "")
+		return
 	case "ctrl+y":
 		m.toggleAudioMute()
 		return
@@ -72,6 +98,8 @@ func (m *projectEditorModel) updateSoundBrowser(key string) {
 	}
 	cue := cues[m.soundSelection]
 	switch key {
+	case "win", "loss":
+		m.setResultCue(key == "win", cue)
 	case "up":
 		m.soundSelection = (m.soundSelection + len(cues) - 1) % len(cues)
 	case "down", "tab":

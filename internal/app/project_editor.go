@@ -936,7 +936,7 @@ func (m projectEditorModel) View() string {
 		}
 
 	}
-	out.WriteString("\n" + m.message)
+	out.WriteString("\n" + printableEditorText(m.message))
 	view := out.String()
 	view = fitView(view, m.width, m.height)
 	return m.stylePreview(view)

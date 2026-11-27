@@ -55,7 +55,7 @@ func (m *projectEditorModel) scenePanel() string {
 	title, v := sceneRow(s, m.sceneField)
 	value, _ := json.Marshal(v)
 	if m.modal == "scene_edit" {
-		return "Edit " + title + " (JSON)\n" + m.draft + "\nEnter apply | Ctrl+U clear | Esc cancel"
+		return "Edit " + title + " (JSON)\n" + printableEditorText(m.draft) + "\nEnter apply | Ctrl+U clear | Esc cancel"
 	}
 	return fmt.Sprintf("Scene settings\nUp/Down select | Enter edit | L add light | D delete\nC reset camera | R reset lighting | S inherit simulation | O clear objective | Esc close\n> %s\n%s", title, value)
 }

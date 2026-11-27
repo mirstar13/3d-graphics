@@ -63,13 +63,21 @@ func TestEditorAudioClickAssignAndReopen(t *testing.T) {
 			t.Fatal("stopped audition still emits PCM")
 		}
 	}
+	_, hits := model.dialogLayout()
+	for _, hit := range hits {
+		if hit.button.key == "win" {
+			next, _ := model.Update(tea.MouseMsg{X: hit.x, Y: hit.y, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+			model = next.(projectEditorModel)
+			break
+		}
+	}
 	model, _ = editorKey(model, tea.KeyMsg{Type: tea.KeyEnter})
 	model.save()
 	reopened, err := project.Open(p.Root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reopened.Scene.Entities[0].PlateSound != "plate_down" {
+	if reopened.Manifest.WinSound != "plate_down" || reopened.Scene.Entities[0].PlateSound != "plate_down" {
 		t.Fatal(model.message, reopened.Scene.Entities[0].PlateSound)
 	}
 }

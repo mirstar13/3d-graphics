@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -63,12 +64,12 @@ func (m *projectEditorModel) readDirectory(dir string) bool {
 
 func (m projectEditorModel) fileDialog() editorDialog {
 	var body strings.Builder
-	body.WriteString("Browse " + m.files.directory + "\n")
+	body.WriteString("Browse " + printableEditorText(m.files.directory) + "\n")
 	visible := max(1, m.height-6)
 	first := max(0, m.fileSelection-visible+1)
 	end := min(len(m.files.names), first+visible)
 	for i := first; i < end; i++ {
-		writeChoice(&body, m.files.names[i], m.fileSelection == i)
+		writeChoice(&body, printableEditorText(m.files.names[i]), m.fileSelection == i)
 	}
 	buttons := []editorButton{{"Cancel", "esc"}, {"Open selection", "enter"}, {"Parent", "ui.up_dir"}, {"Previous", "up"}, {"Next", "down"}}
 	if m.files.returnModal == "new" || m.files.returnModal == "open" {
@@ -105,4 +106,13 @@ func (m projectEditorModel) fileKey(key string) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+func printableEditorText(name string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return '�'
+		}
+		return r
+	}, name)
 }

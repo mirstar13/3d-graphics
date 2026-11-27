@@ -54,7 +54,7 @@ func (m projectEditorModel) dialog() editorDialog {
 		return editorDialog{body: m.toolsView(), listRow: 1, first: first, end: min(len(toolLabels), first+3),
 			buttons: []editorButton{{"Edit", "enter"}, close, {"Impulse", "i"}, {"Spawn", "g"}, {"Delete runtime", "d"}, {"Reset", "r"}, {"Previous", "up"}, {"Next", "down"}}}
 	case "tool_value":
-		return form(fmt.Sprintf("Edit %s: %s_", toolLabels[m.toolField], m.draft), "Apply")
+		return form(fmt.Sprintf("Edit %s: %s_", toolLabels[m.toolField], printableEditorText(m.draft)), "Apply")
 	case "spawn_confirm":
 		e := m.spawnPreview
 		return editorDialog{body: fmt.Sprintf("Spawn preview: %s\nPosition %.2f %.2f %.2f\nSize %.2f m | Mass %.2f kg",
@@ -65,30 +65,31 @@ func (m projectEditorModel) dialog() editorDialog {
 		return editorDialog{body: m.bindingsView(), listRow: 1, first: first, end: min(len(input.Definitions()), first+3),
 			buttons: []editorButton{{"Edit", "enter"}, close, {"Defaults", "d"}, {"Previous", "up"}, {"Next", "down"}}}
 	case "binding":
-		return form(fmt.Sprintf("Bind %s: %s_\nSeparate keys with commas.", input.Definitions()[m.bindingSelected].Label, m.draft), "Save")
+		return form(fmt.Sprintf("Bind %s: %s_\nSeparate keys with commas.", input.Definitions()[m.bindingSelected].Label, printableEditorText(m.draft)), "Save")
 	case "sound_assets":
 		first := max(0, m.soundSelection-1)
 		return editorDialog{body: m.soundBrowser(), listRow: 1, first: first, end: min(len(m.project.Manifest.Sounds), first+4),
-			buttons: []editorButton{{"Import", "i"}, {"Audition", "a"}, {"Stop", "s"}, {"Assign", "enter"}, close, {"Mute", "ctrl+y"}, {"Previous", "up"}, {"Next", "down"}}}
+			buttons: []editorButton{{"Import", "i"}, {"Audition", "a"}, {"Stop", "s"}, {"Assign", "enter"}, close, {"Mute", "ctrl+y"}, {"Previous", "up"}, {"Next", "down"},
+				{"Use on win", "win"}, {"Use on loss", "loss"}, {"Clear win", "clear-win"}, {"Clear loss", "clear-loss"}}}
 	case "sound_import":
-		return form("WAV file path  "+m.draft+"_", "Import")
+		return form("WAV file path  "+printableEditorText(m.draft)+"_", "Import")
 	case "mesh_assets":
 		first := max(0, m.meshSelection-1)
 		return editorDialog{body: m.meshBrowser(), listRow: 1, first: first, end: min(len(m.meshPaths), first+4),
 			buttons: []editorButton{{"Import GLB", "i"}, {"Assign", "enter"}, close, {"Previous", "up"}, {"Next", "down"}}}
 	case "mesh_import":
-		return form("Import GLB file: "+m.draft+"_", "Import")
+		return form("Import GLB file: "+printableEditorText(m.draft)+"_", "Import")
 	case "assets":
 		first := max(0, m.assetSelected-1)
 		return editorDialog{body: m.resourceBrowser(), listRow: 1, first: first, end: min(len(m.assets)+1, first+3),
 			buttons: []editorButton{{"Add / open", "enter"}, {"Edit source", "e"}, close, {"Previous", "up"}, {"Next", "down"}}}
 	case "extract":
-		return form("Resource name: "+m.draft+"_", "Create")
+		return form("Resource name: "+printableEditorText(m.draft)+"_", "Create")
 	case "parent":
 		return m.parentDialog()
 	case "property":
 		p := project.Properties[m.property]
-		d := form(fmt.Sprintf("Edit %s %s %v: %s_", p.Label, p.Units, p.Choices, m.draft), "Apply")
+		d := form(fmt.Sprintf("Edit %s %s %v: %s_", p.Label, p.Units, p.Choices, printableEditorText(m.draft)), "Apply")
 		for _, choice := range p.Choices {
 			d.buttons = append(d.buttons, editorButton{choice, "choice:" + choice})
 		}
@@ -105,7 +106,7 @@ func (m projectEditorModel) dialog() editorDialog {
 	case "shortcuts":
 		return editorDialog{body: m.shortcutView(), buttons: []editorButton{close}}
 	default:
-		return form(fmt.Sprintf("%s project directory: %s_", m.modal, m.draft), "Confirm")
+		return form(fmt.Sprintf("%s project directory: %s_", m.modal, printableEditorText(m.draft)), "Confirm")
 	}
 }
 
@@ -216,7 +217,7 @@ func (m projectEditorModel) dialogLayout() (string, []editorHit) {
 	}
 	// Keep asynchronous build errors and validation messages visible.
 	if m.modal != "build" && m.modal != "child" && m.modal != "export" && m.message != "" {
-		lines = append(lines[:min(len(lines), max(0, height-1))], m.message)
+		lines = append(lines[:min(len(lines), max(0, height-1))], printableEditorText(m.message))
 		hits = removeHiddenHits(hits, height-1)
 	}
 	return fitView(strings.Join(lines, "\n"), m.width, m.height), hits

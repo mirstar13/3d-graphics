@@ -181,3 +181,21 @@ func (p *Project) ImportSound(source string) (string, error) {
 	p.Manifest = next
 	return cue, nil
 }
+
+// SaveResultSound changes the project-wide cue for one round outcome.
+func (p *Project) SaveResultSound(won bool, cue string) error {
+	if cue != "" && p.Manifest.Sounds[cue] == "" {
+		return fmt.Errorf("unknown round result cue %q", cue)
+	}
+	next := p.Manifest
+	if won {
+		next.WinSound = cue
+	} else {
+		next.LossSound = cue
+	}
+	if err := writeAtomic(filepath.Join(p.Root, "project.yaml"), next); err != nil {
+		return err
+	}
+	p.Manifest = next
+	return nil
+}
