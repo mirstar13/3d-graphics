@@ -3,6 +3,7 @@ package project
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,23 +13,13 @@ import (
 	"time"
 )
 
-// New projects use the public API revision with fixed-tick behaviors and objective status.
-// The repository URL and its declared Go module path differ.
-const starterModule = `module example.org/terminalgame
+// The starter pins the creator API by its repository URL.
+//
+//go:embed starter/go.mod.tmpl
+var starterModule string
 
-go 1.24.6
-
-require github.com/mirstar13/go-3d-graphics v0.0.0
-
-replace github.com/mirstar13/go-3d-graphics => github.com/mirstar13/3d-graphics v0.0.0-20261127064335-3dfbb6bfd5aa
-`
-
-const starterSums = `gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
-gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
-gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
-github.com/mirstar13/3d-graphics v0.0.0-20261127064335-3dfbb6bfd5aa h1:OFGUgpKcvGOl7q87ez8AFoeAEi3J5lirQ6g6ksUGz1w=
-github.com/mirstar13/3d-graphics v0.0.0-20261127064335-3dfbb6bfd5aa/go.mod h1:kpY0umyhzWQIfi848UjSYMqs8wE2+hM/q6IdmQpTW7o=
-`
+//go:embed starter/go.sum.tmpl
+var starterSums string
 
 const starterMain = `package main
 
