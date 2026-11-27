@@ -17,6 +17,7 @@ type ParallelRenderer struct {
 	Pools      *engine.RenderPools
 
 	// Worker synchronization
+	bins      [][]tileDraw
 	tileQueue chan RenderTile
 	wg        sync.WaitGroup
 }
@@ -82,6 +83,10 @@ func (pr *ParallelRenderer) renderScene(scene *engine.Scene, cull bool) {
 	pr.generateTiles(nodes, scene.Camera)
 	close(pr.tileQueue)
 	pr.wg.Wait()
+	for i, bin := range pr.bins {
+		clear(bin)
+		pr.bins[i] = bin[:0]
+	}
 	pr.tileQueue = make(chan RenderTile, pr.NumWorkers*4)
 }
 
@@ -104,8 +109,13 @@ func (pr *ParallelRenderer) generateTiles(nodes []*engine.SceneNode, camera *eng
 	tilesX := (width + pr.TileSize - 1) / pr.TileSize
 	tilesY := (height + pr.TileSize - 1) / pr.TileSize
 
-	// Pre-allocate bins
-	bins := make([][]tileDraw, tilesX*tilesY)
+	// Keep bin capacity across frames, releasing scene references after the workers finish.
+	count := tilesX * tilesY
+	if cap(pr.bins) < count {
+		pr.bins = append(pr.bins[:cap(pr.bins)], make([][]tileDraw, count-cap(pr.bins))...)
+	}
+	pr.bins = pr.bins[:count]
+	bins := pr.bins
 	pr.Work = TileWork{}
 
 	add := func(draw tileDraw, minX, minY, maxX, maxY int) int {
