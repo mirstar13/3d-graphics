@@ -34,6 +34,7 @@ type projectEditorModel struct {
 	project                                        *project.Project
 	document                                       *project.Editor
 	preview, play                                  *game.Session
+	previewRenderer                                *terminal.TerminalRenderer
 	width, height, selected, property, focus, view int
 	zoom                                           float64
 	modal, draft, pendingAction, message           string
@@ -133,10 +134,16 @@ func (m *projectEditorModel) renderPreview() {
 	if m.gameViewActive() {
 		w = max(1, m.width-1)
 		h = max(1, m.height-1-strings.Count(objectiveHUD(m.play.Objective()), "\n"))
+		w, h = terminal.FitViewport(m.settings.Width, m.settings.Height, w, h)
 	}
-	renderer := terminal.NewTerminalRenderer(bufio.NewWriter(io.Discard), h, w)
-	renderer.UseColor = false
-	renderer.ShadowRenderer = nil
+	if m.previewRenderer == nil {
+		m.previewRenderer = terminal.NewTerminalRenderer(bufio.NewWriter(io.Discard), h, w)
+		m.previewRenderer.UseColor = false
+		m.previewRenderer.ShadowRenderer = nil
+	} else {
+		m.previewRenderer.Resize(w, h)
+	}
+	renderer := m.previewRenderer
 	renderer.SetLightingSystem(session.Lighting)
 	camera := session.InitialCamera
 	eye := camera.Position
@@ -671,11 +678,10 @@ func (m projectEditorModel) View() string {
 		if len(m.coloredFrame) > 0 {
 			rows = m.coloredFrame
 		}
-		available := max(0, m.height-1-strings.Count(hud, "\n"))
-		if available == 0 {
+		if len(m.frame) == 0 {
 			return hud
 		}
-		return hud + "\n" + strings.Join(rows[:min(len(rows), available)], "\n")
+		return centeredGameView(hud, rows, len(m.frame[0]), m.width, m.height)
 	}
 
 	if m.modal == "build" || m.modal == "child" || m.modal == "export" {

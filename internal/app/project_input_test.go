@@ -223,9 +223,18 @@ func TestPlayControlsAndExpandedViewport(t *testing.T) {
 	}
 	m.focus = 1
 	m, _ = editorRune(m, "p")
-	if view := m.View(); strings.Contains(view, "Hierarchy") || strings.Contains(view, "Project editor") || len(m.frame[0]) != m.width-1 {
+	if view := m.View(); strings.Contains(view, "Hierarchy") || strings.Contains(view, "Project editor") {
 		t.Fatal("editor chrome in game view")
 	}
+	if len(m.frame) != 60 || len(m.frame[0]) != 151 {
+		t.Fatalf("Play viewport got %dx%d, want 151x60", len(m.frame[0]), len(m.frame))
+	}
+	lines := strings.Split(m.View(), "\n")
+	left := strings.Repeat(" ", (m.width-1-len(m.frame[0]))/2)
+	if len(lines) < 10 || lines[1] != "" || !strings.HasPrefix(lines[10], left) {
+		t.Fatal("Play viewport is not centred below the HUD")
+	}
+
 	if m.focus != 2 || m.playActor != "box" {
 		t.Fatal("missing game focus", m.playActor)
 	}

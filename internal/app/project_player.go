@@ -170,11 +170,20 @@ func (m *projectPlayer) View() string {
 			rows[i] = string(row)
 		}
 	}
-	left := strings.Repeat(" ", max(0, (m.width-1-w)/2))
-	out.Reset()
+	return centeredGameView(hud, rows, w, m.width, m.height)
+}
+
+func centeredGameView(hud string, rows []string, frameWidth, columns, height int) string {
+	available := max(0, height-1-strings.Count(hud, "\n"))
+	rows = rows[:min(len(rows), available)]
+	if len(rows) == 0 {
+		return hud
+	}
+	left := strings.Repeat(" ", max(0, (columns-1-frameWidth)/2))
+	var out strings.Builder
 	out.WriteString(hud)
 	out.WriteByte('\n')
-	out.WriteString(strings.Repeat("\n", (availableHeight-h)/2))
+	out.WriteString(strings.Repeat("\n", (available-len(rows))/2))
 	for i, row := range rows {
 		if i > 0 {
 			out.WriteByte('\n')
