@@ -100,3 +100,36 @@ func TestBehaviorFailureStopsGame(t *testing.T) {
 		t.Fatal("failed behavior reran")
 	}
 }
+
+func TestObjectiveStatusAndRestart(t *testing.T) {
+	root := scene(t)
+	sceneFile := filepath.Join(root, "scene.yaml")
+	data, err := os.ReadFile(sceneFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = append(data, []byte("\nobjective: {text: Reach the exit, signal: exit, tick_limit: 1}\n")...)
+	if err = os.WriteFile(sceneFile, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	g, err := creator.Open(root, func(*creator.World, creator.Tick) error { calls++; return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		if err := g.Step(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if o := g.Objective(); o.Outcome != "Lost" || o.Tick != 1 || calls != 1 {
+		t.Fatalf("terminal state %+v; calls %d", o, calls)
+	}
+	fresh, err := creator.Open(root, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o := fresh.Objective(); o.Outcome != "Playing" || o.Tick != 0 {
+		t.Fatal(o)
+	}
+}
