@@ -34,3 +34,44 @@ go.work.sum
 .old
 
 /docs/
+
+# Local AI-agent configuration and generated code indexes
+.jules/
+.codex/
+.agents/
+.claude/
+.cursor/
+.gemini/
+.mcp.json
+[Aa][Gg][Ee][Nn][Tt][Ss].[Mm][Dd]
+.codegraph/
+.codegraph-*/
+
+# Local credentials and environment overrides; keep shareable templates
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+.aws/
+.ssh/
+
+# Local dependencies, caches, and Python environments
+node_modules/
+.cache/
+.local/
+__pycache__/
+.pytest_cache/
+.venv/
+venv/
+
+# Profiling and coverage artifacts
+*.prof
+*.pprof
+*.coverprofile
+coverage/
+
+# Executables produced by local Go builds
+/go-3d-graphics
+/3d-graphics
+/graphics
+/examples/pulse-dock/pulse-dock
