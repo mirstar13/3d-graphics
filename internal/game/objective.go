@@ -21,3 +21,17 @@ func (o ObjectiveStatus) Finished() bool { return o.Outcome == Won || o.Outcome 
 
 // Objective returns the session's current goal and result.
 func (s *Session) Objective() ObjectiveStatus { return s.objective }
+
+// FinishRound records a terminal result after a successful scripted tick.
+func (s *Session) FinishRound(won bool) {
+	if s.objective.Finished() {
+		return
+	}
+	s.objective.Outcome = Lost
+	if won {
+		s.objective.Outcome = Won
+	}
+	s.objective.Tick = s.World.Stats().Tick
+	s.queueResultSound()
+	s.publishSounds()
+}

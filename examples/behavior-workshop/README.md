@@ -26,7 +26,8 @@ c++ -std=c++17 -O2 -I /path/to/json-header workers/cpp/main.cpp -o assets/worker
 
 ## Use it
 
-- Run `go run .` in this example directory and press **E**. The blue crate gets
+- Run `go run .` in this example directory, select **Play** and press **E** before
+  the round times out. The blue crate gets
   a stronger impulse than the orange crate. Both workers request the `launch`
   sound once per press when the engine advertises it.
 - Open the example from the engine with

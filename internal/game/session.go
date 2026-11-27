@@ -38,18 +38,19 @@ type sensorImpulse struct {
 
 // Session owns live entities and a world; all operations belong to the update goroutine.
 type Session struct {
-	behaviorWorker *behaviorWorker
-	objective      ObjectiveStatus
-	plates         map[physics.BodyID]int
-	audiblePlates  int
-	sounds         map[string]*audio.Clip
-	soundScope     *audio.Scope
-	pendingSounds  []*audio.Clip
-	soundCues      []string
-	doorCount      int
-	projectRoot    string
-	sensorEvents   []SensorEvent
-	enterImpulses  map[physics.BodyID]sensorImpulse
+	winSound, lossSound string
+	behaviorWorker      *behaviorWorker
+	objective           ObjectiveStatus
+	plates              map[physics.BodyID]int
+	audiblePlates       int
+	sounds              map[string]*audio.Clip
+	soundScope          *audio.Scope
+	pendingSounds       []*audio.Clip
+	soundCues           []string
+	doorCount           int
+	projectRoot         string
+	sensorEvents        []SensorEvent
+	enterImpulses       map[physics.BodyID]sensorImpulse
 	// InitialCamera holds the authored view used to restore transient editor navigation.
 	InitialCamera project.CameraSettings
 	Scene         *engine.Scene
@@ -454,7 +455,11 @@ func (s *Session) applySensorImpulse(tick uint64, sensor, other physics.BodyID) 
 func (s *Session) hooks() physics.StepHooks {
 	hooks := physics.StepHooks{StopAfterStep: func() bool { return s.objective.Finished() }, AfterStep: func(t physics.Tick) {
 		s.applyEnterImpulses(t.Index)
+		prior := s.objective.Outcome
 		s.updateSignals(t.Index)
+		if s.objective.Outcome != prior && s.objective.Finished() {
+			s.queueResultSound()
+		}
 		for i := range s.entities {
 			e := &s.entities[i]
 			if !e.active || e.description.Body == "none" {

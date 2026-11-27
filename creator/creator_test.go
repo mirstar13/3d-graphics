@@ -265,3 +265,25 @@ func TestFixedTickInputReplay(t *testing.T) {
 		t.Fatal("fixed-tick replay diverged", a, b, aimA, aimB)
 	}
 }
+
+func TestBehaviorControlsRoundOutcome(t *testing.T) {
+	for _, won := range []bool{true, false} {
+		g, err := creator.Open("../examples/relay-rooms", func(world *creator.World, _ creator.Tick) error {
+			return world.FinishRound(won)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(g.Close)
+		if err := g.Step(); err != nil {
+			t.Fatal(err)
+		}
+		want := "Lost"
+		if won {
+			want = "Won"
+		}
+		if err := g.Step(); err != nil || g.Objective().Outcome != want || g.Objective().Tick != 1 {
+			t.Fatalf("scripted round did not stop at tick 1: %+v, %v", g.Objective(), err)
+		}
+	}
+}

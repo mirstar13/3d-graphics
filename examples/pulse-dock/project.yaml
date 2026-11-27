@@ -1,3 +1,15 @@
 version: 1
 name: Pulse Dock
 entry_scene: scenes/dock.yaml
+sounds:
+  win: assets/win.wav
+  loss: assets/loss.wav
+  thruster: assets/thruster.wav
+win_sound: win
+loss_sound: loss
+gameplay_bindings:
+  left: west
+  right: east
+  up: north
+  down: south
+terminal_args: [-view]

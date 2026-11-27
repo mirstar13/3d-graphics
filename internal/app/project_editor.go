@@ -232,6 +232,7 @@ func (m *projectEditorModel) newPlaySession() (*game.Session, error) {
 		clips, err = m.project.LoadSounds()
 		if err == nil {
 			err = s.ConfigureAudio(clips)
+			s.SetResultSounds(m.project.Manifest.WinSound, m.project.Manifest.LossSound)
 		}
 	}
 	if err == nil && m.scriptedPlay {

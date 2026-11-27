@@ -3,6 +3,7 @@ name: Switch Room
 objective:
   text: Open the gate with the green button, then reach the gold exit
   signal: exit
+  tick_limit: 4500
 entities:
   - id: player
     name: Player

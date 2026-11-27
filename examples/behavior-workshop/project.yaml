@@ -6,3 +6,7 @@ gameplay_bindings:
   e: launch
 sounds:
   launch: assets/launch.wav
+  win: assets/win.wav
+  loss: assets/loss.wav
+win_sound: win
+loss_sound: loss

@@ -51,7 +51,7 @@ func (r *switchRoom) key(s *game.Session, key string) error {
 		if key == "g" && r.held != "" {
 			r.held = ""
 			r.message = "Released"
-			return nil
+			return optionalSound(s, "grab")
 		}
 		eye, d := r.sight(s)
 		hit, ok, err := s.Pick(physics.Ray{Origin: eye, Direction: d, MaxDistance: 3})
@@ -71,7 +71,7 @@ func (r *switchRoom) key(s *game.Session, key string) error {
 			}
 			r.opened = true
 			r.message = "Gate open"
-			return nil
+			return optionalSound(s, "gate")
 		}
 		if hit.FileID != "crate" {
 			r.message = "Aim at the crate or green button"
@@ -81,10 +81,11 @@ func (r *switchRoom) key(s *game.Session, key string) error {
 		case "g":
 			r.held = hit.FileID
 			r.message = "Holding crate"
+			return optionalSound(s, "grab")
 		case "f":
 			r.held = ""
 			r.message = "Pushed crate"
-			return s.QueueImpulse(hit.Entity, engine.Point{X: 4 * d.X, Y: 4 * d.Y, Z: 4 * d.Z})
+			return gameImpulse(s, hit.FileID, engine.Point{X: 4 * d.X, Y: 4 * d.Y, Z: 4 * d.Z}, "push")
 		}
 	}
 	r.camera(s)

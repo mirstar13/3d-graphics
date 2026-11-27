@@ -30,6 +30,8 @@ const MaxEntities = 128
 
 // Manifest identifies a project and its initial scene. Version is the file schema.
 type Manifest struct {
+	WinSound         string             `yaml:"win_sound,omitempty"`
+	LossSound        string             `yaml:"loss_sound,omitempty"`
 	Sounds           map[string]string  `yaml:"sounds,omitempty"`
 	BehaviorWorker   string             `yaml:"behavior_worker,omitempty"`
 	TerminalArgs     []string           `yaml:"terminal_args,omitempty"`

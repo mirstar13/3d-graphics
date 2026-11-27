@@ -14,6 +14,7 @@ with tempfile.TemporaryDirectory() as directory:
     fixture.mkdir(parents=True)
     shutil.copy(repo / "examples/relay-rooms/project.yaml", fixture)
     shutil.copytree(repo / "examples/relay-rooms/scenes", fixture / "scenes")
+    shutil.copytree(repo / "examples/relay-rooms/assets", fixture / "assets")
     shutil.copy(repo / "creator/creator_test.go", target / "behavior_test.go")
     shutil.copy(repo / "go.sum", target / "go.sum")
     module = "github.com/mirstar13/go-3d-graphics"

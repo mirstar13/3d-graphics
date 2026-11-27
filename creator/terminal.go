@@ -23,6 +23,10 @@ func (g *Game) RunTerminal(help string) error {
 
 // TerminalOptions configures the HUD and the optional entry-scene restart.
 type TerminalOptions struct {
+	// Title enables the main menu and round result screens.
+	Title        string
+	Instructions string
+
 	Help      string
 	Status    func() string
 	Restart   func() Behavior
@@ -33,7 +37,7 @@ type TerminalOptions struct {
 // RunTerminalWithOptions runs the terminal host with an optional status line,
 // reticle and R restart action.
 func (g *Game) RunTerminalWithOptions(o TerminalOptions) error {
-	m := &terminalGame{game: g, options: o}
+	m := &terminalGame{game: g, options: o, menu: o.Title != ""}
 	defer g.world.CaptureMouse(false)
 	defer g.Close()
 	if !o.MuteAudio && len(g.sounds) > 0 {
@@ -41,7 +45,7 @@ func (g *Game) RunTerminalWithOptions(o TerminalOptions) error {
 		g.world.session.AttachAudio(g.audio)
 	}
 	g.world.session.EnableBehaviors(context.Background(), g.project)
-	_, err := tea.NewProgram(m, tea.WithAltScreen(), tea.WithReportFocus()).Run()
+	_, err := tea.NewProgram(m, tea.WithAltScreen(), tea.WithReportFocus(), tea.WithMouseCellMotion()).Run()
 	if err != nil {
 		return err
 	}
@@ -49,6 +53,7 @@ func (g *Game) RunTerminalWithOptions(o TerminalOptions) error {
 }
 
 type terminalGame struct {
+	menu          bool
 	game          *Game
 	frame         string
 	glyphRows     []string
@@ -81,20 +86,24 @@ func (m *terminalGame) syncCapture() tea.Cmd {
 	if on {
 		return tea.EnableMouseAllMotion
 	}
-	return tea.DisableMouse
+	return tea.EnableMouseCellMotion
 }
 
 type terminalAudioFailure struct{ err error }
 
 func (m *terminalGame) Init() tea.Cmd {
+	var tick tea.Cmd
+	if !m.menu {
+		tick = m.initFrame()
+	}
 	if m.game.audio != nil {
 		manager := m.game.audio
-		return tea.Batch(m.initFrame(), func() tea.Msg {
+		return tea.Batch(tick, func() tea.Msg {
 			<-manager.Finished()
 			return terminalAudioFailure{manager.Err()}
 		})
 	}
-	return m.initFrame()
+	return tick
 }
 
 func (m *terminalGame) initFrame() tea.Cmd {
@@ -103,7 +112,74 @@ func (m *terminalGame) initFrame() tea.Cmd {
 	return tea.Batch(m.syncCapture(), nextFrame())
 }
 
+func (m *terminalGame) screen() (terminal.GameScreen, bool) {
+	if m.options.Title == "" {
+		return terminal.GameScreen{}, false
+	}
+	screen := terminal.GameScreen{Title: m.options.Title, Detail: m.options.Instructions, Help: m.options.Help}
+	if m.menu {
+		return screen, true
+	}
+	objective := m.game.Objective()
+	switch objective.Outcome {
+	case "Won":
+		screen.Result = "You win"
+	case "Lost":
+		screen.Result = "Game over"
+	default:
+		return screen, false
+	}
+	screen.Detail = objective.Text
+	if m.options.Status != nil {
+		screen.Detail = m.options.Status()
+	}
+	screen.Help = "Enter or R replay · Esc main menu · Q quit"
+	if m.audioStatus != "" {
+		screen.Help += " · " + m.audioStatus
+	}
+	return screen, true
+}
+
+func (m *terminalGame) restartRound() (tea.Model, tea.Cmd) {
+	behavior := m.game.behavior
+	if m.options.Restart != nil {
+		behavior = m.options.Restart()
+	}
+	m.err = m.game.restart(m.game.project.Manifest.EntryScene, behavior)
+	if m.err != nil {
+		return m, tea.Quit
+	}
+	m.menu = false
+	m.keys = nil
+	m.debt = 0
+	m.last = time.Now()
+	m.draw()
+	if !m.ticking {
+		return m, m.initFrame()
+	}
+	return m, m.syncCapture()
+}
+
 func (m *terminalGame) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if screen, active := m.screen(); active {
+		switch screen.Input(msg, m.columns, m.rows) {
+		case terminal.ScreenStart:
+			return m.restartRound()
+		case terminal.ScreenMenu:
+			m.menu = true
+			m.game.world.session.Close()
+			return m, nil
+		case terminal.ScreenQuit:
+			return m, tea.Quit
+		}
+		// The screen still needs resize and audio notifications, but never
+		// schedules gameplay or passes typing into the next round.
+		switch msg.(type) {
+		case tea.WindowSizeMsg, terminalAudioFailure:
+		default:
+			return m, nil
+		}
+	}
 	switch v := msg.(type) {
 	case terminalAudioFailure:
 		if v.err != nil {
@@ -142,19 +218,7 @@ func (m *terminalGame) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				break
 			}
-			m.err = m.game.restart(m.game.project.Manifest.EntryScene, m.options.Restart())
-			if m.err != nil {
-				return m, tea.Quit
-			}
-			m.keys = nil
-			m.debt = 0
-			m.last = time.Now()
-			m.draw()
-			if !m.ticking {
-				m.ticking = true
-				return m, tea.Batch(m.syncCapture(), nextFrame())
-			}
-			return m, m.syncCapture()
+			return m.restartRound()
 		case "esc":
 			m.dragging = false
 			m.keys = nil
@@ -208,6 +272,9 @@ func (m *terminalGame) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *terminalGame) draw() {
+	if _, active := m.screen(); active {
+		return
+	}
 	if m.columns < 2 || m.rows < 2 {
 		m.frame = ""
 		return
@@ -249,4 +316,9 @@ func (m *terminalGame) draw() {
 	hud += strings.ReplaceAll(m.options.Help, "\n", " ")
 	m.frame = terminal.CenteredGameView(runewidth.Truncate(hud, m.columns-1, ""), m.glyphRows, w, m.columns, m.rows)
 }
-func (m *terminalGame) View() string { return m.frame }
+func (m *terminalGame) View() string {
+	if screen, active := m.screen(); active {
+		return screen.View(m.columns, m.rows)
+	}
+	return m.frame
+}

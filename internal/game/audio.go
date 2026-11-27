@@ -39,6 +39,20 @@ func (s *Session) Close() {
 	s.CloseBehaviors()
 }
 
+func (s *Session) SetResultSounds(win, loss string) { s.winSound, s.lossSound = win, loss }
+
+func (s *Session) HasSound(cue string) bool { return s.sounds[cue] != nil }
+
+func (s *Session) queueResultSound() {
+	cue := s.winSound
+	if s.objective.Outcome == Lost {
+		cue = s.lossSound
+	}
+	if cue != "" {
+		_ = s.QueueSound(cue)
+	}
+}
+
 func (s *Session) QueueSound(cue string) error {
 	clip := s.sounds[cue]
 	if clip == nil {

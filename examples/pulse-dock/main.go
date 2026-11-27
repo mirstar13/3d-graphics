@@ -7,7 +7,8 @@
 //
 // For a real-time 3D run, use go run . -play-project examples/pulse-dock
 // -player tug from the engine checkout (both flags on one command line).
-// The editable Go entry point runs the turn-based radar cockpit.
+// The editable Go entry point opens the game menu in an interactive terminal.
+// Pass -text to use the turn-based radar cockpit.
 //
 // Copy the entire sample directory before experimenting. Move the pylon, change
 // the beacon collider or edit the objective deadline in Ctrl+E. Keep the three
@@ -25,6 +26,7 @@ import (
 	"strings"
 
 	"github.com/mirstar13/go-3d-graphics/creator"
+	"golang.org/x/term"
 )
 
 const ticksPerBurn = 15
@@ -135,8 +137,50 @@ func play(in io.Reader, out io.Writer) error {
 		}
 	}
 }
+func fly(w *creator.World, _ creator.Tick) error {
+	var impulse creator.Vec3
+	switch {
+	case w.ActionPressed("west"):
+		impulse.X = -1
+	case w.ActionPressed("east"):
+		impulse.X = 1
+	case w.ActionPressed("north"):
+		impulse.Z = 1
+	case w.ActionPressed("south"):
+		impulse.Z = -1
+	default:
+		return nil
+	}
+	tug, ok := w.Find("tug")
+	if !ok {
+		return fmt.Errorf("scene needs a tug")
+	}
+	if err := w.Impulse(tug, impulse); err != nil {
+		return err
+	}
+	return w.PlaySound("thruster")
+}
+
+func view() error {
+	g, err := creator.Open(".", fly)
+	if err != nil {
+		return err
+	}
+	return g.RunTerminalWithOptions(creator.TerminalOptions{
+		Title: "Pulse Dock", Instructions: "Guide the tug around the pylon and into the beacon.",
+		Help: "Arrows fire thrusters. Inertia carries the tug between burns.",
+	})
+}
+
 func main() {
-	if err := play(os.Stdin, os.Stdout); err != nil {
+	var err error
+	if len(os.Args) == 2 && os.Args[1] == "-view" ||
+		len(os.Args) == 1 && term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd())) {
+		err = view()
+	} else {
+		err = play(os.Stdin, os.Stdout)
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

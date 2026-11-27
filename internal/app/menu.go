@@ -17,6 +17,11 @@ const (
 	settingsPage
 )
 
+var extraExamples = []struct{ folder, label, description string }{
+	{"bank-shot", "Bank Shot", "Ricochet a puck around the blocker with one shot."},
+	{"lift-run", "Lift Run", "Ride a launch pad and land on the raised platform."},
+}
+
 type menuModel struct {
 	settings      config.Settings
 	path          string
@@ -28,6 +33,7 @@ type menuModel struct {
 	start         bool
 	playSample    bool
 	switchRoom    bool
+	example       string
 	projectEditor bool
 	editorAction  string
 }
@@ -77,6 +83,32 @@ func (m menuModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 	}
+	if mouse, ok := message.(tea.MouseMsg); ok && mouse.Action == tea.MouseActionPress {
+		selected, count := &m.selected, 4
+		if m.page == scenePage {
+			selected, count = &m.scene, catalogSize()
+		}
+		first, visible := m.menuRows(*selected)
+		switch mouse.Button {
+		case tea.MouseButtonWheelUp:
+			*selected = max(0, *selected-1)
+		case tea.MouseButtonWheelDown:
+			*selected = min(count-1, *selected+1)
+		case tea.MouseButtonLeft:
+			row := mouse.Y - 2
+			if row >= 0 && row < visible && first+row < count && mouse.X >= 0 && mouse.X < m.width-1 {
+				*selected = first + row
+				return m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+			}
+			if m.page == scenePage {
+				lines := strings.Split(m.View(), "\n")
+				if mouse.Y >= 0 && mouse.Y < len(lines) && strings.HasPrefix(lines[mouse.Y], "[Back]") && mouse.X >= 0 && mouse.X < len("[Back]") {
+					return m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+				}
+			}
+		}
+		return m, nil
+	}
 	key, ok := message.(tea.KeyMsg)
 	if !ok {
 		return m, nil
@@ -98,7 +130,11 @@ func (m menuModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			case len(demo.Names) + 1:
 				m.projectEditor, m.editorAction = true, "open"
 			default:
-				m.settings.Demo, m.start = m.scene+1, true
+				if m.scene >= len(demo.Names)+3 {
+					m.example = extraExamples[m.scene-len(demo.Names)-3].folder
+				} else {
+					m.settings.Demo, m.start = m.scene+1, true
+				}
 			}
 			return m, tea.Quit
 		}
@@ -138,17 +174,15 @@ func (m menuModel) View() string {
 	items := []string{"Load scene / project", "Settings", "New scene / project", "Exit"}
 	selected := m.selected
 	if m.page == scenePage {
-		title, help = "Load scene / project", "Up/Down select | Enter load | Esc back"
+		title, help = "Load scene / project", "[Back] | Up/Down select | Enter load | Esc back"
 		items, selected = append(append([]string{}, demo.Names...), "Pulse Dock (example game)", "Open project directory…", "Switch Room (first-person game)"), m.scene
+		for _, example := range extraExamples {
+			items = append(items, example.label)
+		}
 	}
 	var out strings.Builder
 	out.WriteString(title + "\n\n")
-	reserved := 5
-	if m.page == scenePage && m.height >= 9 {
-		reserved = 7
-	}
-	visible := max(1, m.height-reserved)
-	first := max(0, selected-visible+1)
+	first, visible := m.menuRows(selected)
 	for index := first; index < min(len(items), first+visible); index++ {
 		prefix := "  "
 		if index == selected {
@@ -164,6 +198,8 @@ func (m menuModel) View() string {
 			description = demo.PresetAt(selected).Description
 		} else if selected == len(demo.Names) {
 			description = "Play Pulse Dock. Steer the tug with the arrow keys."
+		} else if selected >= len(demo.Names)+3 {
+			description = extraExamples[selected-len(demo.Names)-3].description
 		}
 		out.WriteString("\n" + description + "\n")
 	}
@@ -171,9 +207,18 @@ func (m menuModel) View() string {
 	return fitView(out.String(), m.width, m.height)
 }
 
-func catalogSize() int { return len(demo.Names) + 3 }
+func (m menuModel) menuRows(selected int) (first, visible int) {
+	reserved := 5
+	if m.page == scenePage && m.height >= 9 {
+		reserved = 7
+	}
+	visible = max(1, m.height-reserved)
+	return max(0, selected-visible+1), visible
+}
+
+func catalogSize() int { return len(demo.Names) + 3 + len(extraExamples) }
 func showStartMenu(settings config.Settings, path string, openSettings bool) (menuModel, error) {
-	result, err := tea.NewProgram(newMenuModel(settings, path, openSettings), tea.WithAltScreen()).Run()
+	result, err := tea.NewProgram(newMenuModel(settings, path, openSettings), tea.WithAltScreen(), tea.WithMouseCellMotion()).Run()
 	if err != nil {
 		return menuModel{}, err
 	}

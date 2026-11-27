@@ -25,15 +25,6 @@ func TestNativePulseDockRelease(t *testing.T) {
 
 func TestNativeRelayRoomsRelease(t *testing.T) {
 	output := runNativeRelease(t, "relay-rooms", "u\nv\nv\nr\nv\nq\n", func(root string) {
-		repo, err := filepath.Abs("../..")
-		if err != nil {
-			t.Fatal(err)
-		}
-		cmd := exec.Command("go", "mod", "edit", "-replace=github.com/mirstar13/go-3d-graphics="+repo)
-		cmd.Dir = root
-		if output, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("go mod edit: %v\n%s", err, output)
-		}
 		manifest := filepath.Join(root, "project.yaml")
 		data, err := os.ReadFile(manifest)
 		if err != nil {
@@ -54,6 +45,15 @@ func runNativeRelease(t *testing.T, example, input string, prepare func(string))
 	root := filepath.Join(parent, "Sample source")
 	if err := os.CopyFS(root, os.DirFS(filepath.Join("../../examples", example))); err != nil {
 		t.Fatal(err)
+	}
+	repo, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	modCmd := exec.Command("go", "mod", "edit", "-replace=github.com/mirstar13/go-3d-graphics="+repo)
+	modCmd.Dir = root
+	if output, err := modCmd.CombinedOutput(); err != nil {
+		t.Fatalf("go mod edit: %v\n%s", err, output)
 	}
 	if prepare != nil {
 		prepare(root)

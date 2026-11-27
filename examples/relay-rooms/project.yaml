@@ -13,3 +13,9 @@ gameplay_bindings:
   a: move_left
   s: move_back
   d: move_right
+sounds:
+  win: assets/win.wav
+  loss: assets/loss.wav
+  relay: assets/relay.wav
+win_sound: win
+loss_sound: loss

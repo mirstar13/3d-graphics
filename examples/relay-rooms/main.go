@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/mirstar13/go-3d-graphics/creator"
+	"golang.org/x/term"
 )
 
 func relayBehavior(out io.Writer) creator.Behavior {
@@ -43,6 +44,7 @@ func play(in io.Reader, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	defer game.Close()
 	fmt.Fprintln(out, "Submit an action key from project.yaml (default U), R restart, Q quit")
 	keys := bufio.NewScanner(in)
 	for {
@@ -68,10 +70,17 @@ func runView() error {
 	status := ""
 	restart := func() creator.Behavior {
 		status = "Find the relay"
-		finished := false
-		return func(w *creator.World, _ creator.Tick) error {
-			if finished {
-				return nil
+		arrived := false
+		return func(w *creator.World, tick creator.Tick) error {
+			if arrived {
+				arrived = false
+				if err := w.PlaySound("relay"); err != nil {
+					return err
+				}
+			}
+			if tick.Index >= 2400 {
+				status = "The relay timed out"
+				return w.FinishRound(false)
 			}
 			if w.ActionPressed("mouse_look") {
 				w.CaptureMouse(true)
@@ -115,10 +124,10 @@ func runView() error {
 					return err
 				}
 				status = "Find the exit beacon"
+				arrived = true
 			case "exit":
 				status = "Rooms complete"
-				finished = true
-				w.CaptureMouse(false)
+				return w.FinishRound(true)
 			}
 			return nil
 		}
@@ -128,6 +137,7 @@ func runView() error {
 		return err
 	}
 	return g.RunTerminalWithOptions(creator.TerminalOptions{
+		Title: "Relay Rooms", Instructions: "Activate the relay, then find the exit beacon.",
 		Help:   "WASD walk | Arrows look | M mouse | U use",
 		Status: func() string { return status }, Restart: restart, Reticle: true,
 	})
@@ -166,7 +176,8 @@ func walk(w *creator.World) error {
 
 func main() {
 	var err error
-	if len(os.Args) == 2 && os.Args[1] == "-view" {
+	if len(os.Args) == 2 && os.Args[1] == "-view" ||
+		len(os.Args) == 1 && term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd())) {
 		err = runView()
 	} else {
 		err = play(os.Stdin, os.Stdout)

@@ -148,15 +148,18 @@ func Run() {
 			return
 		}
 		settings = menu.settings
-		if menu.playSample || menu.switchRoom {
-			name, actor := "pulse-dock", "tug"
+		if menu.playSample || menu.switchRoom || menu.example != "" {
+			name := menu.example
+			if menu.playSample {
+				name = "pulse-dock"
+			}
 			if menu.switchRoom {
-				name, actor = "switch-room", "player"
+				name = "switch-room"
 			}
 			path := sampleProjectPath(name)
 			if path == "" {
 				fmt.Fprintln(os.Stderr, "Cannot locate examples/"+name)
-			} else if err := runProjectPlayer(path, actor, menu.switchRoom, settings.Color, settings.Physics.WorldOptions(), settings.Width, settings.Height); err != nil {
+			} else if err := runPlayer(path, exampleProfiles[name], true, settings.Color, settings.Physics.WorldOptions(), settings.Width, settings.Height); err != nil {
 				fmt.Fprintln(os.Stderr, err)
 			}
 			continue

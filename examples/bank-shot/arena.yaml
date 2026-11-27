@@ -1,0 +1,73 @@
+version: 1
+name: Bank Shot
+simulation: {gravityy: 0}
+objective:
+  text: Bank the puck around the blocker and into the green goal
+  signal: goal
+  tick_limit: 600
+camera:
+  position: {x: 0, y: 15, z: -11}
+  target: {x: 0, y: 0, z: 0}
+  fovx: 70
+  fovy: 55
+  near: 0.2
+  far: 60
+entities:
+  - id: puck
+    name: Puck
+    shape: sphere
+    body: dynamic
+    position: {x: 0, y: 0, z: -5}
+    size: {x: 0.2, y: 0.2, z: 0.2}
+    sphere_ccd: "on"
+    linear_damping: 0
+    restitution: 1
+    friction: 0
+    mass: 1
+    color: {r: 254, g: 200, b: 67}
+  - id: board
+    name: Board
+    shape: box
+    body: none
+    position: {x: 0, y: -0.45, z: 0}
+    size: {x: 4, y: 0.15, z: 6}
+    mass: 1
+    color: {r: 44, g: 78, b: 115}
+  - id: left_wall
+    name: Left rail
+    shape: box
+    body: static
+    position: {x: -4, y: 0, z: 0}
+    size: {x: 0.15, y: 0.35, z: 6}
+    restitution: 1
+    friction: 0
+    mass: 1
+    color: {r: 82, g: 150, b: 211}
+  - id: right_wall
+    name: Right rail
+    shape: box
+    body: static
+    position: {x: 4, y: 0, z: 0}
+    size: {x: 0.15, y: 0.35, z: 6}
+    restitution: 1
+    friction: 0
+    mass: 1
+    color: {r: 82, g: 150, b: 211}
+  - id: blocker
+    name: Blocker
+    shape: box
+    body: static
+    position: {x: 0, y: 0, z: 0}
+    size: {x: 0.9, y: 0.55, z: 0.3}
+    mass: 1
+    color: {r: 194, g: 73, b: 83}
+  - id: goal
+    name: Goal
+    shape: box
+    body: static
+    sensor: true
+    plate_signal: goal
+    position: {x: 2.7, y: 0, z: 4}
+    size: {x: 0.65, y: 0.35, z: 0.5}
+    mass: 1
+    color: {r: 79, g: 228, b: 163}

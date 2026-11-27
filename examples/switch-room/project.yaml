@@ -3,3 +3,10 @@ name: Switch Room
 entry_scene: room.yaml
 sounds:
   plate_down: assets/plate_down.wav
+  win: assets/win.wav
+  loss: assets/loss.wav
+  gate: assets/gate.wav
+  grab: assets/grab.wav
+  push: assets/push.wav
+win_sound: win
+loss_sound: loss

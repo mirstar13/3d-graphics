@@ -1,0 +1,9 @@
+version: 1
+name: Lift Run
+entry_scene: arena.yaml
+sounds:
+  win: assets/win.wav
+  loss: assets/loss.wav
+  boost: assets/boost.wav
+win_sound: win
+loss_sound: loss

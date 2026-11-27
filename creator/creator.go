@@ -125,6 +125,15 @@ func (w *World) Impulse(e Entity, j Vec3) error {
 	return w.session.QueueImpulse(e.handle, engine.Point(j))
 }
 
+// FinishRound ends the round with a win or loss after this behavior tick succeeds.
+func (w *World) FinishRound(won bool) error {
+	if !w.owner.inBehavior {
+		return fmt.Errorf("FinishRound requires an active behavior tick")
+	}
+	w.owner.result = &won
+	return nil
+}
+
 // PlaySound requests a named project cue during the current behavior tick.
 func (w *World) PlaySound(cue string) error {
 	if !w.owner.inBehavior {
@@ -153,6 +162,7 @@ func (w *World) Contacts() []Contact {
 
 // Game owns one isolated runtime and its behavior.
 type Game struct {
+	result      *bool
 	audio       *audio.Manager
 	sounds      map[string]*audio.Clip
 	world       World
@@ -195,6 +205,7 @@ func newSession(p *project.Project, scene project.Document, sounds map[string]*a
 		err = s.ConfigureAudio(sounds)
 	}
 	if err == nil {
+		s.SetResultSounds(p.Manifest.WinSound, p.Manifest.LossSound)
 		s.World.SetPaused(true)
 		s.EnableBehaviors(context.Background(), p)
 	}
@@ -307,7 +318,7 @@ func (g *Game) StepWithInput(in Input) error {
 	defer func() {
 		g.dx, g.dy = 0, 0
 		g.stepping, g.inBehavior = false, false
-		g.keys, g.nextSession, g.nextPath = nil, nil, ""
+		g.keys, g.nextSession, g.nextPath, g.result = nil, nil, "", nil
 	}()
 	s := g.world.session
 	defer s.DiscardSounds()
@@ -323,7 +334,10 @@ func (g *Game) StepWithInput(in Input) error {
 	}
 	s.BehaviorInput(in.Keys...)
 	g.failure = s.Step()
-	if g.failure == nil && g.nextSession != nil {
+	if g.failure == nil && g.result != nil {
+		s.FinishRound(*g.result)
+	}
+	if g.failure == nil && !s.Objective().Finished() && g.nextSession != nil {
 		s.Close()
 		g.nextSession.AttachAudio(g.audio)
 		g.world.session, g.scenePath = g.nextSession, g.nextPath

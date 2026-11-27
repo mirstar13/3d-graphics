@@ -166,7 +166,8 @@ print("xterm/linux/vt100 profiles, large-grid viewport budget and exit PASS",flu
 s=Session(["-demo","1"],size=(121,321))
 s.wait(b"3D Graphics")
 s.output=b"";s.send(b"\r");s.wait(b"Switch Room")
-s.output=b"";s.send(b"\x1b[B"*9+b"\r");s.wait(b"WASD walk")
+s.output=b"";s.send(b"\x1b[B"*9+b"\r");s.wait(b"[Play]")
+s.output=b"";s.send(b"\r");s.wait(b"WASD walk")
 for rows,columns in [(24,80),(151,401)]:
     s.output=b""
     fcntl.ioctl(s.fd,termios.TIOCSWINSZ,struct.pack("HHHH",rows,columns,0,0))

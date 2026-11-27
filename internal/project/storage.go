@@ -116,6 +116,11 @@ func Open(root string) (*Project, error) {
 	if e = validateSounds(p.Manifest.Sounds); e != nil {
 		return nil, e
 	}
+	for _, cue := range []string{p.Manifest.WinSound, p.Manifest.LossSound} {
+		if cue != "" && p.Manifest.Sounds[cue] == "" {
+			return nil, fmt.Errorf("unknown round result cue %q", cue)
+		}
+	}
 	p.Scene, e = p.LoadScene(p.Manifest.EntryScene)
 	if e != nil {
 		return nil, e

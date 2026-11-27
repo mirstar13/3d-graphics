@@ -1,0 +1,10 @@
+version: 1
+name: Bank Shot
+entry_scene: arena.yaml
+sounds:
+  win: assets/win.wav
+  loss: assets/loss.wav
+  aim: assets/aim.wav
+  shoot: assets/shoot.wav
+win_sound: win
+loss_sound: loss
