@@ -24,6 +24,9 @@
 // project in a new directory. O opens an existing one. Tab cycles hierarchy,
 // inspector and viewport focus. The viewport uses the configured terminal color mode.
 // Click a viewport cell to pick geometry or scroll to zoom. Press ? for editor shortcuts. B and G add primitives. H reparents a subtree.
+// Play focuses the viewport and controls the selected dynamic body, falling back to the
+// first dynamic body in hierarchy order. Arrows move and Space jumps. Tab releases
+// viewport focus for inspection. Stopping Play restores the previous editor focus.
 // Ctrl+D duplicates it. Delete removes it. E edits an inspector property.
 // Ctrl+Z and Ctrl+Y navigate history. Ctrl+S saves authored data during Edit or Play.
 //

@@ -51,6 +51,8 @@ type projectEditorModel struct {
 	reticleU, reticleV                             float64
 	toolValues                                     [9]string
 	toolField                                      int
+	playActor                                      string
+	editFocus                                      int
 	runtimeSelection, pendingSpawn                 string
 	hitAnchor                                      *game.Anchor
 	spawnPreview                                   project.Entity
@@ -123,7 +125,7 @@ func (m *projectEditorModel) renderPreview() {
 		m.frame = nil
 		return
 	}
-	w, h := max(12, min(70, (m.width-3)/2)), m.contentHeight()
+	w, h := max(12, m.width-4-min(42, m.width/2)), m.contentHeight()
 	if m.width < 65 {
 		w = max(1, m.width-1)
 		h = max(1, m.contentHeight()-1)
@@ -215,6 +217,16 @@ func (m *projectEditorModel) startPlay() tea.Cmd {
 		m.runtimeSelection = selected.ID
 	}
 	m.view, m.zoom = 0, 1
+	if m.play == nil {
+		m.editFocus = m.focus
+	}
+	m.focus = 2
+	m.playActor = ""
+	for _, entry := range m.document.Document().Hierarchy() {
+		if entry.Body == "dynamic" && (m.playActor == "" || entry.ID == selected.ID) {
+			m.playActor = entry.ID
+		}
+	}
 	m.play = session
 	m.lastTick = time.Now()
 	m.message = "Playing a copy; Stop preserves authored edits"
@@ -405,15 +417,15 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		if key == "ctrl+c" {
-			if m.play != nil {
-				m.play = nil
-				m.renderPreview()
-				m.message = "Stopped; authored scene preserved"
+		if m.play != nil && m.focus == 2 && m.playActor != "" {
+			if impulse, ok := playerImpulse(key); ok {
+				if id, exists := m.play.Find(m.playActor); exists && !m.play.Objective().Finished() {
+					if err := m.play.QueueImpulse(id, impulse); err != nil {
+						m.message = err.Error()
+					}
+				}
 				return m, nil
 			}
-			cmd := m.begin("quit")
-			return m, cmd
 		}
 		switch key {
 		case "r":
@@ -422,6 +434,9 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				return m, cmd
 			}
 		case "f6":
+			if m.play != nil {
+				break
+			}
 			if m.project != nil && m.activeResource == nil && m.play == nil {
 				return m.startChild()
 			}
@@ -455,8 +470,9 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+s":
 			m.save()
 			return m, nil
-		case "esc", "q":
+		case "esc", "q", "ctrl+c":
 			if m.play != nil {
+				m.focus = m.editFocus
 				m.play = nil
 				m.renderPreview()
 				m.message = "Stopped; authored scene preserved"
@@ -536,6 +552,9 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				return m, cmd
 			}
 		case "f8":
+			if m.play != nil {
+				m.focus = m.editFocus
+			}
 			m.play = nil
 			m.renderPreview()
 			m.message = "Stopped; authored scene preserved"
@@ -730,7 +749,7 @@ func (m projectEditorModel) View() string {
 		}
 
 		if m.width >= 65 {
-			w := max(12, min(70, (m.width-3)/2))
+			w := max(12, m.width-4-min(42, m.width/2))
 			for i := 0; i < min(contentHeight, max(len(m.frame), len(side))); i++ {
 				a, b := "", ""
 				if i < len(m.frame) {
@@ -748,7 +767,11 @@ func (m projectEditorModel) View() string {
 		}
 		playKey := input.Help(m.project.Manifest.Bindings, input.Play)
 		if m.play != nil {
-			fmt.Fprintf(&out, "? shortcuts | F8 stop | Ctrl+L tools | %s\n", input.Help(m.project.Manifest.Bindings, input.Pause, input.Step))
+			if m.focus == 2 && m.playActor != "" {
+				fmt.Fprintf(&out, "Arrows move %s · Space jump · Tab inspect · F6 pause · F8 stop\n", m.playActor)
+			} else {
+				fmt.Fprintf(&out, "? shortcuts | F8 stop | Ctrl+L tools | %s\n", input.Help(m.project.Manifest.Bindings, input.Pause, input.Step))
+			}
 		} else {
 			fmt.Fprintf(&out, "? shortcuts | %s | E edit | Ctrl+S save | Tab focus\n", playKey)
 		}
@@ -938,5 +961,5 @@ func (m projectEditorModel) contentHeight() int {
 	if m.play != nil {
 		extra = strings.Count(objectiveHUD(m.play.Objective()), "\n")
 	}
-	return max(1, min(60, m.height-7-extra))
+	return max(1, m.height-6-extra)
 }

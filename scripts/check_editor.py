@@ -115,7 +115,7 @@ func main() {
         assert b"name: Player" in authored
         s.send(b"p"); s.wait(b"[PLAY]")
         time.sleep(.2)
-        s.send(b" "); s.wait(b"[PAUSED]")
+        s.send(b"\x1b[17~"); s.wait(b"[PAUSED]")
         s.send(b"i"); s.wait(b"Upward impulse queued")
         s.send(b"n"); s.wait(b"Pending:0")
         s.send(b"\x1b"); s.wait(b"Stopped; authored scene preserved")
@@ -200,7 +200,7 @@ func main() {
         s.send(b"0"); s.wait(b"Selection cleared")
         s.send(b"]]"); s.wait(b"> Box")
         s.send(b"v"); s.wait(b"[PLAY]")
-        s.send(b" "); s.wait(b"[PAUSED]")
+        s.send(b"\x1b[17~"); s.wait(b"[PAUSED]")
         s.send(b"i"); s.wait(b"Upward impulse queued")
         s.send(b"n"); s.wait(b"Pending:0")
         s.send(b"\x1b"); s.wait(b"Stopped; authored scene preserved")

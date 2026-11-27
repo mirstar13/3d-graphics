@@ -58,7 +58,7 @@ func TestEditorRebindingFocusAndQueuedImpulse(t *testing.T) {
 	m = resourceKey(m, tea.KeyEsc)
 	m.selectID("box")
 	m, _ = editorRune(m, "v")
-	m, _ = editorRune(m, " ")
+	m = resourceKey(m, tea.KeyF6)
 	m, _ = editorRune(m, "i")
 	if m.play == nil || !m.play.World.Stats().Paused || m.play.PendingCommands() != 1 {
 		t.Fatal("semantic impulse dispatch")
@@ -156,7 +156,7 @@ func TestBatchedActionsAndPasteIsolation(t *testing.T) {
 		t.Fatal("paste triggered action")
 	}
 	m, _ = editorRune(m, "p")
-	m, _ = editorRune(m, " ")
+	m = resourceKey(m, tea.KeyF6)
 	m, _ = editorRune(m, "ii")
 	if m.play.PendingCommands() != 2 {
 		t.Fatal("batched impulses lost or duplicated")
@@ -211,5 +211,28 @@ func TestPreviewRespectsColorMode(t *testing.T) {
 	m.renderPreview()
 	if strings.Contains(m.View(), "\x1b[") {
 		t.Fatal("monochrome view contains color escapes")
+	}
+}
+
+func TestPlayControlsAndExpandedViewport(t *testing.T) {
+	m := inputEditor(t)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 200, Height: 80})
+	m = next.(projectEditorModel)
+	if len(m.frame) <= 60 || len(m.frame[0]) <= 70 {
+		t.Fatal("viewport did not expand")
+	}
+	m.focus = 1
+	m, _ = editorRune(m, "p")
+	if m.focus != 2 || m.playActor != "box" {
+		t.Fatal("missing game focus", m.playActor)
+	}
+	m = resourceKey(m, tea.KeyRight)
+	m, _ = editorRune(m, " ")
+	if m.play.PendingCommands() != 2 || m.play.World.Stats().Paused {
+		t.Fatal("game input did not queue movement and jump")
+	}
+	m = resourceKey(m, tea.KeyEsc)
+	if m.focus != 1 {
+		t.Fatal("inspector focus lost")
 	}
 }

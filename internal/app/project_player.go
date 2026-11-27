@@ -81,19 +81,8 @@ func (m *projectPlayer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.playerID != "" {
-			var j engine.Point
-			switch key {
-			case "left":
-				j.X = -2
-			case "right":
-				j.X = 2
-			case "up":
-				j.Z = 2
-			case "down":
-				j.Z = -2
-			case " ":
-				j.Y = 5
-			default:
+			j, ok := playerImpulse(key)
+			if !ok {
 				return m, nil
 			}
 			id, _ := m.session.Find(m.playerID)
@@ -155,4 +144,23 @@ func runProjectPlayer(root, id string, options physics.Options) error {
 		return err
 	}
 	return m.err
+}
+
+func playerImpulse(key string) (engine.Point, bool) {
+	var j engine.Point
+	switch key {
+	case "left":
+		j.X = -2
+	case "right":
+		j.X = 2
+	case "up":
+		j.Z = 2
+	case "down":
+		j.Z = -2
+	case " ":
+		j.Y = 5
+	default:
+		return j, false
+	}
+	return j, true
 }
