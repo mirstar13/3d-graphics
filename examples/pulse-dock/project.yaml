@@ -1,0 +1,3 @@
+version: 1
+name: Pulse Dock
+entry_scene: scenes/dock.yaml

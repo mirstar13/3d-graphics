@@ -17,6 +17,13 @@ to omitted fields. Explicit CLI flags override file values. A missing default
 file uses built-in defaults, while a missing explicitly requested file or invalid
 YAML reports an error. Unknown keys and invalid values are rejected.
 
+## Editable sample game
+
+Open Pulse Dock with `go run . -project examples/pulse-dock`. To play its turn-based
+cockpit directly, run `go run .` inside `examples/pulse-dock`. Copy the sample
+directory to customize it. Its Go package guide (`go doc .` in that directory)
+covers editing, play and standalone export.
+
 ## Project editor (prototype)
 
 Run `go run . -editor`, select **Project editor** (or press **E**) in the start menu, or open an existing project

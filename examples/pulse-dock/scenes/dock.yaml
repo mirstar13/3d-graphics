@@ -1,0 +1,44 @@
+version: 1
+name: Docking bay
+simulation: {gravityy: 0}
+objective:
+  text: Guide the tug around the pylon to the beacon
+  signal: dock
+  tick_limit: 180
+camera:
+  position: {x: 2, y: 6, z: -6}
+  target: {x: 2, y: 0, z: 0}
+  fovx: 60
+  fovy: 40
+  near: 0.1
+  far: 80
+entities:
+  - id: tug
+    name: Tug
+    shape: sphere
+    body: dynamic
+    position: {x: 0, y: 0, z: 0}
+    size: {x: 0.32, y: 0.32, z: 0.32}
+    mass: 1
+    linear_damping: 0
+    sphere_ccd: "on"
+    color: {r: 250, g: 210, b: 60}
+  - id: pylon
+    name: Pylon
+    shape: box
+    body: static
+    position: {x: 2, y: 0, z: 0}
+    size: {x: 0.45, y: 0.7, z: 0.8}
+    mass: 1
+    color: {r: 200, g: 80, b: 80}
+  - id: beacon
+    name: Docking beacon
+    shape: sphere
+    body: static
+    sensor: true
+    plate_signal: dock
+    position: {x: 4, y: 0, z: 0}
+    size: {x: 0.45, y: 0.45, z: 0.45}
+    mesh_asset: assets/beacon.obj
+    mass: 1
+    color: {r: 50, g: 230, b: 230}
