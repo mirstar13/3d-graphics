@@ -42,7 +42,7 @@ the editor controls and `go doc ./internal/project` for scene storage and links.
 ## Start menu
 
 `go run .` opens the launcher. Use Up/Down and Enter.
-Load scene / project lists the demo scenes, the editable Pulse Dock example, and an option to open a project directory. New scene / project opens the editor’s project creation form. Click geometry in the viewport to select it and use the mouse wheel to zoom.
+Load scene / project starts a demo scene or the real-time Pulse Dock game. Choose Open project directory to edit an existing project, including the example. New scene / project opens the editor’s project creation form. Click geometry in the viewport to select it and use the mouse wheel to zoom.
 Enter starts that scene. Escape returns from the picker to the start menu.
 Leaving a running scene with X, Escape, or Ctrl+C returns to the start menu.
 Choose Exit, or press Escape or Ctrl+C in the start menu, to close the application.

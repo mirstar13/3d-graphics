@@ -113,7 +113,7 @@ func Run() {
 		}()
 	}
 	if options.playProject != "" {
-		if err := runProjectPlayer(options.playProject, options.playerID, settings.Physics.WorldOptions()); err != nil {
+		if err := runProjectPlayer(options.playProject, options.playerID, settings.Color, settings.Physics.WorldOptions()); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 		}
 		return
@@ -146,6 +146,15 @@ func Run() {
 			return
 		}
 		settings = menu.settings
+		if menu.playSample {
+			path := sampleProjectPath()
+			if path == "" {
+				fmt.Fprintln(os.Stderr, "Cannot locate examples/pulse-dock")
+			} else if err := runProjectPlayer(path, "tug", settings.Color, settings.Physics.WorldOptions()); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+			}
+			continue
+		}
 		if menu.projectEditor {
 			if err := runProjectEditor(settings, "", menu.editorAction); err != nil {
 				fmt.Fprintln(os.Stderr, err)

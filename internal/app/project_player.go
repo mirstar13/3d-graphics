@@ -20,6 +20,7 @@ type projectPlayer struct {
 	renderer      *terminal.TerminalRenderer
 	project       *project.Project
 	options       physics.Options
+	colorMode     string
 	playerID      string
 	session       *game.Session
 	last          time.Time
@@ -113,7 +114,7 @@ func (m *projectPlayer) View() string {
 		out.WriteString("Arrows move | Space jump | ")
 	}
 	out.WriteString("Q quit\n")
-	w, h := max(1, min(120, m.width-1)), max(1, min(40, m.height-4))
+	w, h := max(1, m.width-1), max(1, m.height-strings.Count(out.String(), "\n"))
 	if m.renderer == nil {
 		m.renderer = terminal.NewTerminalRenderer(bufio.NewWriter(io.Discard), h, w)
 		m.renderer.UseColor = false
@@ -124,18 +125,27 @@ func (m *projectPlayer) View() string {
 	r := m.renderer
 	r.SetLightingSystem(m.session.Lighting)
 	r.RenderScene(m.session.Scene)
+	if m.colorMode != "" && m.colorMode != "none" {
+		hud := fitView(strings.TrimSuffix(out.String(), "\n"), m.width, m.height)
+		count := max(0, m.height-1-strings.Count(hud, "\n"))
+		if count == 0 {
+			return hud
+		}
+		return hud + "\n" + strings.Join(coloredRows(r, -1, -1, m.colorMode)[:min(h, count)], "\n")
+	}
 	for _, row := range r.Surface {
 		out.WriteString(string(row))
 		out.WriteByte('\n')
 	}
 	return fitView(out.String(), m.width, m.height)
 }
-func runProjectPlayer(root, id string, options physics.Options) error {
+func runProjectPlayer(root, id, color string, options physics.Options) error {
 	p, err := project.Open(root)
 	if err != nil {
 		return err
 	}
-	m := &projectPlayer{project: p, options: options, playerID: id, width: 80, height: 24}
+	mode, _ := terminal.ResolveColorMode(color)
+	m := &projectPlayer{colorMode: mode, project: p, options: options, playerID: id, width: 80, height: 24}
 	if err = m.reset(); err != nil {
 		return err
 	}

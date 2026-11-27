@@ -100,6 +100,12 @@ func TestLauncherProjectRoutes(t *testing.T) {
 	for i, action := range []string{"sample", "open"} {
 		m.scene = len(demo.Names) + i
 		loaded, cmd := pressMenu(m, tea.KeyEnter)
+		if action == "sample" {
+			if !loaded.playSample || loaded.projectEditor || cmd == nil {
+				t.Fatal("sample should launch directly")
+			}
+			continue
+		}
 		if cmd == nil || !loaded.projectEditor || loaded.editorAction != action || loaded.start {
 			t.Fatalf("load %s route", action)
 		}

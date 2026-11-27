@@ -24,6 +24,8 @@
 // project in a new directory. O opens an existing one. Tab cycles hierarchy,
 // inspector and viewport focus. The viewport uses the configured terminal color mode.
 // Click a viewport cell to pick geometry or scroll to zoom. Press ? for editor shortcuts. B and G add primitives. H reparents a subtree.
+// Selecting Pulse Dock in the launcher starts its real-time game. Q returns to the launcher.
+// Running Play fills the viewport with the game and objective HUD. Tab opens inspection.
 // Play focuses the viewport and controls the selected dynamic body, falling back to the
 // first dynamic body in hierarchy order. Arrows move and Space jumps. Tab releases
 // viewport focus for inspection. Stopping Play restores the previous editor focus.

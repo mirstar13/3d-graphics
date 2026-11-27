@@ -24,7 +24,7 @@ func (m projectEditorModel) viewportRows() (top, visible int) {
 }
 
 func (m *projectEditorModel) viewportMouse(msg tea.MouseMsg) {
-	if m.modal != "" || m.project == nil || msg.Action != tea.MouseActionPress {
+	if m.gameViewActive() || m.modal != "" || m.project == nil || msg.Action != tea.MouseActionPress {
 		return
 	}
 	top, visible := m.viewportRows()
@@ -50,39 +50,7 @@ func (m *projectEditorModel) viewportMouse(msg tea.MouseMsg) {
 func (m *projectEditorModel) colorPreview(renderer *terminal.TerminalRenderer, x, y int) {
 	m.coloredFrame = nil
 	if m.colorMode != "" && m.colorMode != "none" {
-		codes := map[engine.Color]string{}
-		for i, cells := range renderer.Surface {
-			var line strings.Builder
-			previous := ""
-			for j, glyph := range cells {
-				color := renderer.ColorBuffer[i][j]
-				if i == y && j == x {
-					glyph, color = '+', engine.ColorWhite
-				}
-				if glyph != ' ' {
-					code, ok := codes[color]
-					if !ok {
-						code = terminal.Foreground(color, m.colorMode)
-						if code == "\x1b[30m" {
-							code = "\x1b[90m"
-						}
-						codes[color] = code
-					}
-					if code != previous {
-						line.WriteString(code)
-						previous = code
-					}
-					if glyph != '+' {
-						glyph = engine.FILLED_CHAR
-					}
-				}
-				line.WriteRune(glyph)
-			}
-			if previous != "" {
-				line.WriteString("\x1b[0m")
-			}
-			m.coloredFrame = append(m.coloredFrame, line.String())
-		}
+		m.coloredFrame = coloredRows(renderer, x, y, m.colorMode)
 	}
 }
 
@@ -104,4 +72,42 @@ func (m projectEditorModel) stylePreview(view string) string {
 		view = strings.Join(lines, "\n")
 	}
 	return view
+}
+
+func coloredRows(renderer *terminal.TerminalRenderer, x, y int, mode string) []string {
+	rows := make([]string, 0, len(renderer.Surface))
+	codes := map[engine.Color]string{}
+	for i, cells := range renderer.Surface {
+		var line strings.Builder
+		previous := ""
+		for j, glyph := range cells {
+			color := renderer.ColorBuffer[i][j]
+			if i == y && j == x {
+				glyph, color = '+', engine.ColorWhite
+			}
+			if glyph != ' ' {
+				code, ok := codes[color]
+				if !ok {
+					code = terminal.Foreground(color, mode)
+					if code == "\x1b[30m" {
+						code = "\x1b[90m"
+					}
+					codes[color] = code
+				}
+				if code != previous {
+					line.WriteString(code)
+					previous = code
+				}
+				if x < 0 || glyph != '+' {
+					glyph = engine.FILLED_CHAR
+				}
+			}
+			line.WriteRune(glyph)
+		}
+		if previous != "" {
+			line.WriteString("\x1b[0m")
+		}
+		rows = append(rows, line.String())
+	}
+	return rows
 }

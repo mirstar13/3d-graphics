@@ -130,6 +130,10 @@ func (m *projectEditorModel) renderPreview() {
 		w = max(1, m.width-1)
 		h = max(1, m.contentHeight()-1)
 	}
+	if m.gameViewActive() {
+		w = max(1, m.width-1)
+		h = max(1, m.height-1-strings.Count(objectiveHUD(m.play.Objective()), "\n"))
+	}
 	renderer := terminal.NewTerminalRenderer(bufio.NewWriter(io.Discard), h, w)
 	renderer.UseColor = false
 	renderer.ShadowRenderer = nil
@@ -149,7 +153,7 @@ func (m *projectEditorModel) renderPreview() {
 	session.Scene.Camera.SetPosition(target.X+(eye.X-target.X)*m.zoom, target.Y+(eye.Y-target.Y)*m.zoom, target.Z+(eye.Z-target.Z)*m.zoom)
 	session.Scene.Camera.LookAt(target)
 	renderer.RenderScene(session.Scene)
-	if e, ok := m.selectedEntity(); ok {
+	if e, ok := m.selectedEntity(); ok && m.play == nil {
 		if id, ok := session.Find(e.ID); ok {
 			renderer.RenderPhysicsDebug(session.SelectionLines(id), session.Scene.Camera)
 		}
@@ -159,6 +163,10 @@ func (m *projectEditorModel) renderPreview() {
 		m.frame[y] = string(row)
 	}
 	x, y := m.reticleCell(w, h)
+	if m.play != nil {
+		m.colorPreview(renderer, -1, -1)
+		return
+	}
 	row := []rune(m.frame[y])
 	row[x] = '+'
 	m.frame[y] = string(row)
@@ -561,6 +569,7 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case input.Pause:
 			if m.play != nil {
 				m.play.World.SetPaused(!m.play.World.Stats().Paused)
+				m.renderPreview()
 				m.lastTick = time.Now()
 			}
 		case input.Step:
@@ -652,7 +661,23 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	return m, nil
 }
+func (m projectEditorModel) gameViewActive() bool {
+	return m.play != nil && m.focus == 2 && m.modal == "" && !m.play.World.Stats().Paused
+}
 func (m projectEditorModel) View() string {
+	if m.gameViewActive() {
+		hud := fitView(objectiveHUD(m.play.Objective())+"[PLAY]  Tab inspect | F8 stop", m.width, m.height)
+		rows := m.frame
+		if len(m.coloredFrame) > 0 {
+			rows = m.coloredFrame
+		}
+		available := max(0, m.height-1-strings.Count(hud, "\n"))
+		if available == 0 {
+			return hud
+		}
+		return hud + "\n" + strings.Join(rows[:min(len(rows), available)], "\n")
+	}
+
 	if m.modal == "build" || m.modal == "child" || m.modal == "export" {
 		return m.buildView()
 	}
@@ -838,14 +863,7 @@ func runProjectEditor(settings config.Settings, path, action string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	m.lifetime = ctx
-	if action == "sample" {
-		path = sampleProjectPath()
-		if path == "" {
-			m.modal, m.message = "open", "Locate the examples/pulse-dock project directory."
-		}
-	} else {
-		m.modal = action
-	}
+	m.modal = action
 	if path != "" {
 		p, err := project.Open(path)
 		if err != nil {

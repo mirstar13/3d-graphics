@@ -314,10 +314,7 @@ try:
     s.send(b"q");s.wait(b"3D Graphics")
     s.send(b"\r");s.wait(b"Kinetic gallery")
     s.send(b"\x1b[A\x1b[A");s.wait(b"> Pulse Dock")
-    s.send(b"\r");s.wait(b"Opened Pulse Dock")
-    s.send(b"?");s.wait(b"Editor shortcuts")
-    s.send(b"\x1b");s.wait(b"Hierarchy")
-    s.send(b"\x1b[<0;1;4M");s.wait(b"selection cleared")
+    s.send(b"\r");s.wait(b"Arrows move | Space jump")
     s.send(b"q");s.wait(b"3D Graphics")
     s.send(b"\x1b");s.close()
 finally:

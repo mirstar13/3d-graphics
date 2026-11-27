@@ -223,6 +223,9 @@ func TestPlayControlsAndExpandedViewport(t *testing.T) {
 	}
 	m.focus = 1
 	m, _ = editorRune(m, "p")
+	if view := m.View(); strings.Contains(view, "Hierarchy") || strings.Contains(view, "Project editor") || len(m.frame[0]) != m.width-1 {
+		t.Fatal("editor chrome in game view")
+	}
 	if m.focus != 2 || m.playActor != "box" {
 		t.Fatal("missing game focus", m.playActor)
 	}

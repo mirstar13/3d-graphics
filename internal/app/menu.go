@@ -26,6 +26,7 @@ type menuModel struct {
 	width, height int
 	editor        settingsModel
 	start         bool
+	playSample    bool
 	projectEditor bool
 	editorAction  string
 }
@@ -90,7 +91,7 @@ func (m menuModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			switch m.scene {
 			case len(demo.Names):
-				m.projectEditor, m.editorAction = true, "sample"
+				m.playSample = true
 			case len(demo.Names) + 1:
 				m.projectEditor, m.editorAction = true, "open"
 			default:
@@ -157,7 +158,7 @@ func (m menuModel) View() string {
 		if selected < len(demo.Names) {
 			description = demo.PresetAt(selected).Description
 		} else if selected == len(demo.Names) {
-			description = "Open Pulse Dock in the editor. Press P to play the scene."
+			description = "Play Pulse Dock. Steer the tug with the arrow keys."
 		}
 		out.WriteString("\n" + description + "\n")
 	}
