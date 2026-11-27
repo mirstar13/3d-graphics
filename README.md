@@ -360,3 +360,26 @@ For the native export check, frame benchmark and terminal procedures, run
 `go doc ./internal/terminal`. For the project build and export controls, run
 `go doc ./internal/app`. The public gameplay API is documented by
 `go doc ./creator`.
+
+### Demo frame timing
+
+Press T during a demo to toggle update, raster and presentation timings for
+the previous frame. Start with `-frame-trace /tmp/playground.frame-trace.csv`
+to capture up to 600 completed frames from the first scene you exit. The
+trace separates framebuffer write time from total presentation time and records
+simulation ticks advanced, encoded framebuffer
+bytes before status output, and viewport dimensions. Leaving the scene prints
+p50, p95 and p99 frame intervals. Choose a new path for each capture.
+
+### Relay Rooms
+
+Run `go run .` in `examples/relay-rooms` for a turn-based example of project
+actions and room transitions. Enter U to use the relay, U again to activate
+the exit beacon, R to reload the current room, or Q to quit. Change the action
+key in `project.yaml`. To export from the engine checkout, open the example
+with `go run . -project examples/relay-rooms` and press F9.
+
+The sample builds against the engine checkout via its relative Go module
+replacement. If you copy the project elsewhere for development, point that
+replacement at your engine checkout. The extracted export runs independently
+of both source directories.

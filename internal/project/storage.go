@@ -101,20 +101,37 @@ func Open(root string) (*Project, error) {
 	if e = input.Validate(p.Manifest.Bindings); e != nil {
 		return nil, e
 	}
-	path, e := scenePath(root, p.Manifest.EntryScene)
+	for key, action := range p.Manifest.GameplayBindings {
+		if !ValidText(key, 40) || !ValidText(action, 64) ||
+			strings.TrimSpace(key) != key || strings.TrimSpace(action) != action {
+			return nil, fmt.Errorf("invalid gameplay binding %q", key)
+		}
+	}
+	p.Scene, e = p.LoadScene(p.Manifest.EntryScene)
 	if e != nil {
 		return nil, e
 	}
-	if e = decode(path, &p.Scene); e != nil {
-		return nil, fmt.Errorf("scene: %w", e)
-	}
-	if p.Scene, e = p.Resolve(p.Scene); e != nil {
-		return nil, e
-	}
-	if err := p.Scene.validateVisualFiles(root); err != nil {
-		return nil, err
-	}
 	return p, nil
+}
+
+// LoadScene validates and resolves a project-relative scene without changing the project.
+func (p *Project) LoadScene(entry string) (Document, error) {
+	path, err := scenePath(p.Root, entry)
+	if err != nil {
+		return Document{}, err
+	}
+	var raw Document
+	if err := decode(path, &raw); err != nil {
+		return Document{}, fmt.Errorf("scene: %w", err)
+	}
+	resolved, err := p.Resolve(raw)
+	if err != nil {
+		return Document{}, err
+	}
+	if err := resolved.validateVisualFiles(p.Root); err != nil {
+		return Document{}, err
+	}
+	return resolved, nil
 }
 func writeAtomic(path string, value any) error {
 	data, e := yaml.Marshal(value)

@@ -1,0 +1,10 @@
+version: 1
+name: Exit chamber
+entities:
+  - id: exit
+    name: Exit beacon
+    shape: sphere
+    body: static
+    position: {z: 2}
+    size: {x: 0.5, y: 0.5, z: 0.5}
+    mass: 1

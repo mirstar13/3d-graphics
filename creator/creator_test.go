@@ -133,3 +133,51 @@ func TestObjectiveStatusAndRestart(t *testing.T) {
 		t.Fatal(o)
 	}
 }
+
+func TestSceneChangeRetainsRoomOnErrorAndExpiresHandles(t *testing.T) {
+	const exit = "scenes/exit.yaml"
+	var triedInvalid, changed bool
+	g, err := creator.Open("../examples/relay-rooms", func(w *creator.World, _ creator.Tick) error {
+		if w.ActionPressed("use") {
+			if !triedInvalid {
+				triedInvalid = true
+				if err := w.ChangeScene("scenes/missing.yaml"); err == nil {
+					t.Error("accepted missing scene")
+				}
+				return nil
+			}
+			changed = true
+			return w.ChangeScene(exit)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	relay, ok := g.World().Find("relay")
+	if !ok {
+		t.Fatal("missing relay")
+	}
+	if err := g.StepWithKeys("u"); err != nil || !triedInvalid || g.Scene() != "scenes/relay.yaml" {
+		t.Fatalf("failed transition changed the current room: %v", err)
+	}
+	if err := g.Step(); err != nil || changed {
+		t.Fatalf("action persisted into the next tick: %v", err)
+	}
+	if err := g.StepWithKeys("u"); err != nil || !changed || g.Scene() != exit {
+		t.Fatalf("valid transition did not load the exit room: %v", err)
+	}
+	if _, err := g.World().Inspect(relay); err == nil {
+		t.Fatal("accepted a handle from the previous room")
+	}
+	beacon, ok := g.World().Find("exit")
+	if !ok {
+		t.Fatal("missing exit beacon")
+	}
+	if err := g.Restart(nil); err != nil || g.Scene() != exit {
+		t.Fatalf("restart did not reload the current room: %v", err)
+	}
+	if _, err := g.World().Inspect(beacon); err == nil {
+		t.Fatal("accepted a handle from before restart")
+	}
+}

@@ -58,7 +58,46 @@ type Tick struct {
 type Behavior func(*World, Tick) error
 
 // World exposes the running scene to behaviors.
-type World struct{ session *game.Session }
+type World struct {
+	session *game.Session
+	owner   *Game
+}
+
+// ActionPressed reports a project action in the current behavior invocation.
+// Map input tokens to actions under gameplay_bindings in project.yaml.
+func (w *World) ActionPressed(action string) bool {
+	if action == "" || !w.owner.inBehavior {
+		return false
+	}
+	for _, key := range w.owner.keys {
+		if w.owner.project.Manifest.GameplayBindings[key] == action {
+			return true
+		}
+	}
+	return false
+}
+
+// Pick returns the nearest entity along a finite world-space ray.
+func (w *World) Pick(origin, direction Vec3, distance float64) (Entity, bool, error) {
+	hit, ok, err := w.session.Pick(physics.Ray{Origin: engine.Point(origin), Direction: engine.Point(direction), MaxDistance: distance})
+	return Entity{hit.Entity}, ok, err
+}
+
+// ChangeScene validates a project-relative destination immediately. On success
+// the new scene replaces this one after its current tick finishes. Handle
+// errors in the behavior to continue playing the current scene.
+func (w *World) ChangeScene(path string) error {
+	g := w.owner
+	if !g.inBehavior || g.nextSession != nil {
+		return fmt.Errorf("one scene change can be queued by the active behavior")
+	}
+	session, err := g.loadScene(path)
+	if err != nil {
+		return err
+	}
+	g.nextSession, g.nextPath = session, path
+	return nil
+}
 
 // Find resolves a persistent scene entity ID.
 func (w *World) Find(id string) (Entity, bool) {
@@ -104,10 +143,16 @@ func (w *World) Contacts() []Contact {
 
 // Game owns one isolated runtime and its behavior.
 type Game struct {
-	world    World
-	behavior Behavior
-	failure  error
-	stepping bool
+	world       World
+	behavior    Behavior
+	failure     error
+	stepping    bool
+	inBehavior  bool
+	project     *project.Project
+	scenePath   string
+	nextPath    string
+	nextSession *game.Session
+	keys        []string
 }
 
 // Open loads the project's saved scene, resolves linked assets and applies scene
@@ -117,12 +162,46 @@ func Open(root string, b Behavior) (*Game, error) {
 	if err != nil {
 		return nil, err
 	}
-	s, err := game.NewProjectSession(p.Root, p.Scene, physics.DefaultOptions())
+	s, err := newSession(p, p.Scene)
 	if err != nil {
 		return nil, err
 	}
-	s.World.SetPaused(true)
-	return &Game{world: World{s}, behavior: b}, nil
+	g := &Game{project: p, scenePath: p.Manifest.EntryScene, behavior: b}
+	g.world = World{session: s, owner: g}
+	return g, nil
+}
+
+func newSession(p *project.Project, scene project.Document) (*game.Session, error) {
+	s, err := game.NewProjectSession(p.Root, scene, physics.DefaultOptions())
+	if err == nil {
+		s.World.SetPaused(true)
+	}
+	return s, err
+}
+
+func (g *Game) loadScene(path string) (*game.Session, error) {
+	scene, err := g.project.LoadScene(path)
+	if err != nil {
+		return nil, err
+	}
+	return newSession(g.project, scene)
+}
+
+// Scene returns the project-relative path of the current room.
+func (g *Game) Scene() string { return g.scenePath }
+
+// Restart reloads the current room and installs fresh behavior. Existing
+// entity handles expire. A failed reload leaves the current room intact.
+func (g *Game) Restart(b Behavior) error {
+	if g.stepping {
+		return fmt.Errorf("cannot restart during a game step")
+	}
+	s, err := g.loadScene(g.scenePath)
+	if err != nil {
+		return err
+	}
+	g.world.session, g.behavior, g.failure = s, b, nil
+	return nil
 }
 
 // World returns the live scene, including before the first tick.
@@ -130,7 +209,10 @@ func (g *Game) World() *World { return &g.world }
 
 // Step invokes the behavior and simulates one tick. After a behavior or
 // simulation error, subsequent calls return the failure without advancing.
-func (g *Game) Step() error {
+func (g *Game) Step() error { return g.StepWithKeys() }
+
+// StepWithKeys delivers input tokens for this tick only.
+func (g *Game) StepWithKeys(keys ...string) error {
 	if g.failure != nil || g.world.session.Objective().Finished() {
 		return g.failure
 	}
@@ -138,16 +220,25 @@ func (g *Game) Step() error {
 		return fmt.Errorf("recursive game step")
 	}
 	g.stepping = true
-	defer func() { g.stepping = false }()
+	defer func() {
+		g.stepping, g.inBehavior = false, false
+		g.keys, g.nextSession, g.nextPath = nil, nil, ""
+	}()
 	s := g.world.session
 	if g.behavior != nil {
 		stats := s.World.Stats()
-		if err := g.behavior(&g.world, Tick{stats.Tick + 1, stats.FixedStep}); err != nil {
+		g.inBehavior, g.keys = true, keys
+		err := g.behavior(&g.world, Tick{stats.Tick + 1, stats.FixedStep})
+		g.inBehavior = false
+		if err != nil {
 			g.failure = fmt.Errorf("behavior tick %d: %w", stats.Tick+1, err)
 			return g.failure
 		}
 	}
 	g.failure = s.Step()
+	if g.failure == nil && g.nextSession != nil {
+		g.world.session, g.scenePath = g.nextSession, g.nextPath
+	}
 	return g.failure
 }
 

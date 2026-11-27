@@ -1,0 +1,10 @@
+version: 1
+name: Relay chamber
+entities:
+  - id: relay
+    name: Relay
+    shape: box
+    body: static
+    position: {z: 2}
+    size: {x: 0.5, y: 0.5, z: 0.5}
+    mass: 1
