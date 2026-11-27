@@ -61,6 +61,7 @@ type BodyState struct {
 	Sleeping         bool
 }
 type body struct {
+	inverseWorld                           inertiaCache
 	inverseTensor                          InertiaTensor
 	targetActive                           bool
 	ccdStopped                             bool

@@ -2,12 +2,32 @@ package physics
 
 import "math"
 
+type inertiaCache struct {
+	rotation     quat
+	local, world InertiaTensor
+	valid        bool
+}
+
+// Each column is the old body-local inertia operation applied to a world axis.
+func rotateTensor(q quat, t InertiaTensor) InertiaTensor {
+	var world InertiaTensor
+	for i := range world {
+		v := q.RotateVector(tensorVector(t, inverseRotate(q, axis(i))))
+		world[0][i], world[1][i], world[2][i] = v.X, v.Y, v.Z
+	}
+	return world
+}
+
 func inverseInertia(b *body, v vec) vec {
 	if b.inverseMass == 0 {
 		return vec{}
 	}
-	local := inverseRotate(b.state.Rotation, v)
-	return b.state.Rotation.RotateVector(tensorVector(b.inverseTensor, local))
+	cache := &b.inverseWorld
+	rotation := b.state.Rotation
+	if !cache.valid || cache.rotation != rotation || cache.local != b.inverseTensor {
+		*cache = inertiaCache{rotation: rotation, local: b.inverseTensor, world: rotateTensor(rotation, b.inverseTensor), valid: true}
+	}
+	return tensorVector(cache.world, v)
 }
 func worldInertia(b *body, v vec) vec {
 	local := inverseRotate(b.state.Rotation, v)
