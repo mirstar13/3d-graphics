@@ -22,17 +22,21 @@ type BackendAdapter struct {
 type BackendFactory func(engine.EngineConfig) (BackendAdapter, error)
 
 var backendFactories = map[string]BackendFactory{
-	"terminal":    terminalBackend,
-	"terminal-gl": terminalBackend,
+	"terminal":           terminalBackend,
+	"terminal-gl":        terminalBackend,
+	"terminal-gl-raster": terminalBackend,
 }
 
-func isTerminalBackend(name string) bool { return name == "terminal" || name == "terminal-gl" }
+func isTerminalBackend(name string) bool {
+	return name == "terminal" || name == "terminal-gl" || name == "terminal-gl-raster"
+}
 
 func terminalBackend(config engine.EngineConfig) (BackendAdapter, error) {
 	renderer := terminal.NewTerminalRenderer(bufio.NewWriter(os.Stdout), config.Height, config.Width)
 	if config.Backend == "terminal-gl" && config.AAMode == engine.AAFXAA {
 		renderer.UseOpenGLFXAA = true
 	}
+	renderer.UseOpenGLRaster = config.Backend == "terminal-gl-raster"
 	renderer.ColorMode = config.ColorMode
 	renderer.RequestedWidth, renderer.RequestedHeight = config.RequestedWidth, config.RequestedHeight
 	return BackendAdapter{

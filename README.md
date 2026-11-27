@@ -292,6 +292,23 @@ initialization and shutdown. An adapter named example can be selected with
 A renderer that needs drawing calls on the calling thread implements
 `engine.MainThreadRenderer`.
 
+### Experimental offscreen triangle rendering
+
+On Linux amd64 or arm64 with surfaceless EGL and OpenGL 3.3, try:
+
+```sh
+go run -tags terminalgl . -renderer terminal-gl-raster -demo 1
+```
+
+OpenGL determines triangle coverage and visibility. The engine shades the
+winning triangles with its existing CPU materials, textures, and lighting,
+then presents the same terminal framebuffer. The debug line shows **GL raster**
+or **CPU raster**. The selected CPU mode handles frames with unsupported
+drivers, MSAA, wireframes, interleaved points or lines, or screen-door LOD
+transitions. Trailing points and lines use the CPU depth test.
+OpenGL coverage and depth precision may differ at triangle edges and at
+nearly coincident surfaces.
+
 ### Experimental offscreen OpenGL FXAA
 
 On Linux amd64 or arm64 with a surfaceless EGL driver that supports OpenGL 3.3,

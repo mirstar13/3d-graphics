@@ -78,6 +78,9 @@ func (pr *ParallelRenderer) renderScene(scene *engine.Scene, cull bool) {
 		nodes = nil
 		engine.FrustumCullNode(scene.Root, &frustum, &nodes)
 	}
+	if renderer.tryOpenGLRaster(nodes, scene.Camera) {
+		return
+	}
 	pr.Pools.ResetAll()
 	pr.startWorkers()
 	pr.generateTiles(nodes, scene.Camera)
@@ -300,11 +303,14 @@ func (jr *JobBasedRenderer) RenderSceneJobs(scene *engine.Scene) {
 		return
 	}
 	renderer.prepareScene(scene)
-	jr.Pools.ResetAll()
-	jr.jobQueue = make(chan RenderJob, jr.NumWorkers*8)
 	frustum := engine.BuildFrustum(scene.Camera)
 	var visibleNodes []*engine.SceneNode
 	engine.FrustumCullNode(scene.Root, &frustum, &visibleNodes)
+	if renderer.tryOpenGLRaster(visibleNodes, scene.Camera) {
+		return
+	}
+	jr.Pools.ResetAll()
+	jr.jobQueue = make(chan RenderJob, jr.NumWorkers*8)
 
 	// Start workers
 	for i := 0; i < jr.NumWorkers; i++ {

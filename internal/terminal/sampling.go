@@ -115,6 +115,10 @@ func (r *TerminalRenderer) fillTriangleWithPerPixelLighting(t *engine.Triangle, 
 	if math.Abs(area) < 1e-12 {
 		return
 	}
+	if r.collectTriangles != nil {
+		r.collectProjectedTriangle(t, camera, normal, [3]float64{x0, x1, x2}, [3]float64{y0, y1, y2}, [3]float64{z0, z1, z2}, area)
+		return
+	}
 	minX := max(r.ClipMinX, int(math.Floor(math.Min(x0, math.Min(x1, x2)))))
 	maxX := min(r.ClipMaxX-1, int(math.Floor(math.Max(x0, math.Max(x1, x2)))))
 	minY := max(r.ClipMinY, int(math.Floor(math.Min(y0, math.Min(y1, y2)))))
@@ -158,11 +162,7 @@ func (r *TerminalRenderer) fillTriangleWithPerPixelLighting(t *engine.Triangle, 
 				continue
 			}
 			a, b, c := weight0/float64(count), weight1/float64(count), weight2/float64(count)
-			invZ := a/z0 + b/z1 + c/z2
-			a, b, c = a/z0/invZ, b/z1/invZ, c/z2/invZ
-			world := engine.Point{X: a*t.P0.X + b*t.P1.X + c*t.P2.X, Y: a*t.P0.Y + b*t.P1.Y + c*t.P2.Y, Z: a*t.P0.Z + b*t.P1.Z + c*t.P2.Z}
-			u, v := a*t.UV0.U+b*t.UV1.U+c*t.UV2.U, a*t.UV0.V+b*t.UV1.V+c*t.UV2.V
-			color := r.shadeFragment(t, camera, normal, world, u, v)
+			color := r.shadeTriangleAtWeights(t, camera, normal, z0, z1, z2, a, b, c)
 			for s := range samples {
 				if visible[s] {
 					if r.sampleCount > 1 {
@@ -178,6 +178,15 @@ func (r *TerminalRenderer) fillTriangleWithPerPixelLighting(t *engine.Triangle, 
 			}
 		}
 	}
+}
+
+// shadeTriangleAtWeights reconstructs perspective-correct world coordinates and UVs.
+func (r *TerminalRenderer) shadeTriangleAtWeights(t *engine.Triangle, camera *engine.Camera, normal engine.Point, z0, z1, z2, a, b, c float64) engine.Color {
+	invZ := a/z0 + b/z1 + c/z2
+	a, b, c = a/z0/invZ, b/z1/invZ, c/z2/invZ
+	world := engine.Point{X: a*t.P0.X + b*t.P1.X + c*t.P2.X, Y: a*t.P0.Y + b*t.P1.Y + c*t.P2.Y, Z: a*t.P0.Z + b*t.P1.Z + c*t.P2.Z}
+	u, v := a*t.UV0.U+b*t.UV1.U+c*t.UV2.U, a*t.UV0.V+b*t.UV1.V+c*t.UV2.V
+	return r.shadeFragment(t, camera, normal, world, u, v)
 }
 
 // insideEdge implements the top-left rule so shared edges belong to one face.

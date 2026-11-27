@@ -35,19 +35,22 @@ func TestBackendRegistration(t *testing.T) {
 	}
 }
 
-func TestOpenGLFXAAUsesTerminalPipeline(t *testing.T) {
-	for _, mode := range []engine.AAMode{engine.AAFXAA, engine.AAMSAA4x} {
-		config := engine.EngineConfig{Backend: "terminal-gl", Width: 80, Height: 24, AAMode: mode}
-		adapter, err := createBackend(config)
-		if err != nil {
-			t.Fatal(err)
-		}
-		renderer, ok := adapter.Renderer.(*terminal.TerminalRenderer)
-		if !ok || !adapter.Terminal || !isTerminalBackend(config.Backend) {
-			t.Fatal("OpenGL FXAA lost terminal input or presentation")
-		}
-		if renderer.UseOpenGLFXAA != (mode == engine.AAFXAA) {
-			t.Fatal("OpenGL selection should affect FXAA only")
+func TestOpenGLBackendsUseTerminalPipeline(t *testing.T) {
+	for _, backend := range []string{"terminal-gl", "terminal-gl-raster"} {
+		for _, mode := range []engine.AAMode{engine.AAFXAA, engine.AAMSAA4x} {
+			config := engine.EngineConfig{Backend: backend, Width: 80, Height: 24, AAMode: mode}
+			adapter, err := createBackend(config)
+			if err != nil {
+				t.Fatal(err)
+			}
+			renderer, ok := adapter.Renderer.(*terminal.TerminalRenderer)
+			if !ok || !adapter.Terminal || !isTerminalBackend(config.Backend) {
+				t.Fatal("OpenGL backend lost terminal input or presentation")
+			}
+			if renderer.UseOpenGLFXAA != (backend == "terminal-gl" && mode == engine.AAFXAA) ||
+				renderer.UseOpenGLRaster != (backend == "terminal-gl-raster") {
+				t.Fatal("wrong OpenGL pass selected")
+			}
 		}
 	}
 }

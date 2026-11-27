@@ -20,6 +20,12 @@ type TerminalRenderer struct {
 	sampleCount         int
 	sampleDepth         []float64
 	sampleColor         []engine.Color
+	UseOpenGLRaster     bool
+	rasterDevice        rasterDevice
+	rasterError         error
+	rasterBatch         triangleBatch
+	collectTriangles    *triangleBatch
+	usedOpenGLRaster    bool
 	UseOpenGLFXAA       bool
 	fxaaDevice          fxaaDevice
 	fxaaError           error
@@ -119,7 +125,15 @@ func (r *TerminalRenderer) Initialize() error {
 		return err
 	}
 	r.restoreConsole = restore
-	if r.UseOpenGLFXAA {
+	if r.UseOpenGLRaster {
+		var err error
+		r.rasterDevice, err = openRasterDevice()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "OpenGL raster unavailable, using CPU raster: %v\n", err)
+		} else {
+			fmt.Fprintf(os.Stderr, "OpenGL raster device: %s\n", r.rasterDevice.name())
+		}
+	} else if r.UseOpenGLFXAA {
 		device, err := openFXAADevice()
 		r.fxaaDevice = device
 		if err != nil {
@@ -140,6 +154,10 @@ func (r *TerminalRenderer) Initialize() error {
 
 // Shutdown cleans up the terminal renderer
 func (r *TerminalRenderer) Shutdown() {
+	if r.rasterDevice != nil {
+		r.rasterDevice.close()
+		r.rasterDevice = nil
+	}
 	if r.fxaaDevice != nil {
 		r.fxaaDevice.close()
 		r.fxaaDevice = nil
@@ -152,6 +170,10 @@ func (r *TerminalRenderer) Shutdown() {
 	if r.restoreConsole != nil {
 		r.restoreConsole()
 		r.restoreConsole = nil
+	}
+	if r.rasterError != nil {
+		fmt.Fprintf(os.Stderr, "OpenGL raster failed, switched to CPU: %v\n", r.rasterError)
+		r.rasterError = nil
 	}
 	if r.fxaaError != nil {
 		fmt.Fprintf(os.Stderr, "OpenGL FXAA failed, switched to CPU: %v\n", r.fxaaError)
@@ -316,8 +338,11 @@ func (r *TerminalRenderer) prepareScene(scene *engine.Scene) []*engine.SceneNode
 
 // RenderScene rasterizes all enabled scene objects in traversal order.
 func (r *TerminalRenderer) RenderScene(scene *engine.Scene) {
-	for _, node := range r.prepareScene(scene) {
-		r.renderNode(node, node.Transform.GetWorldMatrix(), scene.Camera)
+	nodes := r.prepareScene(scene)
+	if !r.tryOpenGLRaster(nodes, scene.Camera) {
+		for _, node := range nodes {
+			r.renderNode(node, node.Transform.GetWorldMatrix(), scene.Camera)
+		}
 	}
 	r.EndFrame()
 }
@@ -558,6 +583,10 @@ func (r *TerminalRenderer) rasterizeTriangleWithLighting(t *engine.Triangle, cam
 
 // renderTriangleWireframe renders triangle edges
 func (r *TerminalRenderer) renderTriangleWireframe(t *engine.Triangle, camera *engine.Camera) {
+	if r.collectTriangles != nil {
+		r.collectTriangles.unsupported = true
+		return
+	}
 	line1 := engine.NewLine(t.P0, t.P1)
 	line2 := engine.NewLine(t.P1, t.P2)
 	line3 := engine.NewLine(t.P2, t.P0)
@@ -748,6 +777,13 @@ func (r *TerminalRenderer) statusLine() string {
 			r.debugBuffer.WriteString(" | ")
 		}
 		fmt.Fprintf(&r.debugBuffer, "FPS: %.1f", r.measuredFPS)
+		if r.UseOpenGLRaster {
+			if r.usedOpenGLRaster {
+				r.debugBuffer.WriteString(" | GL raster")
+			} else {
+				r.debugBuffer.WriteString(" | CPU raster")
+			}
+		}
 		if status.DroppedSeconds > 0 || status.DroppedCommands > 0 {
 			fmt.Fprintf(&r.debugBuffer, " | Drop:%.3fs Cmd:%d", status.DroppedSeconds, status.DroppedCommands)
 		}
