@@ -75,3 +75,7 @@ coverage/
 /3d-graphics
 /graphics
 /examples/pulse-dock/pulse-dock
+
+# Local planning and analysis
+/ROADMAP.md
+/reviews/
