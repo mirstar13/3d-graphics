@@ -48,6 +48,22 @@ func (m projectEditorModel) buttonText() string {
 
 func (m projectEditorModel) clickButton(msg tea.MouseMsg) (tea.Model, tea.Cmd, bool) {
 	row, buttons := m.buttonBar()
+	if m.modal == "discard" && msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft && msg.X >= 0 && msg.X < m.width-1 {
+		lines := strings.Split(m.View(), "\n")
+		if msg.Y >= 0 && msg.Y < len(lines) && strings.HasPrefix(lines[msg.Y], "[Discard]") {
+			var key tea.KeyMsg
+			switch {
+			case msg.X < len("[Discard]"):
+				key = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}}
+			case msg.X >= len("[Discard] ") && msg.X < len("[Discard] [Cancel]") && strings.HasPrefix(lines[msg.Y], "[Discard] [Cancel]"):
+				key = tea.KeyMsg{Type: tea.KeyEsc}
+			default:
+				return m, nil, false
+			}
+			next, cmd := m.Update(key)
+			return next, cmd, true
+		}
+	}
 	if m.modal != "" || msg.Action != tea.MouseActionPress || msg.Button != tea.MouseButtonLeft || msg.Y != row || row >= m.height {
 		return m, nil, false
 	}

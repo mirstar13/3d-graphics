@@ -192,6 +192,7 @@ func (m *projectEditorModel) resetPlay() {
 	}
 	session.World.SetPaused(paused)
 	m.view, m.zoom = 0, 1
+	m.lookDrag.Reset(false)
 	m.play = session
 	m.runtimeSelection = ""
 	m.pendingSpawn = ""
@@ -317,20 +318,20 @@ func (m *projectEditorModel) inspectorRows() []string {
 	}
 	return rows
 }
-func (m *projectEditorModel) inspectorSlice(visible int) []string {
+func (m *projectEditorModel) inspectorSlice(visible int) []editorRow {
 	rows := m.inspectorRows()
 	if len(rows) == 0 {
-		return []string{"(no selection)"}
+		return []editorRow{{text: "(no selection)"}}
 	}
 	selected := min(m.property, len(rows)-1)
 	first := max(0, selected-visible+1)
-	var out []string
+	var out []editorRow
 	for i := first; i < min(len(rows), first+visible); i++ {
 		prefix := "  "
 		if i == selected {
 			prefix = "> "
 		}
-		out = append(out, prefix+rows[i])
+		out = append(out, editorRow{text: prefix + rows[i], property: i + 1})
 	}
 	return out
 }

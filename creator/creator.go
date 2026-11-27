@@ -9,7 +9,6 @@ package creator
 
 import (
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/mirstar13/go-3d-graphics/internal/engine"
@@ -195,15 +194,17 @@ func (g *Game) Scene() string { return g.scenePath }
 
 // Restart reloads the current room and installs fresh behavior. Existing
 // entity handles expire. A failed reload leaves the current room intact.
-func (g *Game) Restart(b Behavior) error {
+func (g *Game) Restart(b Behavior) error { return g.restart(g.scenePath, b) }
+
+func (g *Game) restart(path string, b Behavior) error {
 	if g.stepping {
 		return fmt.Errorf("cannot restart during a game step")
 	}
-	s, err := g.loadScene(g.scenePath)
+	s, err := g.loadScene(path)
 	if err != nil {
 		return err
 	}
-	g.world.session, g.behavior, g.failure = s, b, nil
+	g.world.session, g.behavior, g.failure, g.scenePath = s, b, nil, path
 	g.capture = false
 	return nil
 }
@@ -245,14 +246,18 @@ func (w *World) CameraRay() (Vec3, Vec3) {
 // TurnCamera rotates relative to the current view in radians. Positive angles
 // turn right and up. Pitch stops just short of the poles.
 func (w *World) TurnCamera(right, up float64) {
-	if right == 0 && up == 0 {
-		return
-	}
-	c := w.session.Scene.Camera
-	eye, forward := w.CameraRay()
-	yaw := math.Atan2(forward.X, forward.Z) + right
-	pitch := max(-math.Pi/2+.001, min(math.Pi/2-.001, math.Atan2(forward.Y, math.Hypot(forward.X, forward.Z))+up))
-	c.LookAt(engine.Point{X: eye.X + math.Sin(yaw)*math.Cos(pitch), Y: eye.Y + math.Sin(pitch), Z: eye.Z + math.Cos(yaw)*math.Cos(pitch)})
+	w.session.Scene.Camera.Turn(right, up)
+}
+
+// MouseLook applies this project's configured sensitivity to captured motion.
+func (w *World) MouseLook() {
+	right, up := w.owner.project.Manifest.MouseLook.Angles(w.MouseDelta())
+	w.TurnCamera(right, up)
+}
+
+// SetCameraPosition translates the camera without changing its orientation.
+func (w *World) SetCameraPosition(eye Vec3) {
+	w.session.Scene.Camera.SetPosition(eye.X, eye.Y, eye.Z)
 }
 
 // StepWithInput delivers motion only when capture was active at tick start.

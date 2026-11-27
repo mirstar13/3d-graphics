@@ -26,6 +26,7 @@ func nextEditorTick() tea.Cmd {
 }
 
 type projectEditorModel struct {
+	lookDrag                                       input.Pointer
 	lifetime                                       context.Context
 	restartChild                                   bool
 	build                                          buildPanel
@@ -157,18 +158,17 @@ func (m *projectEditorModel) renderPreview() {
 	if m.view != 0 {
 		target = engine.Point{Y: 1}
 	}
-	session.Scene.Camera.SetPosition(target.X+(eye.X-target.X)*m.zoom, target.Y+(eye.Y-target.Y)*m.zoom, target.Z+(eye.Z-target.Z)*m.zoom)
-	session.Scene.Camera.LookAt(target)
+	if m.play == nil {
+		session.Scene.Camera.SetPosition(target.X+(eye.X-target.X)*m.zoom, target.Y+(eye.Y-target.Y)*m.zoom, target.Z+(eye.Z-target.Z)*m.zoom)
+		session.Scene.Camera.LookAt(target)
+	}
 	renderer.RenderScene(session.Scene)
 	if e, ok := m.selectedEntity(); ok && m.play == nil {
 		if id, ok := session.Find(e.ID); ok {
 			renderer.RenderPhysicsDebug(session.SelectionLines(id), session.Scene.Camera)
 		}
 	}
-	m.frame = make([]string, h)
-	for y, row := range renderer.Surface {
-		m.frame[y] = string(row)
-	}
+	m.frame = terminal.GlyphRows(m.frame, renderer.Surface)
 	x, y := m.reticleCell(w, h)
 	if m.play != nil {
 		m.colorPreview(renderer, -1, -1)
@@ -242,6 +242,7 @@ func (m *projectEditorModel) startPlay() tea.Cmd {
 			m.playActor = entry.ID
 		}
 	}
+	m.lookDrag.Reset(false)
 	m.play = session
 	m.lastTick = time.Now()
 	m.message = "Playing a copy; Stop preserves authored edits"
@@ -254,6 +255,9 @@ func (m *projectEditorModel) startPlay() tea.Cmd {
 }
 func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := message.(type) {
+	case interactiveChildResult:
+		m.message = childResult{err: msg.err}.status()
+		return m, nil
 	case childResult:
 		m.build.cancel()
 		m.build.cancel = nil
@@ -280,13 +284,32 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.build.output = "Build failed\n" + msg.err.Error()
 		}
 		return m, nil
+	case tea.BlurMsg:
+		m.lookDrag.Reset(false)
+		return m, nil
 	case tea.MouseMsg:
+		if m.gameViewActive() {
+			switch {
+			case msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonRight:
+				m.lookDrag.Captured = true
+				m.lookDrag.Reanchor()
+				m.lookDrag.Motion(msg.X, msg.Y)
+			case msg.Action == tea.MouseActionRelease:
+				m.lookDrag.EndDrag()
+			case msg.Action == tea.MouseActionMotion:
+				m.lookDrag.Motion(msg.X, msg.Y)
+			}
+		}
 		if next, cmd, ok := m.clickButton(msg); ok {
+			return next, cmd
+		}
+		if next, cmd, ok := m.clickSidebar(msg); ok {
 			return next, cmd
 		}
 		m.viewportMouse(msg)
 		return m, nil
 	case tea.WindowSizeMsg:
+		m.lookDrag.Reset(false)
 		m.width, m.height = msg.Width, msg.Height
 		m.renderPreview()
 		return m, nil
@@ -298,6 +321,12 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		now := time.Now()
 		elapsed := now.Sub(m.lastTick)
 		m.lastTick = now
+		if m.gameViewActive() {
+			dx, dy := m.lookDrag.Take()
+			m.play.Scene.Camera.Turn(m.project.Manifest.MouseLook.Angles(dx, dy))
+		} else {
+			m.lookDrag.Reset(false)
+		}
 		if err := m.play.Advance(elapsed); err != nil {
 			m.message = err.Error()
 		}
@@ -435,6 +464,14 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if m.gameViewActive() {
+			turn := map[string][2]float64{"shift+left": {-.12, 0}, "shift+right": {.12, 0}, "shift+up": {0, .1}, "shift+down": {0, -.1}}
+			if angles, ok := turn[key]; ok {
+				m.play.Scene.Camera.Turn(angles[0], angles[1])
+				m.renderPreview()
+				return m, nil
+			}
+		}
 		if m.play != nil && m.focus == 2 && m.playActor != "" {
 			if impulse, ok := playerImpulse(key); ok {
 				if id, exists := m.play.Find(m.playActor); exists && !m.play.Objective().Finished() {
@@ -451,6 +488,11 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				cmd := m.startPlay()
 				return m, cmd
 			}
+		case "ctrl+g":
+			if m.project != nil && m.play == nil && m.activeResource == nil {
+				return m.startInteractiveChild()
+			}
+			return m, nil
 		case "f6":
 			if m.play != nil {
 				break
@@ -550,6 +592,9 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				m.property = (m.property + count + delta) % count
 			}
 		case "1", "2", "3":
+			if m.play != nil {
+				break
+			}
 			m.view = 0
 			if key == "1" {
 				m.view = 1
@@ -676,7 +721,7 @@ func (m projectEditorModel) gameViewActive() bool {
 }
 func (m projectEditorModel) View() string {
 	if m.gameViewActive() {
-		hud := fitView(objectiveHUD(m.play.Objective())+m.buttonText()+" [PLAY]  Tab inspect | F8 stop", m.width, m.height)
+		hud := fitView(objectiveHUD(m.play.Objective())+m.buttonText()+" [PLAY]  Right drag look | Tab inspect | F8 stop", m.width, m.height)
 		rows := m.frame
 		if len(m.coloredFrame) > 0 {
 			rows = m.coloredFrame
@@ -726,61 +771,12 @@ func (m projectEditorModel) View() string {
 		if m.width >= 65 {
 			out.WriteString("── Viewport · click to pick · wheel to zoom ──\n")
 		}
-		side := []string{"── Hierarchy (Tab switches focus)"}
-		entities := m.hierarchy()
-		selected := m.selectionIndex()
-		for i := range entities {
-			if _, _, ok := m.document.Document().Link(entities[i].ID); ok {
-				entities[i].Name += " [linked]"
-			}
+		rows := m.sidebarRows()
+		side := make([]string, len(rows))
+		for i, row := range rows {
+			side[i] = row.text
 		}
-		first := max(0, selected-2)
-		for i := first; i < min(len(entities), first+4); i++ {
-			prefix := "  "
-			if i == selected {
-				prefix = "> "
-			}
-			side = append(side, prefix+strings.Repeat("  ", min(entities[i].Depth, 8))+entities[i].Name)
-		}
-		if len(entities) == 0 {
-			side = append(side, "(empty: B box / G sphere)")
-		}
-		focus := "Hierarchy"
-		if m.focus == 2 {
-			focus = "Viewport"
-		}
-		if m.focus == 1 {
-			focus = "Inspector"
-		}
-		modeLabel := "local"
-		if m.play != nil {
-			modeLabel = "live, read-only"
-		}
-		side = append(side, "", "Inspector ("+modeLabel+") - focus: "+focus)
-		side = append(side, m.inspectorSlice(max(2, len(m.frame)-len(side)))...)
 		contentHeight := m.contentHeight()
-		if m.width < 65 || contentHeight < 10 {
-			side = nil
-			if m.focus == 0 {
-				side = append(side, "Hierarchy (Tab: Inspector)")
-				first := max(0, selected-contentHeight+2)
-				for i := first; i < min(len(entities), first+contentHeight-1); i++ {
-					prefix := "  "
-					if i == selected {
-						prefix = "> "
-					}
-					side = append(side, prefix+strings.Repeat("  ", min(entities[i].Depth, 8))+entities[i].Name)
-				}
-			} else if m.focus == 2 {
-				side = []string{"Viewport (Tab switches focus)"}
-				if m.width < 65 {
-					side = append(side, m.frame...)
-				}
-			} else {
-				side = append(side, "Inspector ("+modeLabel+"; Tab: Viewport)")
-				side = append(side, m.inspectorSlice(max(1, contentHeight-1))...)
-			}
-		}
 
 		if m.width >= 65 {
 			w := max(12, m.width-4-min(42, m.width/2))
@@ -813,7 +809,7 @@ func (m projectEditorModel) View() string {
 	}
 	if m.modal != "" {
 		if m.modal == "discard" {
-			out.WriteString("\nUnsaved edits: D discard | Esc cancel\n")
+			out.WriteString("\n[Discard] [Cancel] Unsaved edits: D discard | Esc cancel\n")
 		} else if m.modal == "tools" {
 			out.WriteString(m.toolsView())
 		} else if m.modal == "tool_value" {
@@ -882,7 +878,7 @@ func runProjectEditor(settings config.Settings, path, action string) error {
 			return err
 		}
 	}
-	_, err := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion()).Run()
+	_, err := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion(), tea.WithReportFocus()).Run()
 	return err
 }
 
@@ -957,7 +953,7 @@ func (m projectEditorModel) shortcutView() string {
 	if m.focus == 2 {
 		out.WriteString(input.Help(bindings, input.AimUp, input.AimDown, input.AimLeft, input.AimRight) + "\n")
 	} else {
-		out.WriteString("F9 export | F6 run build | Ctrl+B build | Ctrl+E scene settings | H parent | 1/2/3 camera | +/- zoom | Q exit editor\n")
+		out.WriteString("F9 export | F6 run build | Ctrl+G run in terminal | Ctrl+B build | Ctrl+E scene settings | H parent | 1/2/3 camera | +/- zoom | Q exit editor\n")
 	}
 	if m.play != nil {
 		fmt.Fprintf(&out, "Ctrl+L tools | Impulse (%s,%s,%s) %s\n", m.toolValues[0], m.toolValues[1], m.toolValues[2], m.toolValues[3])

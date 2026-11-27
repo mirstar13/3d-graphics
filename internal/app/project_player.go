@@ -19,6 +19,7 @@ import (
 // projectPlayer owns the terminal while a saved scene runs outside the editor.
 type projectPlayer struct {
 	frame                           string
+	glyphRows                       []string
 	frameLayout                     [4]int
 	pointer                         input.Pointer
 	room                            *switchRoom
@@ -83,8 +84,9 @@ func (m *projectPlayer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		now := time.Time(v)
 		if m.room != nil {
 			dx, dy := m.pointer.Take()
-			m.room.yaw += float64(dx) * .035
-			m.room.pitch = max(-1.1, min(1.1, m.room.pitch-float64(dy)*.06))
+			right, up := m.project.Manifest.MouseLook.Angles(dx, dy)
+			m.room.yaw += right
+			m.room.pitch = max(-1.1, min(1.1, m.room.pitch+up))
 			if err := m.room.tick(m.session, now.Sub(m.last), now); err != nil {
 				m.err = err
 				return m, tea.Quit
@@ -208,10 +210,8 @@ func (m *projectPlayer) renderView() string {
 	if m.colorMode != "" && m.colorMode != "none" {
 		rows = coloredRows(r, aimX, aimY, m.colorMode)
 	} else {
-		rows = make([]string, h)
-		for i, row := range r.Surface {
-			rows[i] = string(row)
-		}
+		m.glyphRows = terminal.GlyphRows(m.glyphRows, r.Surface)
+		rows = m.glyphRows
 	}
 	return terminal.CenteredGameView(hud, rows, w, m.width, m.height)
 }

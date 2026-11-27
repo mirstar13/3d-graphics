@@ -26,3 +26,9 @@ func (p *Pointer) Take() (int, int) {
 	p.dx, p.dy = 0, 0
 	return x, y
 }
+
+// Reanchor forgets the last cell, preserving motion awaiting the next tick.
+func (p *Pointer) Reanchor() { p.known = false }
+
+// EndDrag stops collecting motion and keeps the latest delta for the next tick.
+func (p *Pointer) EndDrag() { p.Captured, p.known = false, false }

@@ -30,11 +30,13 @@ const MaxEntities = 128
 
 // Manifest identifies a project and its initial scene. Version is the file schema.
 type Manifest struct {
-	GameplayBindings map[string]string `yaml:"gameplay_bindings,omitempty"`
-	Version          int               `yaml:"version"`
-	Name             string            `yaml:"name"`
-	EntryScene       string            `yaml:"entry_scene"`
-	Bindings         input.Bindings    `yaml:"bindings,omitempty"`
+	TerminalArgs     []string           `yaml:"terminal_args,omitempty"`
+	MouseLook        input.LookSettings `yaml:"mouse_look,omitempty"`
+	GameplayBindings map[string]string  `yaml:"gameplay_bindings,omitempty"`
+	Version          int                `yaml:"version"`
+	Name             string             `yaml:"name"`
+	EntryScene       string             `yaml:"entry_scene"`
+	Bindings         input.Bindings     `yaml:"bindings,omitempty"`
 }
 
 // Entity is an authored primitive with an optional persistent parent ID.

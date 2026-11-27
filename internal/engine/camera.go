@@ -203,3 +203,15 @@ func (cam *Camera) RotateRoll(angle float64) {
 	forward := cam.Transform.GetForwardVector()
 	cam.Transform.RotateAxisAngle(forward, angle)
 }
+
+// Turn applies yaw and pitch in radians relative to the current sightline.
+// The positive directions are right and up.
+func (cam *Camera) Turn(right, up float64) {
+	if right == 0 && up == 0 || math.IsNaN(right) || math.IsNaN(up) || math.IsInf(right, 0) || math.IsInf(up, 0) {
+		return
+	}
+	eye, forward := cam.GetPosition(), cam.GetForwardVectorPoint()
+	yaw := math.Atan2(forward.X, forward.Z) + right
+	pitch := Clamp(math.Atan2(forward.Y, math.Hypot(forward.X, forward.Z))+up, -math.Pi/2+.001, math.Pi/2-.001)
+	cam.LookAt(Point{X: eye.X + math.Sin(yaw)*math.Cos(pitch), Y: eye.Y + math.Sin(pitch), Z: eye.Z + math.Cos(yaw)*math.Cos(pitch)})
+}

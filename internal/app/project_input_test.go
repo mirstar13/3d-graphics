@@ -280,3 +280,43 @@ func TestEditorButtonHitRegions(t *testing.T) {
 		t.Fatal("partial button visible")
 	}
 }
+
+func TestEditorSidebarClickAndUndo(t *testing.T) {
+	m := inputEditor(t)
+	for i := 0; i < 6; i++ {
+		m, _ = editorRune(m, "b")
+	}
+	click := func(x, y int) {
+		next, _ := m.Update(tea.MouseMsg{X: x, Y: y, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+		m = next.(projectEditorModel)
+	}
+	x := max(12, m.width-4-min(42, m.width/2)) + 3
+	rows := m.sidebarRows()
+	want := rows[1].entity
+	click(x+2, 4)
+	got, ok := m.selectedEntity()
+	if !ok || got.ID != want {
+		t.Fatal("clicked the wrong scrolled row")
+	}
+	rows = m.sidebarRows()
+	for i, row := range rows {
+		if row.property == 1 {
+			click(x+2, 3+i)
+			break
+		}
+	}
+	if m.modal != "property" {
+		t.Fatal("click did not open property")
+	}
+	m.draft = "Renamed"
+	m = resourceKey(m, tea.KeyEnter)
+	got, _ = m.selectedEntity()
+	if got.Name != "Renamed" {
+		t.Fatal("property did not commit")
+	}
+	m = resourceKey(m, tea.KeyCtrlZ)
+	got, _ = m.selectedEntity()
+	if got.Name == "Renamed" {
+		t.Fatal("mouse edit did not enter undo history")
+	}
+}

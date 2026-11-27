@@ -225,3 +225,43 @@ func TestMouseLookOnlyConsumesCapturedTick(t *testing.T) {
 		t.Fatal("restart capture", err)
 	}
 }
+
+func TestFixedTickInputReplay(t *testing.T) {
+	root := scene(t)
+	replay := func() (creator.State, creator.Vec3) {
+		g, err := creator.Open(root, func(w *creator.World, _ creator.Tick) error {
+			w.CaptureMouse(true)
+			w.MouseLook()
+			if x, y := w.MouseDelta(); x != 0 || y != 0 {
+				player, _ := w.Find("player")
+				_, aim := w.CameraRay()
+				return w.Impulse(player, creator.Vec3{X: aim.X, Y: aim.Y, Z: aim.Z})
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := 0; i < 90; i++ {
+			var in creator.Input
+			if i%7 == 0 {
+				in.MouseX, in.MouseY = i%3-1, -2
+			}
+			if err = g.StepWithInput(in); err != nil {
+				t.Fatal(err)
+			}
+		}
+		player, _ := g.World().Find("player")
+		state, err := g.World().Inspect(player)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, aim := g.World().CameraRay()
+		return state, aim
+	}
+	a, aimA := replay()
+	b, aimB := replay()
+	if a != b || aimA != aimB {
+		t.Fatal("fixed-tick replay diverged", a, b, aimA, aimB)
+	}
+}

@@ -101,6 +101,9 @@ func Open(root string) (*Project, error) {
 	if e = input.Validate(p.Manifest.Bindings); e != nil {
 		return nil, e
 	}
+	if !p.Manifest.MouseLook.Valid() {
+		return nil, fmt.Errorf("mouse look sensitivity must be finite and nonnegative")
+	}
 	for key, action := range p.Manifest.GameplayBindings {
 		if !ValidText(key, 40) || !ValidText(action, 64) ||
 			strings.TrimSpace(key) != key || strings.TrimSpace(action) != action {

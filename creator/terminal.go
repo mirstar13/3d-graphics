@@ -16,7 +16,21 @@ import (
 // Behaviors can request capture with World.CaptureMouse. Esc releases it,
 // Q exits, and terminals without motion reporting can still deliver keys.
 func (g *Game) RunTerminal(help string) error {
-	m := &terminalGame{game: g, help: help}
+	return g.RunTerminalWithOptions(TerminalOptions{Help: help})
+}
+
+// TerminalOptions configures the HUD and the optional entry-scene restart.
+type TerminalOptions struct {
+	Help    string
+	Status  func() string
+	Restart func() Behavior
+	Reticle bool
+}
+
+// RunTerminalWithOptions runs the terminal host with an optional status line,
+// reticle and R restart action.
+func (g *Game) RunTerminalWithOptions(o TerminalOptions) error {
+	m := &terminalGame{game: g, options: o}
 	defer g.world.CaptureMouse(false)
 	_, err := tea.NewProgram(m, tea.WithAltScreen(), tea.WithReportFocus()).Run()
 	if err != nil {
@@ -27,7 +41,11 @@ func (g *Game) RunTerminal(help string) error {
 
 type terminalGame struct {
 	game          *Game
-	help, frame   string
+	frame         string
+	glyphRows     []string
+	options       TerminalOptions
+	dragging      bool
+	ticking       bool
 	columns, rows int
 	keys          []string
 	pointer       input.Pointer
@@ -49,6 +67,7 @@ func (m *terminalGame) syncCapture() tea.Cmd {
 		return nil
 	}
 	m.pointer.Reset(on)
+	m.dragging = false
 	if on {
 		return tea.EnableMouseAllMotion
 	}
@@ -57,6 +76,7 @@ func (m *terminalGame) syncCapture() tea.Cmd {
 
 func (m *terminalGame) Init() tea.Cmd {
 	m.last = time.Now()
+	m.ticking = true
 	return tea.Batch(m.syncCapture(), nextFrame())
 }
 
@@ -65,8 +85,10 @@ func (m *terminalGame) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.columns, m.rows = v.Width, v.Height
 		m.pointer.Reset(m.pointer.Captured)
+		m.dragging = false
 		m.draw()
 	case tea.BlurMsg:
+		m.dragging = false
 		m.keys = nil
 		m.game.world.CaptureMouse(false)
 		return m, m.syncCapture()
@@ -77,7 +99,28 @@ func (m *terminalGame) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch v.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
+		case "r":
+			if m.options.Restart == nil {
+				if !m.game.world.session.Objective().Finished() {
+					m.keys = append(m.keys, "r")
+				}
+				break
+			}
+			m.err = m.game.restart(m.game.project.Manifest.EntryScene, m.options.Restart())
+			if m.err != nil {
+				return m, tea.Quit
+			}
+			m.keys = nil
+			m.debt = 0
+			m.last = time.Now()
+			m.draw()
+			if !m.ticking {
+				m.ticking = true
+				return m, tea.Batch(m.syncCapture(), nextFrame())
+			}
+			return m, m.syncCapture()
 		case "esc":
+			m.dragging = false
 			m.keys = nil
 			m.game.world.CaptureMouse(false)
 			return m, m.syncCapture()
@@ -87,7 +130,15 @@ func (m *terminalGame) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case tea.MouseMsg:
-		if v.Action == tea.MouseActionMotion {
+		switch {
+		case v.Action == tea.MouseActionPress && v.Button == tea.MouseButtonRight && m.pointer.Captured:
+			m.dragging = true
+			m.pointer.Reanchor()
+			m.pointer.Motion(v.X, v.Y)
+		case v.Action == tea.MouseActionRelease:
+			m.dragging = false
+			m.pointer.Reanchor()
+		case v.Action == tea.MouseActionMotion && (!m.game.project.Manifest.MouseLook.DragOnly || m.dragging):
 			m.pointer.Motion(v.X, v.Y)
 		}
 	case frameTick:
@@ -110,6 +161,7 @@ func (m *terminalGame) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.game.world.session.Objective().Finished() {
 			m.keys = nil
 			m.game.world.CaptureMouse(false)
+			m.ticking = false
 			m.draw()
 			return m, m.syncCapture()
 		}
@@ -135,10 +187,10 @@ func (m *terminalGame) draw() {
 	s := m.game.world.session
 	m.renderer.SetLightingSystem(s.Lighting)
 	m.renderer.RenderScene(s.Scene)
-	lines := make([]string, h)
-	for i, row := range m.renderer.Surface {
-		lines[i] = string(row)
+	if m.options.Reticle {
+		m.renderer.Surface[h/2][w/2] = '+'
 	}
+	m.glyphRows = terminal.GlyphRows(m.glyphRows, m.renderer.Surface)
 	hud := "Q quit | "
 	if m.game.MouseCaptured() {
 		hud += "Esc release | "
@@ -146,7 +198,13 @@ func (m *terminalGame) draw() {
 	if objective := m.game.Objective(); objective.Outcome != "" {
 		hud += objective.Outcome + " | "
 	}
-	hud += strings.ReplaceAll(m.help, "\n", " ")
-	m.frame = terminal.CenteredGameView(runewidth.Truncate(hud, m.columns-1, ""), lines, w, m.columns, m.rows)
+	if m.options.Restart != nil {
+		hud += "R restart | "
+	}
+	if m.options.Status != nil {
+		hud += strings.ReplaceAll(m.options.Status(), "\n", " ") + " | "
+	}
+	hud += strings.ReplaceAll(m.options.Help, "\n", " ")
+	m.frame = terminal.CenteredGameView(runewidth.Truncate(hud, m.columns-1, ""), m.glyphRows, w, m.columns, m.rows)
 }
 func (m *terminalGame) View() string { return m.frame }

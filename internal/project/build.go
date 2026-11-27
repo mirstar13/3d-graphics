@@ -130,16 +130,10 @@ func gameExecutable() string {
 // waits for exit, returning bounded stdout/stderr and the process error. Cancel
 // the context to stop the game. The editor retains ownership of terminal input.
 func (p *Project) RunBuilt(ctx context.Context) (string, error) {
-	path, err := scenePath(p.Root, filepath.Join("build", gameExecutable()))
+	cmd, err := p.BuiltCommand(ctx)
 	if err != nil {
 		return "", err
 	}
-	if _, err = os.Stat(path); os.IsNotExist(err) {
-		return "", fmt.Errorf("build the project with Ctrl+B first")
-	}
-	cmd := exec.CommandContext(ctx, path)
-	cmd.Dir = p.Root
-	cmd.WaitDelay = time.Second
 	var output compilerOutput
 	cmd.Stdout = &output
 	cmd.Stderr = &output
@@ -152,4 +146,19 @@ func (p *Project) RunBuilt(ctx context.Context) (string, error) {
 		text += "\n(game output truncated)"
 	}
 	return text, err
+}
+
+// BuiltCommand prepares a child for a host that provides its own terminal.
+func (p *Project) BuiltCommand(ctx context.Context, args ...string) (*exec.Cmd, error) {
+	path, err := scenePath(p.Root, filepath.Join("build", gameExecutable()))
+	if err != nil {
+		return nil, err
+	}
+	if _, err = os.Stat(path); os.IsNotExist(err) {
+		return nil, fmt.Errorf("build the project with Ctrl+B first")
+	}
+	cmd := exec.CommandContext(ctx, path, args...)
+	cmd.Dir = p.Root
+	cmd.WaitDelay = time.Second
+	return cmd, nil
 }

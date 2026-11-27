@@ -23,3 +23,15 @@ func CenteredGameView(hud string, rows []string, frameWidth, columns, height int
 	}
 	return out.String()
 }
+
+// GlyphRows copies framebuffer rows into reusable string storage for a text UI.
+func GlyphRows(dst []string, surface [][]rune) []string {
+	if cap(dst) < len(surface) {
+		dst = make([]string, len(surface))
+	}
+	dst = dst[:len(surface)]
+	for i, row := range surface {
+		dst[i] = string(row)
+	}
+	return dst
+}

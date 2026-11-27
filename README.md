@@ -43,7 +43,11 @@ with `go run . -project /path/to/MyGame`. Create a project, add boxes/spheres, e
 properties, save, and Play/Stop without changing the authored scene. The workspace
 has clickable New, Open, Save, Play and Stop buttons. It also includes nested visual hierarchies, reparenting, subtree duplication/deletion,
 linked scene resources, property overrides, selection outlines, undo/redo, and
-pause/step. Press **R** to extract a subtree and **A** to browse resources.
+pause/step. Click a hierarchy row to select it or an inspector property to edit it.
+During Play, drag with the right mouse button or use Shift+arrow keys to turn the
+camera. Press **Ctrl+G** to give the last built game the terminal, with any
+`terminal_args` from its manifest. The editor regains focus when the child exits.
+Press **R** to extract a subtree and **A** to browse resources.
 Physics bodies remain root-level. Press **K** to edit project key bindings;
 **Tab** to focus the viewport, arrows to aim the reticle, and **F** to pick.
 Press **Ctrl+E** to author the scene camera, lighting and simulation settings.
@@ -379,16 +383,21 @@ the exit beacon, R to reload the current room, or Q to quit. Change the action
 key in `project.yaml`. To export from the engine checkout, open the example
 with `go run . -project examples/relay-rooms` and press F9.
 
-Run `go run . -view` in the same directory for the interactive camera. Press
-**M** to capture mouse motion, **Esc** to release it, or use the arrow keys.
-Aim at the relay and press **U** to switch rooms. Terminal mouse motion has
-cell resolution and stops at the edge of the window.
+Run `go run . -view` in the same directory for the interactive game. Walk with
+WASD and look with the arrow keys or press **M** for mouse look. Get close to
+each relay or beacon, aim the reticle and press **U**. Press **R** to restart
+from the first room or **Q** to quit. **Esc** releases mouse capture. Terminal
+mouse motion has cell resolution and stops at the edge of the window. The
+exported launcher accepts the same `-view` flag.
 
 In a standalone Go project, `game.RunTerminal(help)` runs a centred monochrome
 view and delivers key presses and accumulated mouse motion to fixed ticks.
 A behavior can request capture with `world.CaptureMouse(true)`, read
 `dx, dy := world.MouseDelta()`, and call `world.TurnCamera` with its own
-sensitivity in radians. Positive camera angles turn right and up. Mouse Y
+sensitivity in radians. Use `world.MouseLook()` to read the project's
+`mouse_look` settings. Its optional keys are `horizontal`, `vertical`,
+`invert_y`, and `drag_only` (hold the right mouse button after capture).
+Positive camera angles turn right and up. Mouse Y
 increases downward. A custom host can use `game.MouseCaptured()` and
 `game.StepWithInput` to supply the same input.
 

@@ -15,3 +15,17 @@ entities:
     position: {z: 2}
     size: {x: 0.5, y: 0.5, z: 0.5}
     mass: 1
+  - id: floor
+    name: Floor
+    shape: box
+    body: static
+    position: {y: -0.65, z: 2}
+    size: {x: 8, y: 0.15, z: 12}
+    mass: 1
+  - id: marker
+    name: Side marker
+    shape: box
+    body: static
+    position: {x: 2, z: 3}
+    size: {x: 0.5, y: 0.6, z: 0.5}
+    mass: 1

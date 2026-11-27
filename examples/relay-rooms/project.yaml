@@ -1,6 +1,7 @@
 version: 1
 name: Relay Rooms
 entry_scene: scenes/relay.yaml
+terminal_args: [-view]
 gameplay_bindings:
   u: use
   m: mouse_look
@@ -8,3 +9,7 @@ gameplay_bindings:
   right: look_right
   up: look_up
   down: look_down
+  w: move_forward
+  a: move_left
+  s: move_back
+  d: move_right

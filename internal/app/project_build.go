@@ -142,3 +142,16 @@ func (m projectEditorModel) startExport() (tea.Model, tea.Cmd) {
 	p := m.project
 	return m, func() tea.Msg { path, err := p.Export(ctx); return projectExportResult{path, err} }
 }
+
+// Let Bubble Tea suspend its renderer and input reader while the child owns
+// the terminal, then restore the editor before reporting the exit status.
+func (m projectEditorModel) startInteractiveChild() (tea.Model, tea.Cmd) {
+	cmd, err := m.project.BuiltCommand(m.lifetime, m.project.Manifest.TerminalArgs...)
+	if err != nil {
+		m.message = err.Error()
+		return m, nil
+	}
+	return m, tea.ExecProcess(cmd, func(err error) tea.Msg { return interactiveChildResult{err} })
+}
+
+type interactiveChildResult struct{ err error }
