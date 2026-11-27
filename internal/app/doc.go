@@ -40,6 +40,12 @@
 // builds produce build/game (build/game.exe on Windows). Launch from the project
 // directory so the starter finds project.yaml. Its main function runs one tick.
 //
+// F6 runs the last successful build as a child process from the project
+// directory. The game reads saved files. Editor edits stay in memory. Escape
+// stops the child, F6 restarts it, and Ctrl+B rebuilds after exit. The results
+// panel shows the exit status and captured output. The editor owns keyboard
+// input throughout. P still opens the interactive scene simulation.
+//
 // # Visual assets
 //
 // Put Wavefront files in the project assets directory (create it in existing

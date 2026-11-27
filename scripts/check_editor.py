@@ -74,7 +74,37 @@ with tempfile.TemporaryDirectory() as parent:
             file.write(starter)
         s.send(b"\x02"); s.wait(b"Built build/game", seconds=30)
         s.send(b"\x1b"); s.wait(b"Hierarchy")
+        s.send(b"\x1b[17~"); s.wait(b"Game exited successfully")
+        s.send(b"\x1b"); s.wait(b"Hierarchy")
+        # Keep an unsaved entity through a crash, a running restart and a stop.
         s.send(b"g"); s.wait(b"Added sphere")
+        with open(source_path, "w") as file:
+            file.write("""package main
+import ("fmt"; "os"; "time")
+func main() {
+    data, _ := os.ReadFile("starts")
+    if err := os.WriteFile("starts", append(data, 'x'), 0600); err != nil { panic(err) }
+    fmt.Println("project game started")
+    if len(data) == 0 { panic("sample behavior failure") }
+    for { time.Sleep(time.Second) }
+}
+""")
+        s.send(b"\x02"); s.wait(b"Built build/game", seconds=30)
+        s.send(b"\x1b[17~"); s.wait(b"sample behavior failure")
+        starts = os.path.join(root, "starts")
+        def wait_starts(count):
+            end = time.monotonic() + 8
+            while time.monotonic() < end:
+                if os.path.getsize(starts) == count:
+                    return
+                time.sleep(.03)
+            raise AssertionError("game did not restart")
+        s.send(b"\x1b[17~"); wait_starts(2)
+        s.send(b"\x1b[17~"); wait_starts(3)
+        s.send(b"\x1b"); s.wait(b"Game stopped")
+        s.send(b"\x1b"); s.wait(b"New sphere")
+        with open(source_path, "wb") as file:
+            file.write(starter)
         s.send(b"e"); s.wait(b"Edit Name")
         s.send(b"\x7f" * len("New sphere") + b"Player\r"); s.wait(b"Property updated")
         s.send(b"\x13"); s.wait(b"Saved scenes/main.yaml")
@@ -226,6 +256,7 @@ with tempfile.TemporaryDirectory() as parent:
             assert file.read() == authored_before_tools, "Play tools modified saved scene"
     finally:
         s.cleanup()
+print("Built game exit/crash/restart/stop and unsaved editor state PASS")
 print("Play tools configure/preview/cancel/spawn/impulse/delete/reset/isolation PASS")
 print("Bindings edit/persist/reset, viewport picking/clear/cycle, paused actions PASS")
 print("Linked resources extract/instantiate/source edit/override/reset/unpack/reopen PASS")
