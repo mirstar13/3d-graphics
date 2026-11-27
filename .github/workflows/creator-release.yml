@@ -23,9 +23,29 @@ jobs:
       - run: go test -v ./...
       - run: go test -v ./...
         working-directory: examples/pulse-dock
-      - if: runner.os != 'Windows'
+      - name: Build race-enabled terminal engine
+        if: runner.os != 'Windows'
+        shell: bash
+        run: go build -race -o "$RUNNER_TEMP/graphics" .
+      - name: Run editor and terminal PTY smoke tests
+        if: runner.os != 'Windows'
         shell: bash
         run: |
-          go build -race -o "$RUNNER_TEMP/graphics" .
-          python3 scripts/check_editor.py "$RUNNER_TEMP/graphics"
-          python3 scripts/check_terminal.py "$RUNNER_TEMP/graphics"
+          for check in check_editor check_terminal; do
+            log="$RUNNER_TEMP/$check.log"
+            if python3 -u "scripts/$check.py" "$RUNNER_TEMP/graphics" >"$log" 2>&1; then
+              cat "$log"
+            else
+              cat "$log"
+              python3 - "$check" "$log" <<'PY'
+          import pathlib
+          import sys
+
+          check, log = sys.argv[1:]
+          lines = pathlib.Path(log).read_text(errors="replace").splitlines()
+          summary = "\n".join(line[:1000] for line in lines[-12:])
+          print(f"::error title={check} failed::" + summary.replace("%", "%25").replace("\n", "%0A"))
+          PY
+              exit 1
+            fi
+          done
