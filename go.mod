@@ -5,12 +5,12 @@ go 1.24.6
 require (
 	github.com/charmbracelet/bubbletea v1.3.4
 	github.com/charmbracelet/x/ansi v0.8.0
-	github.com/ebitengine/oto/v3 v3.3.3
+	github.com/ebitengine/oto/v3 v3.4.1
 	github.com/ebitengine/purego v0.10.1
 	github.com/eiannone/keyboard v0.0.0-20220611211555-0d226195f203
 	github.com/mattn/go-runewidth v0.0.16
 	github.com/qmuntal/gltf v0.28.0
-	golang.org/x/sys v0.30.0
+	golang.org/x/sys v0.36.0
 	golang.org/x/term v0.29.0
 	gopkg.in/yaml.v3 v3.0.1
 )

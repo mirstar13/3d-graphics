@@ -43,7 +43,10 @@ jobs:
 
           check, log = sys.argv[1:]
           lines = pathlib.Path(log).read_text(errors="replace").splitlines()
-          summary = "\n".join(line[:1000] for line in lines[-12:])
+          summary = "\n".join(
+              line if len(line) <= 1200 else line[:600] + " … " + line[-600:]
+              for line in lines[-12:]
+          )
           print(f"::error title={check} failed::" + summary.replace("%", "%25").replace("\n", "%0A"))
           PY
               exit 1

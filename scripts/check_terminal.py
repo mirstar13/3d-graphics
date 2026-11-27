@@ -31,7 +31,8 @@ class Session:
                 except OSError:time.sleep(.05)
             pid,status=os.waitpid(self.pid,os.WNOHANG)
             if pid:
-                assert os.waitstatus_to_exitcode(status)==0,self.output[-4000:]
+                exit_code = os.waitstatus_to_exitcode(status)
+                assert exit_code == 0, (exit_code, self.output[-4000:])
                 assert b"DATA RACE" not in self.output,self.output[-4000:]
                 flags=termios.tcgetattr(self.fd)[3]
                 assert flags & termios.ECHO and flags & termios.ICANON, "input mode not restored"
