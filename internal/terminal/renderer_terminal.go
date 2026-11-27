@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -45,6 +46,12 @@ type TerminalRenderer struct {
 	lastDebugLine                   string
 	presentBuffer                   bytes.Buffer
 	presentColors                   map[engine.Color]string
+
+	frameBytes                          int
+	measureWrite                        bool
+	writeTime                           time.Duration
+	timingHUD                           bool
+	updateTime, rasterTime, presentTime time.Duration
 
 	// Clipping bounds (inclusive min, exclusive max)
 	ClipMinX, ClipMinY int
@@ -171,10 +178,13 @@ func (r *TerminalRenderer) Present() {
 	if r.UseColor {
 		currentColor := engine.ColorBlack
 		firstColor := true
-		if r.presentColors == nil {
-			r.presentColors = make(map[engine.Color]string)
+		trueColor := r.ColorMode == "truecolor" || r.ColorMode == ""
+		if !trueColor {
+			if r.presentColors == nil {
+				r.presentColors = make(map[engine.Color]string)
+			}
+			clear(r.presentColors)
 		}
-		clear(r.presentColors)
 		colorCodes := r.presentColors
 		for i := 0; i < r.Height; i++ {
 			if r.OffsetX != 0 || r.OffsetY != 0 {
@@ -186,12 +196,20 @@ func (r *TerminalRenderer) Present() {
 
 				if firstColor || color != currentColor {
 					firstColor = false
-					code, ok := colorCodes[color]
-					if !ok {
-						code = Foreground(color, r.ColorMode)
-						colorCodes[color] = code
+					if trueColor {
+						var scratch [20]byte
+						code := strconv.AppendUint(append(scratch[:0], "\033[38;2;"...), uint64(color.R), 10)
+						code = strconv.AppendUint(append(code, ';'), uint64(color.G), 10)
+						code = strconv.AppendUint(append(code, ';'), uint64(color.B), 10)
+						builder.Write(append(code, 'm'))
+					} else {
+						code, ok := colorCodes[color]
+						if !ok {
+							code = Foreground(color, r.ColorMode)
+							colorCodes[color] = code
+						}
+						builder.WriteString(code)
 					}
-					builder.WriteString(code)
 					currentColor = color
 				}
 				builder.WriteRune(char)
@@ -218,8 +236,16 @@ func (r *TerminalRenderer) Present() {
 		}
 	}
 
+	r.frameBytes = builder.Len()
+	var writeStart time.Time
+	if r.measureWrite {
+		writeStart = time.Now()
+	}
 	r.Writer.Write(builder.Bytes())
 	r.Writer.Flush()
+	if r.measureWrite {
+		r.writeTime = time.Since(writeStart)
+	}
 
 	now := time.Now()
 	if !r.lastPresent.IsZero() {
@@ -227,6 +253,13 @@ func (r *TerminalRenderer) Present() {
 	}
 	r.lastPresent = now
 	r.showDebugLine()
+}
+
+// FrameOutput reports encoded bytes and, when enabled, the framebuffer write duration.
+func (r *TerminalRenderer) FrameOutput() (int, time.Duration) { return r.frameBytes, r.writeTime }
+
+func (r *TerminalRenderer) MeasureFrameWrite(enabled bool) {
+	r.measureWrite = enabled
 }
 
 // prepareScene builds frame state on the caller's goroutine before workers read it.
@@ -329,7 +362,7 @@ func (r *TerminalRenderer) renderTriangleInternal(p0, p1, p2 engine.Point, origi
 	if originalTri.Material.IsWireframe() {
 		r.renderTriangleWireframe(transformed, camera)
 	} else {
-		r.rasterizeTriangleWithLighting(transformed, camera)
+		r.rasterizeTriangleWithLighting(transformed, camera, [3]float64{v0.Z, v1.Z, v2.Z})
 	}
 }
 
@@ -455,12 +488,7 @@ func (r *TerminalRenderer) SetShowDebugInfo(show bool) {
 }
 
 // rasterizeTriangleWithLighting performs triangle rasterization with PERSPECTIVE CORRECT lighting
-func (r *TerminalRenderer) rasterizeTriangleWithLighting(t *engine.Triangle, camera *engine.Camera) {
-	clipped := engine.ClipTriangleToNearPlane(t, camera)
-	if len(clipped) == 0 {
-		return
-	}
-
+func (r *TerminalRenderer) rasterizeTriangleWithLighting(t *engine.Triangle, camera *engine.Camera, depths [3]float64) {
 	normal := engine.CalculateSurfaceNormal(&t.P0, &t.P1, &t.P2, t.Normal, t.UseSetNormal)
 	surfacePoint := engine.Point{
 		X: (t.P0.X + t.P1.X + t.P2.X) / 3.0,
@@ -474,8 +502,14 @@ func (r *TerminalRenderer) rasterizeTriangleWithLighting(t *engine.Triangle, cam
 		return
 	}
 
-	for _, tri := range clipped {
-		r.fillTriangleWithPerPixelLighting(tri, camera, normal, t.Material)
+	if depths[0] >= camera.Near && depths[1] >= camera.Near && depths[2] >= camera.Near {
+		r.fillTriangleWithPerPixelLighting(t, camera, normal, t.Material)
+		return
+	}
+	var clipped [2]engine.Triangle
+	count := engine.ClipTriangleAtDepths(t, depths, camera.Near, &clipped)
+	for i := range count {
+		r.fillTriangleWithPerPixelLighting(&clipped[i], camera, normal, t.Material)
 	}
 }
 
@@ -572,7 +606,7 @@ func (r *TerminalRenderer) RenderQuad(quad *engine.Quad, worldMatrix engine.Matr
 			if tri.Material.IsWireframe() {
 				r.renderTriangleWireframe(tri, camera)
 			} else {
-				r.rasterizeTriangleWithLighting(tri, camera)
+				r.rasterizeTriangleWithLighting(tri, camera, [3]float64{camera.TransformToViewSpace(tri.P0).Z, camera.TransformToViewSpace(tri.P1).Z, camera.TransformToViewSpace(tri.P2).Z})
 			}
 		}
 	}
@@ -641,7 +675,16 @@ func (r *TerminalRenderer) showDebugLine() {
 	}
 }
 
+func (r *TerminalRenderer) SetFrameTiming(enabled bool, update, raster, present time.Duration) {
+	r.timingHUD = enabled
+	r.updateTime, r.rasterTime, r.presentTime = update, raster, present
+}
+
 func (r *TerminalRenderer) statusLine() string {
+	if r.timingHUD {
+		ms := func(d time.Duration) float64 { return float64(d) / float64(time.Millisecond) }
+		return fmt.Sprintf("Update %.1fms | Raster %.1fms | Present %.1fms", ms(r.updateTime), ms(r.rasterTime), ms(r.presentTime))
+	}
 	status := r.simulationStatus
 	if !r.ShowDebugInfo && (!r.hasSimulationStatus || !status.Paused) {
 		return ""

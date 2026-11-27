@@ -12,7 +12,7 @@ import (
 	"github.com/mirstar13/go-3d-graphics/internal/terminal"
 )
 
-func runEngine(demoType int, config engine.EngineConfig, physicsSettings settingsconfig.PhysicsSettings) bool {
+func runEngine(demoType int, config engine.EngineConfig, physicsSettings settingsconfig.PhysicsSettings, tracePath string) bool {
 	adapter, err := createBackend(config)
 	if err != nil {
 		fmt.Println(err)
@@ -29,6 +29,23 @@ func runEngine(demoType int, config engine.EngineConfig, physicsSettings setting
 		profiler = engine.NewProfiler(60)
 		fmt.Println("Profiling enabled")
 	}
+
+	var frames []frameTiming
+	if tracePath != "" {
+		frames = make([]frameTiming, 0, frameTimingWindow)
+		defer func() {
+			if len(frames) == 0 {
+				return
+			}
+			if err := writeFrameTrace(tracePath, frames); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				return
+			}
+			fmt.Fprintln(os.Stderr, frameTimingSummary(frames))
+		}()
+	}
+	var timingHUD bool
+	var previous frameTiming
 
 	finalRenderer := terminal.ComposeRenderer(baseRenderer, config)
 
@@ -104,10 +121,12 @@ func runEngine(demoType int, config engine.EngineConfig, physicsSettings setting
 		elapsed := now.Sub(lastFrame)
 		dt := elapsed.Seconds()
 		lastFrame = now
-		if tr, ok := baseRenderer.(*terminal.TerminalRenderer); ok {
+		tr, isTerminal := baseRenderer.(*terminal.TerminalRenderer)
+		if isTerminal {
 			tr.SyncSize()
+		} else {
+			finalRenderer.BeginFrame()
 		}
-		finalRenderer.BeginFrame()
 
 		// Update phase
 		if profiler != nil {
@@ -128,12 +147,27 @@ func runEngine(demoType int, config engine.EngineConfig, physicsSettings setting
 		if source, ok := inputManager.(engine.SimulationCommandInput); ok {
 			commands = source.DrainSimulationCommands()
 		}
+		for _, command := range commands.Commands {
+			if command == engine.ToggleFrameTiming {
+				timingHUD = !timingHUD
+			}
+		}
+		measuring := timingHUD || (frames != nil && len(frames) < cap(frames))
+		var startTick uint64
+		if measuring {
+			startTick = simulation.world.Stats().Tick
+		}
 		if err := simulation.advance(elapsed, commands); err != nil {
 			fmt.Printf("Simulation error: %v\n", err)
 			return false
 		}
 		if display, ok := baseRenderer.(engine.SimulationStatusRenderer); ok {
-			display.SetSimulationStatus(simulation.status())
+			status := simulation.status()
+			if isTerminal {
+				tr.SetFrameTiming(timingHUD, previous.update, previous.raster, previous.present)
+				tr.MeasureFrameWrite(measuring)
+			}
+			display.SetSimulationStatus(status)
 		}
 
 		if profiler != nil {
@@ -147,6 +181,10 @@ func runEngine(demoType int, config engine.EngineConfig, physicsSettings setting
 			profiler.BeginRender()
 		}
 
+		var rasterStart, presentStart time.Time
+		if measuring {
+			rasterStart = time.Now()
+		}
 		simulation.prepareRender()
 		finalRenderer.RenderScene(scene)
 		if simulation.overlay {
@@ -164,8 +202,24 @@ func runEngine(demoType int, config engine.EngineConfig, physicsSettings setting
 			profiler.BeginPresent()
 		}
 
+		if measuring {
+			presentStart = time.Now()
+		}
 		finalRenderer.EndFrame()
 		finalRenderer.Present()
+		if measuring {
+			tick := simulation.world.Stats().Tick
+			w, h := finalRenderer.GetDimensions()
+			previous = frameTiming{interval: elapsed, update: rasterStart.Sub(now),
+				raster: presentStart.Sub(rasterStart), present: time.Since(presentStart),
+				ticks: tick - startTick, columns: w, rows: h}
+			if isTerminal {
+				previous.bytes, previous.write = tr.FrameOutput()
+			}
+			if frames != nil && len(frames) < cap(frames) {
+				frames = append(frames, previous)
+			}
+		}
 		simulation.bindings.synchronize()
 
 		if profiler != nil {

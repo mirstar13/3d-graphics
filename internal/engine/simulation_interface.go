@@ -8,6 +8,7 @@ const (
 	ResumeSimulation
 	StepSimulation
 	TogglePhysicsDebug
+	ToggleFrameTiming
 )
 
 // SimulationCommandCapacity bounds both input and pending single-step queues.

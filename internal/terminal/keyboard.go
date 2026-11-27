@@ -153,6 +153,8 @@ func (sim *SilentInputManager) enqueueSimulationEventLocked(event keyboard.KeyEv
 		command = engine.ResumeSimulation
 	case event.Rune == 'c' || event.Rune == 'C':
 		command = engine.TogglePhysicsDebug
+	case event.Rune == 't' || event.Rune == 'T':
+		command = engine.ToggleFrameTiming
 	case event.Rune == 'n' || event.Rune == 'N':
 		command = engine.StepSimulation
 	default:

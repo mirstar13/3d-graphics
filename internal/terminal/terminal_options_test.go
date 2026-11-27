@@ -127,3 +127,17 @@ func TestInputCancellationAndStickyQuit(t *testing.T) {
 		}
 	}
 }
+
+func TestPresentTrueColorRun(t *testing.T) {
+	var output bytes.Buffer
+	r := NewTerminalRenderer(bufio.NewWriter(&output), 1, 2)
+	r.ColorMode = "truecolor"
+	for x := range r.Surface[0] {
+		r.Surface[0][x] = 'x'
+		r.ColorBuffer[0][x] = engine.NewColor(0, 128, 255)
+	}
+	r.Present()
+	if got := output.String(); !strings.Contains(got, "\033[38;2;0;128;255mxx") {
+		t.Fatalf("same-color cells should share one foreground command: %q", got)
+	}
+}

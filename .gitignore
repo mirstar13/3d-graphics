@@ -79,3 +79,6 @@ coverage/
 # Local planning and analysis
 /ROADMAP.md
 /reviews/
+
+# Local frame timing traces
+*.frame-trace.csv

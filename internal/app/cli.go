@@ -21,6 +21,7 @@ type commandOptions struct {
 	settingsScreen        bool
 	cpuProfile            string
 	memoryProfile         string
+	frameTrace            string
 }
 
 func readCommand(args []string, output io.Writer) (config.Settings, commandOptions, error) {
@@ -35,6 +36,7 @@ func readCommand(args []string, output io.Writer) (config.Settings, commandOptio
 	flags.StringVar(&options.path, "config", "renderer.yaml", "YAML settings file")
 	flags.BoolVar(&options.settingsScreen, "settings", false, "open the settings editor")
 	flags.StringVar(&options.cpuProfile, "cpuprofile", "", "write CPU profile to file")
+	flags.StringVar(&options.frameTrace, "frame-trace", "", "save up to 600 completed demo frames as CSV on leaving the scene (new file)")
 	flags.StringVar(&options.memoryProfile, "memprofile", "", "write memory profile to file")
 	flags.StringVar(&settings.Renderer, "renderer", settings.Renderer, "registered rendering backend")
 	flags.IntVar(&settings.Demo, "demo", settings.Demo, fmt.Sprintf("scene number (1-%d)", len(demo.Presets)))
@@ -176,7 +178,7 @@ func Run() {
 					return
 				}
 			}
-			if !runEngine(settings.Demo-1, runtimeConfig, settings.Physics) {
+			if !runEngine(settings.Demo-1, runtimeConfig, settings.Physics, options.frameTrace) {
 				break
 			}
 			updated, restart, err := editSettings(settings, options.path)

@@ -7,42 +7,62 @@ import (
 // ClipTriangleToNearPlane clips world-space geometry while preserving winding,
 // material, normals, and interpolated texture coordinates.
 func ClipTriangleToNearPlane(triangle *Triangle, camera *Camera) []*Triangle {
+	depths := [3]float64{camera.TransformToViewSpace(triangle.P0).Z, camera.TransformToViewSpace(triangle.P1).Z, camera.TransformToViewSpace(triangle.P2).Z}
+	var out [2]Triangle
+	count := ClipTriangleAtDepths(triangle, depths, camera.Near, &out)
+	switch count {
+	case 0:
+		return nil
+	case 1:
+		if depths[0] >= camera.Near && depths[1] >= camera.Near && depths[2] >= camera.Near {
+			return []*Triangle{triangle}
+		}
+		return []*Triangle{&out[0]}
+	default:
+		return []*Triangle{&out[0], &out[1]}
+	}
+}
+
+// ClipTriangleAtDepths writes up to two triangles using precomputed view depths.
+func ClipTriangleAtDepths(triangle *Triangle, depths [3]float64, near float64, out *[2]Triangle) int {
 	type vertex struct {
 		point Point
 		uv    TextureCoord
 		depth float64
 	}
 	input := []vertex{
-		{triangle.P0, triangle.UV0, camera.TransformToViewSpace(triangle.P0).Z},
-		{triangle.P1, triangle.UV1, camera.TransformToViewSpace(triangle.P1).Z},
-		{triangle.P2, triangle.UV2, camera.TransformToViewSpace(triangle.P2).Z},
+		{triangle.P0, triangle.UV0, depths[0]},
+		{triangle.P1, triangle.UV1, depths[1]},
+		{triangle.P2, triangle.UV2, depths[2]},
 	}
 	inside := 0
 	for _, v := range input {
-		if v.depth >= camera.Near {
+		if v.depth >= near {
 			inside++
 		}
 	}
 	if inside == 3 {
-		return []*Triangle{triangle}
+		out[0] = *triangle
+		return 1
 	}
 	if inside == 0 {
-		return nil
+		return 0
 	}
 
-	output := make([]vertex, 0, 4)
+	var vertices [4]vertex
+	output := vertices[:0]
 	previous := input[len(input)-1]
 	for _, current := range input {
-		previousInside, currentInside := previous.depth >= camera.Near, current.depth >= camera.Near
+		previousInside, currentInside := previous.depth >= near, current.depth >= near
 		if previousInside != currentInside {
-			fraction := (camera.Near - previous.depth) / (current.depth - previous.depth)
+			fraction := (near - previous.depth) / (current.depth - previous.depth)
 			output = append(output, vertex{
 				point: lerpPoint(previous.point, current.point, fraction),
 				uv: TextureCoord{
 					U: previous.uv.U + (current.uv.U-previous.uv.U)*fraction,
 					V: previous.uv.V + (current.uv.V-previous.uv.V)*fraction,
 				},
-				depth: camera.Near,
+				depth: near,
 			})
 		}
 		if currentInside {
@@ -50,14 +70,15 @@ func ClipTriangleToNearPlane(triangle *Triangle, camera *Camera) []*Triangle {
 		}
 		previous = current
 	}
-	result := make([]*Triangle, 0, len(output)-2)
+	count := 0
 	for i := 1; i+1 < len(output); i++ {
 		clipped := *triangle
 		clipped.P0, clipped.P1, clipped.P2 = output[0].point, output[i].point, output[i+1].point
 		clipped.UV0, clipped.UV1, clipped.UV2 = output[0].uv, output[i].uv, output[i+1].uv
-		result = append(result, &clipped)
+		out[count] = clipped
+		count++
 	}
-	return result
+	return count
 }
 
 // ClipLineToNearPlane clips a line against the near plane
