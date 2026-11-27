@@ -69,6 +69,12 @@ func (cam *Camera) ProjectPoint(p Point, canvasHeight, canvasWidth int) (int, in
 // ProjectPointFloat projects without cell quantization, retaining subpixel coverage.
 func (cam *Camera) ProjectPointFloat(p Point, canvasHeight, canvasWidth int) (float64, float64, float64) {
 	view := cam.TransformToViewSpace(p)
+	// World-space clipping followed by another view transform can put an
+	// intersection a few ulps behind Near. Keep that intersection projectable;
+	// otherwise one rounded vertex discards an entire clipped triangle.
+	if view.Z > 0 && view.Z < cam.Near && cam.Near-view.Z <= 1e-9*math.Max(1, math.Abs(cam.Near)) {
+		view.Z = cam.Near
+	}
 	if view.Z < cam.Near || view.Z <= 0 || canvasWidth <= 0 || canvasHeight <= 0 {
 		return -1, -1, 0
 	}

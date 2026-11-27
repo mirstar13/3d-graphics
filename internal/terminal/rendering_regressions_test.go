@@ -4,11 +4,50 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"math"
 	"reflect"
 	"testing"
 
 	"github.com/mirstar13/go-3d-graphics/internal/engine"
 )
+
+// A floor spanning the near plane must stay solid while walking and turning.
+// Compare raster coverage to independent ray/plane intersections at cell centres.
+func TestNearPlaneFloorCoverage(t *testing.T) {
+	camera := engine.NewCameraAt(2.3, 1.3, -4.2)
+	camera.Near, camera.Far = .1, 1000
+	camera.SetFOV(90, 60)
+	floor := engine.NewQuad(
+		engine.Point{X: -100, Z: -100}, engine.Point{X: -100, Z: 100},
+		engine.Point{X: 100, Z: 100}, engine.Point{X: 100, Z: -100})
+	r := NewTerminalRenderer(bufio.NewWriter(io.Discard), 40, 100)
+	for turn := 0; turn < 30; turn++ {
+		camera.SetRotation(.17, float64(turn)*.13, 0)
+		r.BeginFrame()
+		r.RenderQuad(floor, engine.IdentityMatrix(), camera)
+		covered := 0
+		for y := 0; y < r.Height; y++ {
+			for x := 0; x < r.Width; x++ {
+				ray := engine.CameraScreenPointToRay(camera, x, y, r.Width, r.Height)
+				if ray.Direction.Y >= 0 {
+					continue
+				}
+				p := ray.GetPoint(-ray.Origin.Y / ray.Direction.Y)
+				depth := camera.TransformToViewSpace(p).Z
+				if math.Abs(p.X) >= 99 || math.Abs(p.Z) >= 99 || depth <= camera.Near || depth >= camera.Far {
+					continue
+				}
+				covered++
+				if math.IsInf(r.ZBuffer[y][x], 1) || math.Abs(r.ZBuffer[y][x]-depth) > 1e-6 {
+					t.Fatalf("turn %d: floor missing or wrong depth at (%d,%d): got %g, want %g", turn, x, y, r.ZBuffer[y][x], depth)
+				}
+			}
+		}
+		if covered < 500 {
+			t.Fatalf("turn %d: insufficient floor coverage (%d cells)", turn, covered)
+		}
+	}
+}
 
 func TestParallelPrimitiveParity(t *testing.T) {
 	scene := engine.NewScene()
