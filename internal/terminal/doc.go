@@ -25,10 +25,36 @@
 //
 // # Terminal compatibility checks
 //
-// Build the application with the race detector and run scripts/check_terminal.py
-// against the binary on a PTY. On native Windows and macOS, check menu return,
-// resizing, color modes, cursor restoration, echo and prompt exit. Re-enter a
-// scene after returning to the menu. On Windows 10 in VS Code with PowerShell,
-// disabling terminal.integrated.gpuAcceleration prevented recurring corruption
-// during one follow-up observation. The cause remains unconfirmed.
+// From the repository root, run the native export check on each target:
+//
+//	go test -v -count=1 ./internal/project -run '^TestNativePulseDockRelease$'
+//
+// It exports Pulse Dock, extracts the ZIP into a path containing spaces,
+// moves the source project away and runs play.sh or play.cmd from a different
+// directory. Scripted turns exercise timeout, restart and docking. The release
+// validation workflow runs this test on Linux, Windows and macOS. Linux and
+// macOS also exercise interactive editor and renderer flows through PTYs.
+//
+// For an interactive native check, start the editor with -project
+// examples/pulse-dock, enter Play, resize the window, stop, export with F9
+// and quit. Launch the extracted game, burn east until timeout, restart, and
+// steer north around the pylon to dock. Check cursor visibility, input echo,
+// colors and scrolling after returning to the shell. Record OS, architecture,
+// terminal application/version, dimensions, build revision and result.
+//
+// On Windows 10 in VS Code with PowerShell, disabling
+// terminal.integrated.gpuAcceleration prevented recurring corruption during
+// one follow-up observation. Repeat extended rendering in the same terminal
+// session to investigate recurrence. The cause remains unconfirmed.
+//
+// # Pulse Dock frame benchmark
+//
+//	go test ./internal/app -run '^$' -bench BenchmarkPulseDockView -benchmem -count=3 -cpu=1
+//
+// This measures a monochrome frame and HUD at two terminal sizes, after loading
+// the sample. Simulation, terminal writes and display latency are outside the
+// timed loop. On Linux amd64 with Go 1.24.6 and an AMD EPYC 9V74, median
+// times across three runs were 0.327 ms at 80x24 and 0.729 ms at 120x40.
+// Reusing the framebuffer reduced allocations from about 46 to 16 kB/frame
+// and from 110 to 35 kB/frame respectively.
 package terminal

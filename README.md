@@ -263,8 +263,17 @@ To export a framebuffer contact sheet for review:
 
 Panels follow the picker order from left to right, top to bottom.
 
-## Toward a terminal game engine
+## Creator release validation
 
-The creator roadmap includes richer asset and physics authoring, gameplay behaviors,
-a public API, project-local Go builds, supervised Play, HUDs, standalone export,
-an editable sample game and native-platform validation.
+The creator workflow covers authoring, project-local builds, supervised runs and
+standalone export. Run the engine and sample tests separately because Pulse Dock
+has its own Go module:
+
+    go test -race ./...
+    cd examples/pulse-dock
+    go test -race ./...
+
+For the native export check, frame benchmark and terminal procedures, run
+`go doc ./internal/terminal`. For the project build and export controls, run
+`go doc ./internal/app`. The public gameplay API is documented by
+`go doc ./creator`.
