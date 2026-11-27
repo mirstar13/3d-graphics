@@ -272,3 +272,40 @@ try:
 finally:
     s.cleanup()
 print("Launcher/editor/launcher/exit PASS")
+
+with tempfile.TemporaryDirectory() as root:
+    with open(os.path.join(root, "project.yaml"), "w") as file:
+        file.write("version: 1\nname: Trial\nentry_scene: scene.yaml\n")
+    with open(os.path.join(root, "scene.yaml"), "w") as file:
+        file.write("""version: 1
+name: Finish
+simulation: {gravityy: 0}
+objective: {text: Cross the finish, signal: finish, tick_limit: 90}
+entities:
+  - id: player
+    name: Player
+    shape: sphere
+    body: dynamic
+    size: {x: 0.5, y: 0.5, z: 0.5}
+    mass: 1
+  - id: finish
+    name: Finish
+    shape: box
+    body: static
+    sensor: true
+    plate_signal: finish
+    position: {x: 2, y: 0, z: 0}
+    size: {x: 0.5, y: 1, z: 1}
+    mass: 1
+""")
+    s = Session(["-play-project", root, "-player", "player"])
+    try:
+        s.wait(b"Objective: Cross the finish")
+        s.wait(b"Lost | R restart")
+        s.send(b"r"); s.wait(b"Ticks left:")
+        s.send(b"\x1b[C"); s.wait(b"Won | R restart")
+        s.send(b"r"); s.wait(b"Ticks left:")
+        s.send(b"q"); s.close()
+    finally:
+        s.cleanup()
+print("Player HUD, timeout, restart, movement and victory PASS")

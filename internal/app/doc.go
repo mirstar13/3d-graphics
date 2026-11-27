@@ -46,6 +46,22 @@
 // panel shows the exit status and captured output. The editor owns keyboard
 // input throughout. P still opens the interactive scene simulation.
 //
+// # Objectives and game flow
+//
+// Add a static sensor with a Plate signal. In Ctrl+E, navigate past the lights
+// to Objective, press Enter, and set Text, Signal and TickLimit. A dynamic
+// body reaching a plate with the matching signal wins. The deadline counts
+// fixed simulation ticks. Contact on the last tick wins, and zero disables the
+// deadline. O in scene settings clears the objective.
+//
+// Play displays the objective and remaining ticks. R restarts a finished round.
+// To play the saved scene directly, run:
+//
+//	go run . -play-project DIRECTORY -player ENTITY_ID
+//
+// Arrows apply horizontal impulses and Space jumps. Omit -player to watch the
+// simulation. Q exits. A restart restores the saved positions and timer.
+//
 // # Visual assets
 //
 // Put Wavefront files in the project assets directory (create it in existing

@@ -391,6 +391,11 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		switch key {
+		case "r":
+			if m.play != nil && m.play.Objective().Finished() {
+				cmd := m.startPlay()
+				return m, cmd
+			}
 		case "f6":
 			if m.project != nil && m.activeResource == nil && m.play == nil {
 				return m.startChild()
@@ -629,6 +634,9 @@ func (m projectEditorModel) View() string {
 			path = m.resourcePath + " [SOURCE]"
 		}
 		fmt.Fprintf(&out, "Project editor - %s%s [%s]%s\nResource: %s\n", m.project.Manifest.Name, dirty, mode, runtimeStatus, path)
+		if m.play != nil {
+			out.WriteString(objectiveHUD(m.play.Objective()))
+		}
 		side := []string{"Hierarchy (Tab switches focus)"}
 		entities := m.hierarchy()
 		selected := m.selectionIndex()

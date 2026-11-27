@@ -14,12 +14,13 @@ import (
 )
 
 type commandOptions struct {
-	projectEditor  bool
-	projectPath    string
-	path           string
-	settingsScreen bool
-	cpuProfile     string
-	memoryProfile  string
+	projectEditor         bool
+	projectPath           string
+	playProject, playerID string
+	path                  string
+	settingsScreen        bool
+	cpuProfile            string
+	memoryProfile         string
 }
 
 func readCommand(args []string, output io.Writer) (config.Settings, commandOptions, error) {
@@ -27,6 +28,8 @@ func readCommand(args []string, output io.Writer) (config.Settings, commandOptio
 	options := commandOptions{}
 	flags := flag.NewFlagSet("3d-graphics", flag.ContinueOnError)
 	flags.SetOutput(output)
+	flags.StringVar(&options.playProject, "play-project", "", "play a saved scene with its objective HUD")
+	flags.StringVar(&options.playerID, "player", "", "dynamic entity ID controlled by arrows and Space")
 	flags.BoolVar(&options.projectEditor, "editor", false, "open the project editor")
 	flags.StringVar(&options.projectPath, "project", "", "open a project directory in the editor")
 	flags.StringVar(&options.path, "config", "renderer.yaml", "YAML settings file")
@@ -108,6 +111,12 @@ func Run() {
 				fmt.Fprintln(os.Stderr, err)
 			}
 		}()
+	}
+	if options.playProject != "" {
+		if err := runProjectPlayer(options.playProject, options.playerID, settings.Physics.WorldOptions()); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+		}
+		return
 	}
 	if options.projectEditor || options.projectPath != "" {
 		runtimeConfig := settings.EngineConfig()

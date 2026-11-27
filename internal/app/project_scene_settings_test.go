@@ -74,3 +74,45 @@ func TestLightingChangesMonochromeFrame(t *testing.T) {
 		t.Fatal("lighting should change shaded glyphs")
 	}
 }
+
+func TestObjectiveAuthoringAndDeadlineTie(t *testing.T) {
+	m := inputEditor(t)
+	for _, edit := range [][3]string{{"floor", "sensor", "true"}, {"floor", "plate_signal", "finish"}, {"box", "position.y", "0.25"}} {
+		if err := m.document.Set(edit[0], edit[1], edit[2]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m = resourceKey(m, tea.KeyCtrlE)
+	for i := 0; i < 4; i++ {
+		m = resourceKey(m, tea.KeyDown)
+	}
+	m = resourceKey(m, tea.KeyEnter)
+	m.draft = `{"Text":"Reach the plate","Signal":"finish","TickLimit":1}`
+	m = resourceKey(m, tea.KeyEnter)
+	if m.document.Document().Objective == nil {
+		t.Fatal(m.message)
+	}
+	m = resourceKey(m, tea.KeyEsc)
+	m.save()
+	p, err := project.Open(m.project.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = m.install(p); err != nil {
+		t.Fatal(err)
+	}
+	m.startPlay()
+	if err = m.play.Advance(5 * m.play.World.Stats().FixedStep); err != nil {
+		t.Fatal(err)
+	}
+	if got := m.play.Objective(); got.Outcome != "Won" || got.Tick != 1 || m.play.World.Stats().Tick != 1 {
+		t.Fatal("goal on deadline", got)
+	}
+	if err = m.play.Step(); err != nil || m.play.World.Stats().Tick != 1 {
+		t.Fatal("terminal tick advanced", err)
+	}
+	m, _ = editorRune(m, "r")
+	if m.play.Objective().Outcome != "Playing" || m.play.World.Stats().Tick != 0 {
+		t.Fatal("restart failed")
+	}
+}

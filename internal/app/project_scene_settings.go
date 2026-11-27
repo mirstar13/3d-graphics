@@ -24,6 +24,12 @@ func sceneRig(s project.SceneSettings) project.LightingSettings {
 
 func sceneRow(s project.SceneSettings, row int) (string, any) {
 	rig := sceneRig(s)
+	if row == 3+len(rig.Lights) {
+		if s.Objective != nil {
+			return "Objective", s.Objective
+		}
+		return "Objective", &project.ObjectiveSettings{Text: "Reach the goal", Signal: "goal", TickLimit: 600}
+	}
 	switch row {
 	case 0:
 		if s.Camera != nil {
@@ -51,7 +57,7 @@ func (m *projectEditorModel) scenePanel() string {
 	if m.modal == "scene_edit" {
 		return "Edit " + title + " (JSON)\n" + m.draft + "\nEnter apply | Ctrl+U clear | Esc cancel\n" + m.message
 	}
-	return fmt.Sprintf("Scene settings\nUp/Down select | Enter edit | L add light | D delete\nC reset camera | R reset lighting | S inherit simulation | Esc close\n> %s\n%s\n%s", title, value, m.message)
+	return fmt.Sprintf("Scene settings\nUp/Down select | Enter edit | L add light | D delete\nC reset camera | R reset lighting | S inherit simulation | O clear objective | Esc close\n> %s\n%s\n%s", title, value, m.message)
 }
 
 func (m *projectEditorModel) sceneKey(msg tea.KeyMsg) {
@@ -85,6 +91,8 @@ func (m *projectEditorModel) sceneKey(msg tea.KeyMsg) {
 				return
 			}
 			switch p := v.(type) {
+			case *project.ObjectiveSettings:
+				s.Objective = p
 			case *project.CameraSettings:
 				s.Camera = p
 			case *project.SimulationSettings:
@@ -115,7 +123,7 @@ func (m *projectEditorModel) sceneKey(msg tea.KeyMsg) {
 			m.sceneField = max(0, m.sceneField-1)
 			return
 		case "down":
-			m.sceneField = min(2+len(rig.Lights), m.sceneField+1)
+			m.sceneField = min(3+len(rig.Lights), m.sceneField+1)
 			return
 		case "enter":
 			_, v := sceneRow(s, m.sceneField)
@@ -123,6 +131,8 @@ func (m *projectEditorModel) sceneKey(msg tea.KeyMsg) {
 			m.draft = string(b)
 			m.modal = "scene_edit"
 			return
+		case "o":
+			s.Objective = nil
 		case "c":
 			s.Camera = nil
 		case "s":
@@ -149,7 +159,7 @@ func (m *projectEditorModel) sceneKey(msg tea.KeyMsg) {
 			s.Lighting = &rig
 			m.sceneField = 2 + len(rig.Lights)
 		case "d":
-			if m.sceneField < 3 {
+			if m.sceneField < 3 || m.sceneField >= 3+len(rig.Lights) {
 				return
 			}
 			i := m.sceneField - 3
