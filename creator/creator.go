@@ -131,7 +131,7 @@ func (g *Game) World() *World { return &g.world }
 // Step invokes the behavior and simulates one tick. After a behavior or
 // simulation error, subsequent calls return the failure without advancing.
 func (g *Game) Step() error {
-	if g.failure != nil {
+	if g.failure != nil || g.world.session.Objective().Finished() {
 		return g.failure
 	}
 	if g.stepping {
@@ -149,4 +149,18 @@ func (g *Game) Step() error {
 	}
 	g.failure = s.Step()
 	return g.failure
+}
+
+// Objective describes the HUD for the current round. Outcome is "Playing",
+// "Won", "Lost", or empty for a scene without an objective.
+type Objective struct {
+	Text, Signal, Outcome string
+	Tick, TickLimit       uint64
+}
+
+// Objective returns a detached snapshot. Step holds the terminal tick after a
+// win or loss. Open a fresh Game and behavior to start another round.
+func (g *Game) Objective() Objective {
+	o := g.world.session.Objective()
+	return Objective{o.Text, o.Signal, string(o.Outcome), o.Tick, o.TickLimit}
 }

@@ -35,6 +35,7 @@ type sensorImpulse struct {
 
 // Session owns live entities and a world; all operations belong to the update goroutine.
 type Session struct {
+	objective     ObjectiveStatus
 	plates        map[physics.BodyID]string
 	doorCount     int
 	projectRoot   string
@@ -98,6 +99,9 @@ func NewProjectSession(root string, d project.Document, options physics.Options)
 	scene.Camera.SetFOV(c.FOVX, c.FOVY)
 	scene.Camera.Near, scene.Camera.Far = c.Near, c.Far
 	s := &Session{projectRoot: root, InitialCamera: c, Scene: scene, World: world, id: sessionSequence.Add(1)}
+	if o := d.Objective; o != nil {
+		s.objective = ObjectiveStatus{Text: o.Text, Signal: o.Signal, TickLimit: o.TickLimit, Outcome: Playing}
+	}
 	s.Lighting = engine.NewLightingSystem(scene.Camera)
 	lighting := project.DefaultLighting()
 	if d.Lighting != nil {
@@ -319,6 +323,9 @@ func (s *Session) queueImpulse(id EntityID, impulse engine.Point, localPoint *en
 	})
 }
 func (s *Session) enqueue(command func() error) error {
+	if s.objective.Finished() {
+		return fmt.Errorf("round finished; restart to play again")
+	}
 	if len(s.pending) >= 64 {
 		return fmt.Errorf("command queue full")
 	}
@@ -428,9 +435,9 @@ func (s *Session) applySensorImpulse(tick uint64, sensor, other physics.BodyID) 
 }
 
 func (s *Session) hooks() physics.StepHooks {
-	return physics.StepHooks{AfterStep: func(t physics.Tick) {
+	return physics.StepHooks{StopAfterStep: func() bool { return s.objective.Finished() }, AfterStep: func(t physics.Tick) {
 		s.applyEnterImpulses(t.Index)
-		s.updateDoors()
+		s.updateSignals(t.Index)
 		for i := range s.entities {
 			e := &s.entities[i]
 			if !e.active || e.description.Body == "none" {
@@ -449,6 +456,9 @@ func (s *Session) hooks() physics.StepHooks {
 
 // Advance runs fixed updates; commands stay pending while paused.
 func (s *Session) Advance(elapsed time.Duration) error {
+	if s.objective.Finished() {
+		return nil
+	}
 	s.lastError = nil
 	stats := s.World.Stats()
 	if elapsed > 0 && !stats.Paused && elapsed >= stats.FixedStep-stats.Remainder {
@@ -460,6 +470,9 @@ func (s *Session) Advance(elapsed time.Duration) error {
 	return s.lastError
 }
 func (s *Session) Step() error {
+	if s.objective.Finished() {
+		return nil
+	}
 	s.lastError = nil
 	if s.World.Stats().Paused {
 		s.applyCommands()

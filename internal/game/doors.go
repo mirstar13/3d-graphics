@@ -2,10 +2,10 @@ package game
 
 import "github.com/mirstar13/go-3d-graphics/internal/physics"
 
-// updateDoors samples the tick's sensor pairs together. Combining them before
+// updateSignals samples the tick's sensor pairs together. Combining them before
 // changing a door handles simultaneous exits and entries and removed bodies.
-func (s *Session) updateDoors() {
-	if s.doorCount == 0 {
+func (s *Session) updateSignals(tick uint64) {
+	if s.doorCount == 0 && s.objective.Outcome != Playing {
 		return
 	}
 	held := map[string]bool{}
@@ -15,6 +15,14 @@ func (s *Session) updateDoors() {
 		}
 		s.holdPlate(held, event.A, event.B)
 		s.holdPlate(held, event.B, event.A)
+	}
+	if s.objective.Outcome == Playing {
+		s.objective.Tick = tick
+		if held[s.objective.Signal] {
+			s.objective.Outcome = Won
+		} else if s.objective.TickLimit > 0 && tick >= s.objective.TickLimit {
+			s.objective.Outcome = Lost
+		}
 	}
 	for i := range s.entities {
 		e := &s.entities[i]

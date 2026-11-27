@@ -13,7 +13,11 @@ type Tick struct {
 }
 
 // StepHooks separate commands/kinematic targets from post-solve scene synchronization.
-type StepHooks struct{ BeforeStep, AfterStep func(Tick) }
+// StopAfterStep ends a catch-up batch after the current tick (for example on victory).
+type StepHooks struct {
+	BeforeStep, AfterStep func(Tick)
+	StopAfterStep         func() bool
+}
 
 // Advance is a compatibility entry point whose callback runs before body integration.
 func (w *World) Advance(elapsed time.Duration, update func(Tick)) error {
@@ -48,6 +52,9 @@ func (w *World) AdvanceWithHooks(elapsed time.Duration, hooks StepHooks) error {
 	for w.remainder >= w.options.FixedStep && w.substeps < w.options.MaxSubsteps {
 		w.remainder -= w.options.FixedStep
 		w.tick(hooks)
+		if hooks.StopAfterStep != nil && hooks.StopAfterStep() {
+			break
+		}
 	}
 	backlog := w.remainder / w.options.FixedStep * w.options.FixedStep
 	w.discard(backlog)

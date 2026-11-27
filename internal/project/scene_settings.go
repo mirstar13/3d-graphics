@@ -8,9 +8,18 @@ import (
 
 // SceneSettings describes global state inherited by each new runtime session.
 type SceneSettings struct {
+	Objective  *ObjectiveSettings  `yaml:"objective,omitempty"`
 	Camera     *CameraSettings     `yaml:"camera,omitempty"`
 	Lighting   *LightingSettings   `yaml:"lighting,omitempty"`
 	Simulation *SimulationSettings `yaml:"simulation,omitempty"`
+}
+
+// ObjectiveSettings challenges a dynamic body to activate a named pressure plate
+// by the final tick. Zero TickLimit allows unlimited time.
+type ObjectiveSettings struct {
+	Text      string `yaml:"text"`
+	Signal    string `yaml:"signal"`
+	TickLimit uint64 `yaml:"tick_limit,omitempty"`
 }
 
 // CameraSettings specifies the initial world-space view and clipping planes.
@@ -63,6 +72,7 @@ func copyValue[T any](v *T) *T {
 	return &c
 }
 func (s SceneSettings) clone() SceneSettings {
+	s.Objective = copyValue(s.Objective)
 	s.Camera = copyValue(s.Camera)
 	if s.Lighting != nil {
 		s.Lighting = copyValue(s.Lighting)
@@ -84,6 +94,9 @@ func validPosition(p engine.Point) bool {
 	return finiteRange(p.X, -1e9, 1e9) && finiteRange(p.Y, -1e9, 1e9) && finiteRange(p.Z, -1e9, 1e9)
 }
 func (s SceneSettings) validate() error {
+	if o := s.Objective; o != nil && (!ValidText(o.Text, 100) || !ValidText(o.Signal, 80)) {
+		return fmt.Errorf("objective requires printable text and a plate signal")
+	}
 	if c := s.Camera; c != nil && (!validPosition(c.Position) || !validPosition(c.Target) || c.Position == c.Target || !finiteRange(c.FOVX, .01, 179.99) || !finiteRange(c.FOVY, .01, 179.99) || !finiteRange(c.Near, 1e-8, 1e9) || !finiteRange(c.Far, c.Near, 1e9) || c.Far == c.Near) {
 		return fmt.Errorf("invalid camera position, target, FOV or clipping planes")
 	}
