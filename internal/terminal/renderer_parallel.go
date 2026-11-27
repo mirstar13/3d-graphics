@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"math"
 	"sync"
 
 	"github.com/mirstar13/go-3d-graphics/internal/engine"
@@ -12,6 +13,7 @@ type ParallelRenderer struct {
 	NumWorkers int
 	TileSize   int
 	Batched    bool
+	Work       TileWork
 	Pools      *engine.RenderPools
 
 	// Worker synchronization
@@ -19,11 +21,22 @@ type ParallelRenderer struct {
 	wg        sync.WaitGroup
 }
 
+// TileWork describes the last tiled frame's instance preparation and binning.
+type TileWork struct {
+	Instances, Vertices, InstanceTileReferences int
+}
+
+type tileDraw struct {
+	node     *engine.SceneNode
+	mesh     *engine.Mesh
+	vertices []engine.Point
+}
+
 // RenderTile represents a tile to be rendered
 type RenderTile struct {
 	X, Y          int
 	Width, Height int
-	Nodes         []*engine.SceneNode
+	draws         []tileDraw
 	Camera        *engine.Camera
 }
 
@@ -92,17 +105,11 @@ func (pr *ParallelRenderer) generateTiles(nodes []*engine.SceneNode, camera *eng
 	tilesY := (height + pr.TileSize - 1) / pr.TileSize
 
 	// Pre-allocate bins
-	bins := make([][]*engine.SceneNode, tilesX*tilesY)
-	for i := range bins {
-		bins[i] = make([]*engine.SceneNode, 0)
-	}
+	bins := make([][]tileDraw, tilesX*tilesY)
+	pr.Work = TileWork{}
 
-	// Bin nodes
-	for _, node := range nodes {
-		minX, minY, maxX, maxY := 0, 0, width-1, height-1
-		if bounds := engine.ComputeNodeBounds(node); bounds != nil {
-			minX, minY, maxX, maxY = projectAABBToScreen(bounds, camera, width, height)
-		}
+	add := func(draw tileDraw, minX, minY, maxX, maxY int) int {
+		references := 0
 		if maxX >= 0 && maxY >= 0 && minX < width && minY < height {
 			startTx := engine.ClampInt(minX/pr.TileSize, 0, tilesX-1)
 			endTx := engine.ClampInt(maxX/pr.TileSize, 0, tilesX-1)
@@ -112,10 +119,34 @@ func (pr *ParallelRenderer) generateTiles(nodes []*engine.SceneNode, camera *eng
 			for ty := startTy; ty <= endTy; ty++ {
 				for tx := startTx; tx <= endTx; tx++ {
 					idx := ty*tilesX + tx
-					bins[idx] = append(bins[idx], node)
+					bins[idx] = append(bins[idx], draw)
+					references++
 				}
 			}
 		}
+		return references
+	}
+	for _, node := range nodes {
+		if instances, ok := node.Object.(*engine.InstancedMesh); ok {
+			if !instances.Enabled || instances.BaseMesh == nil || len(instances.BaseMesh.Vertices) == 0 {
+				continue
+			}
+			world := node.Transform.GetWorldMatrix()
+			for _, instance := range instances.Instances {
+				mesh := instanceMesh(instances.BaseMesh, instance.Color)
+				vertices := transformMeshVertices(&mesh, world.Multiply(instance.Transform))
+				x0, y0, x1, y1 := instanceScreenBounds(vertices, camera, width, height)
+				pr.Work.Instances++
+				pr.Work.Vertices += len(vertices)
+				pr.Work.InstanceTileReferences += add(tileDraw{mesh: &mesh, vertices: vertices}, x0, y0, x1, y1)
+			}
+			continue
+		}
+		x0, y0, x1, y1 := 0, 0, width-1, height-1
+		if bounds := engine.ComputeNodeBounds(node); bounds != nil {
+			x0, y0, x1, y1 = projectAABBToScreen(bounds, camera, width, height)
+		}
+		add(tileDraw{node: node}, x0, y0, x1, y1)
 	}
 
 	for ty := 0; ty < tilesY; ty++ {
@@ -138,7 +169,7 @@ func (pr *ParallelRenderer) generateTiles(nodes []*engine.SceneNode, camera *eng
 
 			tile := RenderTile{
 				X: x, Y: y, Width: w, Height: h,
-				Nodes: bins[idx], Camera: camera,
+				draws: bins[idx], Camera: camera,
 			}
 			pr.tileQueue <- tile
 		}
@@ -149,14 +180,31 @@ func (pr *ParallelRenderer) generateTiles(nodes []*engine.SceneNode, camera *eng
 func (pr *ParallelRenderer) renderTile(tile RenderTile) {
 	renderer := *(pr.Renderer.(*TerminalRenderer))
 	renderer.SetClipBounds(tile.X, tile.Y, tile.X+tile.Width, tile.Y+tile.Height)
-	for _, node := range tile.Nodes {
-		renderer.renderNode(node, node.Transform.GetWorldMatrix(), tile.Camera)
+	for _, draw := range tile.draws {
+		if draw.mesh != nil {
+			renderer.renderPreparedMesh(draw.mesh, draw.vertices, tile.Camera)
+		} else {
+			renderer.renderNode(draw.node, draw.node.Transform.GetWorldMatrix(), tile.Camera)
+		}
 	}
 }
 
 // RenderBatched bins enabled objects into tiles without the frustum pre-pass.
 func (pr *ParallelRenderer) RenderBatched(scene *engine.Scene) {
 	pr.renderScene(scene, false)
+}
+
+// In front of the near plane, projected triangle extrema occur at vertices.
+func instanceScreenBounds(vertices []engine.Point, camera *engine.Camera, width, height int) (int, int, int, int) {
+	x0, y0, x1, y1 := float64(width), float64(height), -1., -1.
+	for _, v := range vertices {
+		x, y, z := camera.ProjectPointFloat(v, height, width)
+		if z <= camera.Near {
+			return 0, 0, width - 1, height - 1
+		}
+		x0, y0, x1, y1 = min(x0, x), min(y0, y), max(x1, x), max(y1, y)
+	}
+	return int(math.Floor(x0)) - 1, int(math.Floor(y0)) - 1, int(math.Ceil(x1)) + 1, int(math.Ceil(y1)) + 1
 }
 
 func projectAABBToScreen(aabb *engine.AABB, cam *engine.Camera, w, h int) (minX, minY, maxX, maxY int) {

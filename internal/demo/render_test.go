@@ -206,3 +206,16 @@ func TestRunwayVisitsAllDetailLevels(t *testing.T) {
 		t.Fatalf("runway only visits %v", visited)
 	}
 }
+
+func TestInstancedTileParity(t *testing.T) {
+	for _, elapsed := range []float64{0, 1.75} {
+		scene, lights := presetScene(5, elapsed, false)
+		want := renderPreset(5, scene, lights, engine.RenderModeSingle, true)
+		for _, mode := range []engine.RenderMode{engine.RenderModeParallelTiles, engine.RenderModeParallelBatched} {
+			got := renderPreset(5, scene, lights, mode, true)
+			if !reflect.DeepEqual(got.Surface, want.Surface) || !reflect.DeepEqual(got.ColorBuffer, want.ColorBuffer) || !reflect.DeepEqual(got.ZBuffer, want.ZBuffer) {
+				t.Fatalf("tile parity failed for mode %v at %.2fs", mode, elapsed)
+			}
+		}
+	}
+}

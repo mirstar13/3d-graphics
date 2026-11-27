@@ -23,6 +23,7 @@ func (r *TerminalRenderer) fitTerminal(width, height, columns, rows int) {
 	moved := x != r.OffsetX || y != r.OffsetY
 	r.OffsetX, r.OffsetY = x, y
 	if r.Resize(width, height) || moved {
+		r.previousPresentation.valid = false
 		r.lastDebugLine = ""
 		fmt.Fprint(r.Writer, "\033[2J\033[H")
 	}
@@ -43,6 +44,7 @@ func (r *TerminalRenderer) Resize(width, height int) bool {
 		r.ColorBuffer[y] = make([]engine.Color, width)
 		r.ZBuffer[y] = make([]float64, width)
 	}
+	r.previousPresentation.valid = false
 	r.lastDebugLine = ""
 	r.BeginFrame()
 	return true

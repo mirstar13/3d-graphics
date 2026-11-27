@@ -45,6 +45,8 @@ type TerminalRenderer struct {
 	debugBuffer                     strings.Builder
 	lastDebugLine                   string
 	presentBuffer                   bytes.Buffer
+	previousPresentation            presentationHistory
+	DiffPresentation                bool
 	presentColors                   map[engine.Color]string
 
 	frameBytes                          int
@@ -103,6 +105,8 @@ func (r *TerminalRenderer) SetClipBounds(minX, minY, maxX, maxY int) {
 
 // Initialize sets up the terminal renderer
 func (r *TerminalRenderer) Initialize() error {
+	r.previousPresentation.valid = false
+	r.DiffPresentation = true
 	if r.Writer == nil {
 		return fmt.Errorf("writer is nil")
 	}
@@ -172,77 +176,83 @@ func (r *TerminalRenderer) Present() {
 	builder.Reset()
 	builder.Grow(r.Height * r.Width * 25)
 
-	// Move cursor to home position
-	builder.WriteString("\033[H")
+	if sparse := r.DiffPresentation && r.appendChangedRows(builder); !sparse {
+		// Move cursor to home position.
+		builder.WriteString("\033[H")
 
-	if r.UseColor {
-		currentColor := engine.ColorBlack
-		firstColor := true
-		trueColor := r.ColorMode == "truecolor" || r.ColorMode == ""
-		if !trueColor {
-			if r.presentColors == nil {
-				r.presentColors = make(map[engine.Color]string)
-			}
-			clear(r.presentColors)
-		}
-		colorCodes := r.presentColors
-		for i := 0; i < r.Height; i++ {
-			if r.OffsetX != 0 || r.OffsetY != 0 {
-				fmt.Fprintf(builder, "\033[%d;%dH", r.OffsetY+i+1, r.OffsetX+1)
-			}
-			for j := 0; j < r.Width; j++ {
-				char := r.Surface[i][j]
-				color := r.ColorBuffer[i][j]
-
-				if firstColor || color != currentColor {
-					firstColor = false
-					if trueColor {
-						var scratch [20]byte
-						code := strconv.AppendUint(append(scratch[:0], "\033[38;2;"...), uint64(color.R), 10)
-						code = strconv.AppendUint(append(code, ';'), uint64(color.G), 10)
-						code = strconv.AppendUint(append(code, ';'), uint64(color.B), 10)
-						builder.Write(append(code, 'm'))
-					} else {
-						code, ok := colorCodes[color]
-						if !ok {
-							code = Foreground(color, r.ColorMode)
-							colorCodes[color] = code
-						}
-						builder.WriteString(code)
-					}
-					currentColor = color
+		if r.UseColor {
+			currentColor := engine.ColorBlack
+			firstColor := true
+			trueColor := r.ColorMode == "truecolor" || r.ColorMode == ""
+			if !trueColor {
+				if r.presentColors == nil {
+					r.presentColors = make(map[engine.Color]string)
 				}
-				builder.WriteRune(char)
+				clear(r.presentColors)
 			}
+			colorCodes := r.presentColors
+			for i := 0; i < r.Height; i++ {
+				if r.OffsetX != 0 || r.OffsetY != 0 {
+					fmt.Fprintf(builder, "\033[%d;%dH", r.OffsetY+i+1, r.OffsetX+1)
+				}
+				for j := 0; j < r.Width; j++ {
+					char := r.Surface[i][j]
+					color := r.ColorBuffer[i][j]
 
-			builder.WriteString("\033[K")
-			if i < r.Height-1 && r.OffsetX == 0 && r.OffsetY == 0 {
-				builder.WriteString("\r\n")
+					if firstColor || color != currentColor {
+						firstColor = false
+						if trueColor {
+							var scratch [20]byte
+							code := strconv.AppendUint(append(scratch[:0], "\033[38;2;"...), uint64(color.R), 10)
+							code = strconv.AppendUint(append(code, ';'), uint64(color.G), 10)
+							code = strconv.AppendUint(append(code, ';'), uint64(color.B), 10)
+							builder.Write(append(code, 'm'))
+						} else {
+							code, ok := colorCodes[color]
+							if !ok {
+								code = Foreground(color, r.ColorMode)
+								colorCodes[color] = code
+							}
+							builder.WriteString(code)
+						}
+						currentColor = color
+					}
+					builder.WriteRune(char)
+				}
+
+				builder.WriteString("\033[K")
+				if i < r.Height-1 && r.OffsetX == 0 && r.OffsetY == 0 {
+					builder.WriteString("\r\n")
+				}
+			}
+			builder.WriteString(engine.ColorReset())
+		} else {
+			for i := 0; i < r.Height; i++ {
+				if r.OffsetX != 0 || r.OffsetY != 0 {
+					fmt.Fprintf(builder, "\033[%d;%dH", r.OffsetY+i+1, r.OffsetX+1)
+				}
+				for j := 0; j < r.Width; j++ {
+					builder.WriteRune(r.Surface[i][j])
+				}
+				builder.WriteString("\033[K")
+				if i < r.Height-1 && r.OffsetX == 0 && r.OffsetY == 0 {
+					builder.WriteString("\r\n")
+				}
 			}
 		}
-		builder.WriteString(engine.ColorReset())
-	} else {
-		for i := 0; i < r.Height; i++ {
-			if r.OffsetX != 0 || r.OffsetY != 0 {
-				fmt.Fprintf(builder, "\033[%d;%dH", r.OffsetY+i+1, r.OffsetX+1)
-			}
-			for j := 0; j < r.Width; j++ {
-				builder.WriteRune(r.Surface[i][j])
-			}
-			builder.WriteString("\033[K")
-			if i < r.Height-1 && r.OffsetX == 0 && r.OffsetY == 0 {
-				builder.WriteString("\r\n")
-			}
-		}
+
 	}
-
 	r.frameBytes = builder.Len()
 	var writeStart time.Time
 	if r.measureWrite {
 		writeStart = time.Now()
 	}
-	r.Writer.Write(builder.Bytes())
-	r.Writer.Flush()
+	if builder.Len() > 0 {
+		_, writeErr := r.Writer.Write(builder.Bytes())
+		if flushErr := r.Writer.Flush(); writeErr != nil || flushErr != nil {
+			r.previousPresentation.valid = false
+		}
+	}
 	if r.measureWrite {
 		r.writeTime = time.Since(writeStart)
 	}
@@ -397,6 +407,10 @@ func (r *TerminalRenderer) RenderPoint(point *engine.Point, worldMatrix engine.M
 
 // RenderMesh renders a complete mesh
 func (r *TerminalRenderer) RenderMesh(mesh *engine.Mesh, worldMatrix engine.Matrix4x4, camera *engine.Camera) {
+	r.renderPreparedMesh(mesh, transformMeshVertices(mesh, worldMatrix), camera)
+}
+
+func transformMeshVertices(mesh *engine.Mesh, worldMatrix engine.Matrix4x4) []engine.Point {
 	transformedVertices := make([]engine.Point, len(mesh.Vertices))
 	for i, vertex := range mesh.Vertices {
 		vertex.X += mesh.Position.X
@@ -405,6 +419,10 @@ func (r *TerminalRenderer) RenderMesh(mesh *engine.Mesh, worldMatrix engine.Matr
 		transformedVertices[i] = worldMatrix.TransformPoint(vertex)
 	}
 
+	return transformedVertices
+}
+
+func (r *TerminalRenderer) renderPreparedMesh(mesh *engine.Mesh, transformedVertices []engine.Point, camera *engine.Camera) {
 	// Reusable triangle struct for metadata passing to internal renderer
 	// We only set metadata (Material, UVs) on this, not vertices
 	tempTri := engine.AcquireTriangle()
@@ -450,16 +468,20 @@ func (r *TerminalRenderer) RenderInstancedMesh(instMesh *engine.InstancedMesh, w
 		// Combine world matrix with instance transform
 		finalMatrix := worldMatrix.Multiply(instance.Transform)
 
-		// Per-instance materials must not mutate the shared mesh during tiled rendering.
-		mesh := *instMesh.BaseMesh
-		if instance.Color != (engine.Color{}) {
-			material := engine.NewMaterial()
-			material.DiffuseColor = instance.Color
-			mesh.Material = &material
-			mesh.FaceMaterials = nil
-		}
+		mesh := instanceMesh(instMesh.BaseMesh, instance.Color)
 		r.RenderMesh(&mesh, finalMatrix, camera)
 	}
+}
+
+func instanceMesh(base *engine.Mesh, color engine.Color) engine.Mesh {
+	mesh := *base
+	if color != (engine.Color{}) {
+		material := engine.NewMaterial()
+		material.DiffuseColor = color
+		mesh.Material = &material
+		mesh.FaceMaterials = nil
+	}
+	return mesh
 }
 
 // SetLightingSystem sets the lighting system
