@@ -1,5 +1,12 @@
 version: 1
 name: Relay chamber
+camera:
+  position: {z: -2}
+  target: {z: 2}
+  fovx: 60
+  fovy: 40
+  near: 0.1
+  far: 100
 entities:
   - id: relay
     name: Relay

@@ -181,3 +181,47 @@ func TestSceneChangeRetainsRoomOnErrorAndExpiresHandles(t *testing.T) {
 		t.Fatal("accepted a handle from before restart")
 	}
 }
+
+func TestMouseLookOnlyConsumesCapturedTick(t *testing.T) {
+	calls := 0
+	g, err := creator.Open(scene(t), func(w *creator.World, _ creator.Tick) error {
+		dx, dy := w.MouseDelta()
+		calls++
+		switch calls {
+		case 1:
+			if dx != 0 || dy != 0 {
+				t.Fatal("uncaptured motion", dx, dy)
+			}
+			w.CaptureMouse(true)
+		case 2:
+			if dx != 3 || dy != -2 {
+				t.Fatal("lost motion", dx, dy)
+			}
+			eye, before := w.CameraRay()
+			w.TurnCamera(.12, .08)
+			afterEye, after := w.CameraRay()
+			if afterEye != eye || before == after || after.Y <= before.Y {
+				t.Fatal("camera rotation", before, after)
+			}
+		case 3:
+			if dx != 0 || dy != 0 {
+				t.Fatal("repeated motion")
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, in := range []creator.Input{{MouseX: 99}, {MouseX: 3, MouseY: -2}, {}} {
+		if err := g.StepWithInput(in); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !g.MouseCaptured() {
+		t.Fatal("lost capture")
+	}
+	if err := g.Restart(nil); err != nil || g.MouseCaptured() {
+		t.Fatal("restart capture", err)
+	}
+}

@@ -63,8 +63,57 @@ func play(in io.Reader, out io.Writer) error {
 	}
 }
 
+// runView shows the authored room with script-controlled camera input.
+func runView() error {
+	g, err := creator.Open(".", func(w *creator.World, _ creator.Tick) error {
+		if w.ActionPressed("mouse_look") {
+			w.CaptureMouse(true)
+		}
+		x, y := w.MouseDelta()
+		right, up := float64(x)*.035, -float64(y)*.06
+		if w.ActionPressed("look_left") {
+			right -= .12
+		}
+		if w.ActionPressed("look_right") {
+			right += .12
+		}
+		if w.ActionPressed("look_up") {
+			up += .1
+		}
+		if w.ActionPressed("look_down") {
+			up -= .1
+		}
+		w.TurnCamera(right, up)
+		if w.ActionPressed("use") {
+			eye, direction := w.CameraRay()
+			entity, ok, err := w.Pick(eye, direction, 100)
+			if err != nil || !ok {
+				return err
+			}
+			state, err := w.Inspect(entity)
+			if err != nil {
+				return err
+			}
+			if state.ID == "relay" {
+				return w.ChangeScene("scenes/exit.yaml")
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	return g.RunTerminal("M mouse look | Arrows look | U use")
+}
+
 func main() {
-	if err := play(os.Stdin, os.Stdout); err != nil {
+	var err error
+	if len(os.Args) == 2 && os.Args[1] == "-view" {
+		err = runView()
+	} else {
+		err = play(os.Stdin, os.Stdout)
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

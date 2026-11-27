@@ -8,7 +8,12 @@ import tempfile
 repo = Path(__file__).resolve().parents[1]
 env = {**os.environ, "GOWORK": "off"}
 with tempfile.TemporaryDirectory() as directory:
-    target = Path(directory)
+    target = Path(directory) / "consumer"
+    target.mkdir()
+    fixture = Path(directory) / "examples" / "relay-rooms"
+    fixture.mkdir(parents=True)
+    shutil.copy(repo / "examples/relay-rooms/project.yaml", fixture)
+    shutil.copytree(repo / "examples/relay-rooms/scenes", fixture / "scenes")
     shutil.copy(repo / "creator/creator_test.go", target / "behavior_test.go")
     shutil.copy(repo / "go.sum", target / "go.sum")
     module = "github.com/mirstar13/go-3d-graphics"

@@ -9,6 +9,7 @@ package creator
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/mirstar13/go-3d-graphics/internal/engine"
@@ -153,6 +154,8 @@ type Game struct {
 	nextPath    string
 	nextSession *game.Session
 	keys        []string
+	capture     bool
+	dx, dy      int
 }
 
 // Open loads the project's saved scene, resolves linked assets and applies scene
@@ -201,6 +204,7 @@ func (g *Game) Restart(b Behavior) error {
 		return err
 	}
 	g.world.session, g.behavior, g.failure = s, b, nil
+	g.capture = false
 	return nil
 }
 
@@ -213,6 +217,46 @@ func (g *Game) Step() error { return g.StepWithKeys() }
 
 // StepWithKeys delivers input tokens for this tick only.
 func (g *Game) StepWithKeys(keys ...string) error {
+	return g.StepWithInput(Input{Keys: keys})
+}
+
+// Input carries one tick of key presses and relative terminal cell motion.
+// Positive X points right and positive Y points down.
+type Input struct {
+	Keys           []string
+	MouseX, MouseY int
+}
+
+// CaptureMouse requests terminal motion reporting, or releases it.
+func (w *World) CaptureMouse(on bool) { w.owner.capture = on }
+
+// MouseCaptured reports whether the game currently requests pointer motion.
+func (g *Game) MouseCaptured() bool { return g.capture }
+
+// MouseDelta returns accumulated motion for this behavior invocation.
+func (w *World) MouseDelta() (int, int) { return w.owner.dx, w.owner.dy }
+
+// CameraRay returns the current eye and forward direction.
+func (w *World) CameraRay() (Vec3, Vec3) {
+	c := w.session.Scene.Camera
+	return Vec3(c.GetPosition()), Vec3(c.GetForwardVectorPoint())
+}
+
+// TurnCamera rotates relative to the current view in radians. Positive angles
+// turn right and up. Pitch stops just short of the poles.
+func (w *World) TurnCamera(right, up float64) {
+	if right == 0 && up == 0 {
+		return
+	}
+	c := w.session.Scene.Camera
+	eye, forward := w.CameraRay()
+	yaw := math.Atan2(forward.X, forward.Z) + right
+	pitch := max(-math.Pi/2+.001, min(math.Pi/2-.001, math.Atan2(forward.Y, math.Hypot(forward.X, forward.Z))+up))
+	c.LookAt(engine.Point{X: eye.X + math.Sin(yaw)*math.Cos(pitch), Y: eye.Y + math.Sin(pitch), Z: eye.Z + math.Cos(yaw)*math.Cos(pitch)})
+}
+
+// StepWithInput delivers motion only when capture was active at tick start.
+func (g *Game) StepWithInput(in Input) error {
 	if g.failure != nil || g.world.session.Objective().Finished() {
 		return g.failure
 	}
@@ -220,14 +264,18 @@ func (g *Game) StepWithKeys(keys ...string) error {
 		return fmt.Errorf("recursive game step")
 	}
 	g.stepping = true
+	if g.capture {
+		g.dx, g.dy = in.MouseX, in.MouseY
+	}
 	defer func() {
+		g.dx, g.dy = 0, 0
 		g.stepping, g.inBehavior = false, false
 		g.keys, g.nextSession, g.nextPath = nil, nil, ""
 	}()
 	s := g.world.session
 	if g.behavior != nil {
 		stats := s.World.Stats()
-		g.inBehavior, g.keys = true, keys
+		g.inBehavior, g.keys = true, in.Keys
 		err := g.behavior(&g.world, Tick{stats.Tick + 1, stats.FixedStep})
 		g.inBehavior = false
 		if err != nil {
@@ -238,6 +286,7 @@ func (g *Game) StepWithKeys(keys ...string) error {
 	g.failure = s.Step()
 	if g.failure == nil && g.nextSession != nil {
 		g.world.session, g.scenePath = g.nextSession, g.nextPath
+		g.capture = false
 	}
 	return g.failure
 }

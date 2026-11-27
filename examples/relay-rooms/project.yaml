@@ -3,3 +3,8 @@ name: Relay Rooms
 entry_scene: scenes/relay.yaml
 gameplay_bindings:
   u: use
+  m: mouse_look
+  left: look_left
+  right: look_right
+  up: look_up
+  down: look_down

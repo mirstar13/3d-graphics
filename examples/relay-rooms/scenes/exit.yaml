@@ -1,5 +1,12 @@
 version: 1
 name: Exit chamber
+camera:
+  position: {z: -2}
+  target: {z: 2}
+  fovx: 60
+  fovy: 40
+  near: 0.1
+  far: 100
 entities:
   - id: exit
     name: Exit beacon

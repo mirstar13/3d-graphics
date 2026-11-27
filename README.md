@@ -27,7 +27,7 @@ covers editing, play and standalone export.
 ## First-person example
 
 Run `go run .`, choose **Load scene / project**, and select **Switch Room**.
-Walk with WASD and look with the arrow keys. Aim the center marker at the crate
+Walk with WASD. Use the arrow keys to look, or press **M** for mouse look and **Esc** to release the pointer. Aim the center marker at the crate
 and press F to push or G to grab. Press G again to release it. Approach the
 green button, aim at it and press E to open the gate. Reach the gold pad to
 finish. R restarts a completed round and Q returns to the launcher.
@@ -41,7 +41,7 @@ change your font. See [font size and performance](#font-size-and-performance).
 Run `go run . -editor`, select **New scene / project** (or press **E**) in the start menu, or open an existing project
 with `go run . -project /path/to/MyGame`. Create a project, add boxes/spheres, edit
 properties, save, and Play/Stop without changing the authored scene. The workspace
-includes nested visual hierarchies, reparenting, subtree duplication/deletion,
+has clickable New, Open, Save, Play and Stop buttons. It also includes nested visual hierarchies, reparenting, subtree duplication/deletion,
 linked scene resources, property overrides, selection outlines, undo/redo, and
 pause/step. Press **R** to extract a subtree and **A** to browse resources.
 Physics bodies remain root-level. Press **K** to edit project key bindings;
@@ -378,6 +378,19 @@ actions and room transitions. Enter U to use the relay, U again to activate
 the exit beacon, R to reload the current room, or Q to quit. Change the action
 key in `project.yaml`. To export from the engine checkout, open the example
 with `go run . -project examples/relay-rooms` and press F9.
+
+Run `go run . -view` in the same directory for the interactive camera. Press
+**M** to capture mouse motion, **Esc** to release it, or use the arrow keys.
+Aim at the relay and press **U** to switch rooms. Terminal mouse motion has
+cell resolution and stops at the edge of the window.
+
+In a standalone Go project, `game.RunTerminal(help)` runs a centred monochrome
+view and delivers key presses and accumulated mouse motion to fixed ticks.
+A behavior can request capture with `world.CaptureMouse(true)`, read
+`dx, dy := world.MouseDelta()`, and call `world.TurnCamera` with its own
+sensitivity in radians. Positive camera angles turn right and up. Mouse Y
+increases downward. A custom host can use `game.MouseCaptured()` and
+`game.StepWithInput` to supply the same input.
 
 The sample builds against the engine checkout via its relative Go module
 replacement. If you copy the project elsewhere for development, point that
