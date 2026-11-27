@@ -12,6 +12,8 @@ import (
 	"github.com/mirstar13/go-3d-graphics/internal/project"
 )
 
+const soundButtons = "[Import] [Audition] [Stop]"
+
 func TestEditorAudioClickAssignAndReopen(t *testing.T) {
 	p, err := project.Create(filepath.Join(t.TempDir(), "audio"))
 	if err != nil {

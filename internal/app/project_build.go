@@ -68,7 +68,7 @@ func (m projectEditorModel) buildKey(key string) (tea.Model, tea.Cmd) {
 	case "up":
 		m.build.scroll = max(0, m.build.scroll-1)
 	case "down":
-		m.build.scroll = min(max(0, len(m.buildLines())-max(1, m.height-2)), m.build.scroll+1)
+		m.build.scroll = min(max(0, len(m.buildLines())-max(1, m.height-3)), m.build.scroll+1)
 	case "ctrl+b":
 		if m.build.cancel == nil {
 			return m.startBuild()
@@ -78,7 +78,7 @@ func (m projectEditorModel) buildKey(key string) (tea.Model, tea.Cmd) {
 }
 func (m projectEditorModel) buildView() string {
 	lines := m.buildLines()
-	rows := max(1, m.height-2)
+	rows := max(1, m.height-3)
 	first := min(m.build.scroll, max(0, len(lines)-rows))
 	help := "Up/Down scroll | Ctrl+B rebuild | Esc close"
 	if m.build.cancel != nil {

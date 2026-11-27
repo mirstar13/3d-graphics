@@ -33,8 +33,6 @@ func (m *projectEditorModel) soundCues() []string {
 	return slices.Sorted(maps.Keys(m.project.Manifest.Sounds))
 }
 
-const soundButtons = "[Import] [Audition] [Stop]"
-
 func (m *projectEditorModel) soundBrowser() string {
 	var out strings.Builder
 	out.WriteString("\nAudio cues\n")
@@ -50,28 +48,8 @@ func (m *projectEditorModel) soundBrowser() string {
 		}
 		fmt.Fprintln(&out, prefix+cues[i])
 	}
-	out.WriteString(soundButtons + "\n")
 	out.WriteString("Arrows choose | Enter assign to plate | I import | A audition | S stop | Esc close\n")
 	return out.String()
-}
-
-func (m *projectEditorModel) soundClick(msg tea.MouseMsg) string {
-	if msg.Action != tea.MouseActionPress || msg.Button != tea.MouseButtonLeft || msg.X < 0 {
-		return ""
-	}
-	lines := strings.Split(m.View(), "\n")
-	if msg.Y < 0 || msg.Y >= len(lines) || msg.X >= len(lines[msg.Y]) {
-		return ""
-	}
-	line := lines[msg.Y]
-	x := 0
-	for i, button := range strings.Fields(soundButtons) {
-		if strings.HasPrefix(line, soundButtons[:x+len(button)]) && msg.X >= x && msg.X < x+len(button) {
-			return []string{"i", "a", "s"}[i]
-		}
-		x += len(button) + 1
-	}
-	return ""
 }
 
 func (m *projectEditorModel) updateSoundBrowser(key string) {

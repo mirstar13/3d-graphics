@@ -17,12 +17,28 @@ to omitted fields. Explicit CLI flags override file values. A missing default
 file uses built-in defaults, while a missing explicitly requested file or invalid
 YAML reports an error. Unknown keys and invalid values are rejected.
 
-## Editable sample game
+## Example games
 
-Open Pulse Dock with `go run . -project examples/pulse-dock`. To play its turn-based
-cockpit directly, run `go run .` inside `examples/pulse-dock`. Copy the sample
-directory to customize it. Its Go package guide (`go doc .` in that directory)
-covers editing, play and standalone export.
+Open **Load scene / project** to play these games. Select **Play** with the mouse
+or press **Enter**. Win and game-over screens let you replay, return to the game
+menu, or quit to the launcher.
+
+| Example | Play |
+| --- | --- |
+| [Switch Room](examples/switch-room) | Walk through a first-person room, open the gate and reach the exit. |
+| [Pulse Dock](examples/pulse-dock) | Use the arrow keys to steer a tug around a pylon and dock before time runs out. |
+| [Bank Shot](examples/bank-shot) | Choose a rail with Left or Right, or aim straight with Down. Press Space to launch one puck. |
+| [Lift Run](examples/lift-run) | Steer with Left/Right and brake with Space. Use the launch pad to reach the raised landing. |
+
+[Relay Rooms](examples/relay-rooms) and the [Behavior Workshop](examples/behavior-workshop)
+also run from their example directories with `go run .`. The workshop requires
+a compiled worker. Pulse Dock supports a turn-based cockpit with `go run . -text`.
+Relay Rooms supports its line-input demo with the same flag.
+
+Open an example for editing with `go run . -project examples/bank-shot`, replacing
+the folder as needed. Use **Actions → Export game** to build a ZIP, then extract
+it and run the included launcher. On Linux, use an audio-enabled build to hear
+the examples.
 
 ## Project audio
 
@@ -36,8 +52,11 @@ inspector.
 
 Use **Ctrl+Y** during Play, at the audio cue browser, or in an interactive game
 to toggle mute. A pressure plate plays once when it becomes occupied. Go game
-behaviors can call `world.PlaySound("plate_down")` during a tick. Export includes
-the project's WAV assets.
+behaviors can call `world.PlaySound("plate_down")` during a tick. Set
+`win_sound` and `loss_sound` in `project.yaml` to registered cue IDs for round
+results. Go behaviors can call `world.FinishRound(true)` to win or
+`world.FinishRound(false)` to lose after the current tick succeeds. Export
+includes the project's WAV assets.
 
 Windows and macOS builds include the native audio backend. On Linux, install
 the ALSA development files and enable the backend with `go run -tags audio .`.
@@ -48,10 +67,11 @@ running the game.
 ## First-person example
 
 Run `go run .`, choose **Load scene / project**, and select **Switch Room**.
-Walk with WASD. Use the arrow keys to look, or press **M** for mouse look and **Esc** to release the pointer. Aim the center marker at the crate
-and press F to push or G to grab. Press G again to release it. Approach the
-green button, aim at it and press E to open the gate. Reach the gold pad to
-finish. R restarts a completed round and Q returns to the launcher.
+Walk with **WASD**. Hold the right mouse button and drag to turn and look up
+or down. Press **M** for free look and **Esc** to release it. The arrow keys
+also turn the camera. Aim at the crate and press **F** to push or **G** to
+grab or release. Approach the green button and press **E** to open the gate.
+Reach the gold pad before time runs out.
 
 Run in any terminal with ANSI cursor positioning and interactive input. Font size
 belongs to the terminal's preferences: the engine does not require VS Code or
@@ -62,9 +82,11 @@ change your font. See [font size and performance](#font-size-and-performance).
 Run `go run . -editor`, select **New scene / project** (or press **E**) in the start menu, or open an existing project
 with `go run . -project /path/to/MyGame`. Create a project, add boxes/spheres, edit
 properties, save, and Play/Stop without changing the authored scene. The workspace
-has clickable New, Open, Save, Play and Stop buttons. It also includes nested visual hierarchies, reparenting, subtree duplication/deletion,
-linked scene resources, property overrides, selection outlines, undo/redo, and
-pause/step. Click a hierarchy row to select it or an inspector property to edit it.
+has clickable New, Open, Save, Play, Pause, Step, and Stop controls. Use
+**Actions** for entity creation, parenting, undo/redo, resources, scene
+settings, build and export. Click hierarchy rows and inspector properties,
+and scroll these panels with the mouse wheel. **Browse** selects directories
+or import files, and **Keys** opens an on-screen keyboard for text fields.
 During Play, drag with the right mouse button or use Shift+arrow keys to turn the
 camera. Press **Ctrl+G** to give the last built game the terminal, with any
 `terminal_args` from its manifest. The editor regains focus when the child exits.
@@ -96,8 +118,8 @@ view through **Ctrl+G** after building.
 
 ## Start menu
 
-`go run .` opens the launcher. Use Up/Down and Enter.
-Load scene / project starts a demo scene or the real-time Pulse Dock game. Choose Open project directory to edit an existing project, including the example. New scene / project opens the editor’s project creation form. Click geometry in the viewport to select it and use the mouse wheel to zoom.
+`go run .` opens the launcher. Click an item or use Up/Down and Enter.
+Load scene / project lists the demo scenes and games. Choose Open project directory to edit an existing project, including the example. New scene / project opens the editor’s project creation form. Click geometry in the viewport to select it and use the mouse wheel to zoom.
 Enter starts that scene. Escape returns from the picker to the start menu.
 Leaving a running scene with X, Escape, or Ctrl+C returns to the start menu.
 Choose Exit, or press Escape or Ctrl+C in the start menu, to close the application.

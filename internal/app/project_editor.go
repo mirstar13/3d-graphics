@@ -28,9 +28,14 @@ func nextEditorTick() tea.Cmd {
 }
 
 type projectEditorModel struct {
-	audio          *audio.Manager
-	audition       *audio.Scope
-	soundSelection int
+	files           editorFiles
+	fileSelection   int
+	actionSelection int
+	keyboard        bool
+	keyPage         int
+	audio           *audio.Manager
+	audition        *audio.Scope
+	soundSelection  int
 
 	scriptedPlay                                   bool
 	lookDrag                                       input.Pointer
@@ -335,9 +340,8 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.lookDrag.Reset(false)
 		return m, nil
 	case tea.MouseMsg:
-		if m.modal == "sound_assets" {
-			m.updateSoundBrowser(m.soundClick(msg))
-			return m, nil
+		if m.modal != "" {
+			return m.dialogMouse(msg)
 		}
 		if m.gameViewActive() {
 			switch {
@@ -401,412 +405,446 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Batch(commands...)
 			}
 		}
-		key := msg.String()
-		if m.modal == "shortcuts" {
-			if key == "esc" || key == "?" || key == "q" {
+		return m.handleEditorKey(msg, msg.String())
+	}
+	return m, nil
+}
+
+func (m projectEditorModel) handleEditorKey(msg tea.KeyMsg, key string) (tea.Model, tea.Cmd) {
+	if key == "ui.keyboard" {
+		m.keyboard = !m.keyboard
+		m.keyPage = 0
+		return m, nil
+	}
+	if key == "ui.next_keys" {
+		m.keyPage++
+		return m, nil
+	}
+	if key == "ui.clear_draft" {
+		m.draft = ""
+		return m, nil
+	}
+	if key == "ui.files" {
+		m.browseFiles()
+		return m, nil
+	}
+	if m.modal == "files" {
+		return m.fileKey(key)
+	}
+	if m.modal == "commands" {
+		return m.commandKey(key)
+	}
+	if key == "ui.commands" && m.modal == "" {
+		m.actionSelection, m.modal = 0, "commands"
+		return m, nil
+	}
+	if m.modal == "shortcuts" {
+		if key == "esc" || key == "?" || key == "q" {
+			m.modal = ""
+		}
+		return m, nil
+	}
+	if m.project != nil && m.modal == "" && key == "?" {
+		m.modal = "shortcuts"
+		return m, nil
+	}
+	if m.modal == "build" || m.modal == "child" || m.modal == "export" {
+		return m.buildKey(key)
+	}
+	if m.modal == "scene" || m.modal == "scene_edit" {
+		m.sceneKey(msg, key)
+		return m, nil
+	}
+	if m.modal != "" {
+		if key == "esc" || key == "ctrl+c" {
+			if m.modal == "sound_assets" || m.modal == "sound_import" {
+				m.audition.Close()
+			}
+			m.modal = ""
+			return m, nil
+		}
+		if m.modal == "sound_assets" {
+			m.updateSoundBrowser(key)
+			return m, nil
+		}
+		if m.modal == "mesh_assets" {
+			m.updateMeshBrowser(key)
+			return m, nil
+		}
+		if m.modal == "tools" {
+			m.updateTools(key)
+			return m, nil
+		}
+		if m.modal == "bindings" {
+			m.updateBindings(key)
+			return m, nil
+		}
+		if m.modal == "assets" {
+			cmd := m.updateAssets(key)
+			return m, cmd
+		}
+		if m.modal == "parent" {
+			m.updateParentPicker(key)
+			return m, nil
+		}
+		if m.modal == "discard" {
+			if key == "d" {
+				action := m.pendingAction
 				m.modal = ""
-			}
-			return m, nil
-		}
-		if m.project != nil && m.modal == "" && key == "?" {
-			m.modal = "shortcuts"
-			return m, nil
-		}
-		if m.modal == "build" || m.modal == "child" || m.modal == "export" {
-			return m.buildKey(key)
-		}
-		if m.modal == "scene" || m.modal == "scene_edit" {
-			m.sceneKey(msg)
-			return m, nil
-		}
-		if m.modal != "" {
-			if key == "esc" || key == "ctrl+c" {
-				if m.modal == "sound_assets" || m.modal == "sound_import" {
-					m.audition.Close()
-				}
-				m.modal = ""
-				return m, nil
-			}
-			if m.modal == "sound_assets" {
-				m.updateSoundBrowser(key)
-				return m, nil
-			}
-			if m.modal == "mesh_assets" {
-				m.updateMeshBrowser(key)
-				return m, nil
-			}
-			if m.modal == "tools" {
-				m.updateTools(key)
-				return m, nil
-			}
-			if m.modal == "bindings" {
-				m.updateBindings(key)
-				return m, nil
-			}
-			if m.modal == "assets" {
-				cmd := m.updateAssets(key)
+				cmd := m.finishAction(action)
 				return m, cmd
 			}
-			if m.modal == "parent" {
-				m.updateParentPicker(key)
-				return m, nil
-			}
-			if m.modal == "discard" {
-				if key == "d" {
-					action := m.pendingAction
-					m.modal = ""
-					cmd := m.finishAction(action)
-					return m, cmd
+			return m, nil
+		}
+		switch key {
+		case "enter":
+			var err error
+			switch m.modal {
+			case "sound_import":
+				var cue string
+				cue, err = m.project.ImportSound(strings.TrimSpace(m.draft))
+				if err == nil {
+					m.modal = "sound_assets"
+					m.soundSelection = slices.Index(m.soundCues(), cue)
+					m.message = "Imported " + cue
 				}
-				return m, nil
-			}
-			switch key {
-			case "enter":
-				var err error
-				switch m.modal {
-				case "sound_import":
-					var cue string
-					cue, err = m.project.ImportSound(strings.TrimSpace(m.draft))
-					if err == nil {
-						m.modal = "sound_assets"
-						m.soundSelection = slices.Index(m.soundCues(), cue)
-						m.message = "Imported " + cue
-					}
-				case "mesh_import":
-					var name string
-					name, err = m.project.ImportGLB(strings.TrimSpace(m.draft))
-					if err == nil {
-						m.browseMeshes()
-						m.meshSelection = max(0, slices.Index(m.meshPaths, name))
-						m.message = "Imported " + name
-					}
-				case "new", "open":
-					var p *project.Project
-					path := strings.TrimSpace(m.draft)
-					if path == "" {
-						err = fmt.Errorf("enter a project directory")
-					} else if m.modal == "new" {
-						p, err = project.Create(path)
-					} else {
-						p, err = project.Open(path)
-					}
-					if err == nil {
-						err = m.install(p)
-					}
-				case "tool_value":
-					err = m.saveToolValue()
-				case "spawn_confirm":
-					err = m.confirmSpawn()
-				case "binding":
-					err = m.saveBinding()
-				case "extract":
-					if e, ok := m.selectedEntity(); ok {
-						var path string
-						path, err = m.project.Extract(m.document.Document(), e.ID, strings.TrimSpace(m.draft))
-						if err == nil {
-							m.modal = ""
-							m.message = "Created resource " + path + "; A browses resources"
-						}
-					}
-				case "property":
-					if e, ok := m.selectedEntity(); ok {
-						prop := project.Properties[m.property]
-						if prop.Key == "mesh_asset" || prop.Key == "material_asset" {
-							err = prop.Set(&e, m.draft)
-							if err == nil {
-								_, _, err = e.LoadVisualAssets(m.project.Root)
-							}
-						}
-						if err == nil {
-							err = m.document.Set(e.ID, prop.Key, m.draft)
-						}
-					}
+			case "mesh_import":
+				var name string
+				name, err = m.project.ImportGLB(strings.TrimSpace(m.draft))
+				if err == nil {
+					m.browseMeshes()
+					m.meshSelection = max(0, slices.Index(m.meshPaths, name))
+					m.message = "Imported " + name
+				}
+			case "new", "open":
+				var p *project.Project
+				path := strings.TrimSpace(m.draft)
+				if path == "" {
+					err = fmt.Errorf("enter a project directory")
+				} else if m.modal == "new" {
+					p, err = project.Create(path)
+				} else {
+					p, err = project.Open(path)
+				}
+				if err == nil {
+					err = m.install(p)
+				}
+			case "tool_value":
+				err = m.saveToolValue()
+			case "spawn_confirm":
+				err = m.confirmSpawn()
+			case "binding":
+				err = m.saveBinding()
+			case "extract":
+				if e, ok := m.selectedEntity(); ok {
+					var path string
+					path, err = m.project.Extract(m.document.Document(), e.ID, strings.TrimSpace(m.draft))
 					if err == nil {
 						m.modal = ""
-						m.refresh()
-						m.message = "Property updated"
+						m.message = "Created resource " + path + "; A browses resources"
 					}
 				}
-				if err != nil {
-					m.message = err.Error()
-				}
-			case "backspace", "ctrl+h":
-				runes := []rune(m.draft)
-				if len(runes) > 0 {
-					m.draft = string(runes[:len(runes)-1])
-				}
-			default:
-				if msg.Type == tea.KeyRunes && len([]rune(m.draft)) < 512 {
-					runes := append([]rune(m.draft), msg.Runes...)
-					m.draft = string(runes[:min(512, len(runes))])
-				}
-			}
-			return m, nil
-		}
-		if m.gameViewActive() {
-			turn := map[string][2]float64{"shift+left": {-.12, 0}, "shift+right": {.12, 0}, "shift+up": {0, .1}, "shift+down": {0, -.1}}
-			if angles, ok := turn[key]; ok {
-				m.play.Scene.Camera.Turn(angles[0], angles[1])
-				m.renderPreview()
-				return m, nil
-			}
-		}
-		if m.play != nil && m.focus == 2 {
-			m.play.BehaviorInput(key)
-		}
-		if m.play != nil && m.focus == 2 && m.playActor != "" {
-			if impulse, ok := playerImpulse(key); ok {
-				if id, exists := m.play.Find(m.playActor); exists && !m.play.Objective().Finished() {
-					if err := m.play.QueueImpulse(id, impulse); err != nil {
-						m.message = err.Error()
-					}
-				}
-				return m, nil
-			}
-		}
-		switch key {
-		case "r":
-			if m.play != nil && m.play.Objective().Finished() {
-				cmd := m.startPlay()
-				return m, cmd
-			}
-		case "ctrl+w":
-			if m.project != nil && m.play == nil {
-				if _, err := m.project.WorkerExecutable(); err != nil {
-					m.message = err.Error()
-					return m, nil
-				}
-				m.scriptedPlay = true
-				cmd := m.startPlay()
-				if m.play == nil {
-					m.scriptedPlay = false
-				}
-				return m, cmd
-			}
-			return m, nil
-		case "ctrl+g":
-			if m.project != nil && m.play == nil && m.activeResource == nil {
-				return m.startInteractiveChild()
-			}
-			return m, nil
-		case "f6":
-			if m.play != nil {
-				break
-			}
-			if m.project != nil && m.activeResource == nil && m.play == nil {
-				return m.startChild()
-			}
-			return m, nil
-		case "f9":
-			if m.project != nil && m.activeResource == nil && m.play == nil {
-				return m.startExport()
-			}
-			return m, nil
-		case "ctrl+b":
-			if m.project != nil && m.activeResource == nil && m.play == nil {
-				return m.startBuild()
-			}
-			return m, nil
-		case "ctrl+e":
-			if m.document != nil && m.play == nil && m.activeResource == nil {
-				m.modal = "scene"
-				m.sceneField = 0
-				m.message = ""
-			}
-			return m, nil
-		case "ctrl+l":
-			m.openTools()
-			return m, nil
-		case "ctrl+n":
-			cmd := m.begin("new")
-			return m, cmd
-		case "ctrl+o":
-			cmd := m.begin("open")
-			return m, cmd
-		case "ctrl+s":
-			m.save()
-			return m, nil
-		case "esc", "q", "ctrl+c":
-			if m.play != nil {
-				m.stopPlay()
-				return m, nil
-			}
-			cmd := m.begin("quit")
-			return m, cmd
-		}
-		if m.document == nil {
-			if key == "n" {
-				m.modal = "new"
-				m.draft = ""
-			}
-			if key == "o" {
-				m.modal = "open"
-				m.draft = ""
-			}
-			return m, nil
-		}
-		if action := input.Resolve(m.project.Manifest.Bindings, key, m.focus == 2); action != "" {
-			key = action
-		}
-		switch key {
-		case input.Pick:
-			m.pickReticle()
-		case input.Clear:
-			m.clearSelection()
-			m.message = "Selection cleared"
-			m.renderPreview()
-		case input.Next:
-			m.cycleSelection(1)
-		case input.Previous:
-			m.cycleSelection(-1)
-		case input.AimUp:
-			m.moveReticle(0, -1)
-		case input.AimDown:
-			m.moveReticle(0, 1)
-		case input.AimLeft:
-			m.moveReticle(-1, 0)
-		case input.AimRight:
-			m.moveReticle(1, 0)
-		case "tab":
-			m.focus = (m.focus + 1) % 3
-			m.renderPreview()
-		case "up", "down":
-			if m.focus == 2 {
-				break
-			}
-			delta := 1
-			if key == "up" {
-				delta = -1
-			}
-			if m.focus == 0 {
-				m.cycleSelection(delta)
-			} else {
-				count := max(1, len(m.inspectorRows()))
-				m.property = (m.property + count + delta) % count
-			}
-		case "1", "2", "3":
-			if m.play != nil {
-				break
-			}
-			m.view = 0
-			if key == "1" {
-				m.view = 1
-			}
-			if key == "2" {
-				m.view = 2
-			}
-			m.renderPreview()
-		case "+", "=":
-			m.zoom = max(.25, m.zoom*.8)
-			m.renderPreview()
-		case "-":
-			m.zoom = min(5, m.zoom*1.25)
-			m.renderPreview()
-		case input.Play:
-			if m.play == nil {
-				cmd := m.startPlay()
-				return m, cmd
-			}
-		case "f8":
-			m.stopPlay()
-		case "ctrl+y":
-			if m.play != nil {
-				m.toggleAudioMute()
-				return m, nil
-			}
-			e, _ := m.selectedEntity()
-			if m.document.Redo() {
-				m.selectID(e.ID)
-				m.refresh()
-				m.message = "Redo"
-			}
-		case input.Pause:
-			if m.play != nil {
-				m.play.SetPaused(!m.play.World.Stats().Paused)
-				m.renderPreview()
-				m.lastTick = time.Now()
-			}
-		case input.Step:
-			if m.play != nil && m.play.World.Stats().Paused {
-				if err := m.play.Step(); err != nil {
-					m.message = err.Error()
-				}
-				m.renderPreview()
-			}
-		case input.Impulse:
-			m.applyToolImpulse()
-		default:
-			if m.play != nil {
-				m.message = "Stop Play to edit authored properties"
-				return m, nil
-			}
-			switch key {
-			case "ctrl+k":
-				m.soundSelection, m.modal = 0, "sound_assets"
-			case "ctrl+x":
-				m.browseMeshes()
-			case "k":
-				m.modal = "bindings"
-				m.bindingSelected = 0
-			case "a", "r", "ctrl+r", "ctrl+u", "ctrl+t":
-				m.resourceCommand(key)
-			case "h":
+			case "property":
 				if e, ok := m.selectedEntity(); ok {
-					m.modal = "parent"
-					m.message = "Choose a parent; local pose stays unchanged"
-					if e.Body != "none" {
-						m.message = "Physics roots: set Body to none before parenting"
-					}
-					m.parentChoice = 0
-					for i, p := range m.document.Document().ParentChoices(e.ID) {
-						if p.ID == e.Parent {
-							m.parentChoice = i + 1
+					prop := project.Properties[m.property]
+					if prop.Key == "mesh_asset" || prop.Key == "material_asset" {
+						err = prop.Set(&e, m.draft)
+						if err == nil {
+							_, _, err = e.LoadVisualAssets(m.project.Root)
 						}
 					}
+					if err == nil {
+						err = m.document.Set(e.ID, prop.Key, m.draft)
+					}
 				}
-			case "enter", "e":
-				if e, ok := m.selectedEntity(); ok {
-					m.focus = 1
-					m.modal = "property"
-					m.draft = project.Properties[m.property].Get(e)
+				if err == nil {
+					m.modal = ""
+					m.refresh()
+					m.message = "Property updated"
 				}
-			case "b", "g":
-				shape := "box"
-				if key == "g" {
-					shape = "sphere"
+			}
+			if err != nil {
+				m.message = err.Error()
+			}
+		case "backspace", "ctrl+h":
+			runes := []rune(m.draft)
+			if len(runes) > 0 {
+				m.draft = string(runes[:len(runes)-1])
+			}
+		default:
+			if msg.Type == tea.KeyRunes && len([]rune(m.draft)) < 512 {
+				runes := append([]rune(m.draft), msg.Runes...)
+				m.draft = string(runes[:min(512, len(runes))])
+			}
+		}
+		return m, nil
+	}
+	if m.gameViewActive() {
+		turn := map[string][2]float64{"shift+left": {-.12, 0}, "shift+right": {.12, 0}, "shift+up": {0, .1}, "shift+down": {0, -.1}}
+		if angles, ok := turn[key]; ok {
+			m.play.Scene.Camera.Turn(angles[0], angles[1])
+			m.renderPreview()
+			return m, nil
+		}
+	}
+	if m.play != nil && m.focus == 2 {
+		m.play.BehaviorInput(key)
+	}
+	if m.play != nil && m.focus == 2 && m.playActor != "" {
+		if impulse, ok := playerImpulse(key); ok {
+			if id, exists := m.play.Find(m.playActor); exists && !m.play.Objective().Finished() {
+				if err := m.play.QueueImpulse(id, impulse); err != nil {
+					m.message = err.Error()
 				}
-				if id, err := m.document.Add(shape); err != nil {
+			}
+			return m, nil
+		}
+	}
+	switch key {
+	case "r":
+		if m.play != nil && m.play.Objective().Finished() {
+			cmd := m.startPlay()
+			return m, cmd
+		}
+	case "ctrl+w":
+		if m.project != nil && m.play == nil {
+			if _, err := m.project.WorkerExecutable(); err != nil {
+				m.message = err.Error()
+				return m, nil
+			}
+			m.scriptedPlay = true
+			cmd := m.startPlay()
+			if m.play == nil {
+				m.scriptedPlay = false
+			}
+			return m, cmd
+		}
+		return m, nil
+	case "ctrl+g":
+		if m.project != nil && m.play == nil && m.activeResource == nil {
+			return m.startInteractiveChild()
+		}
+		return m, nil
+	case "f6":
+		if m.play != nil {
+			break
+		}
+		if m.project != nil && m.activeResource == nil && m.play == nil {
+			return m.startChild()
+		}
+		return m, nil
+	case "f9":
+		if m.project != nil && m.activeResource == nil && m.play == nil {
+			return m.startExport()
+		}
+		return m, nil
+	case "ctrl+b":
+		if m.project != nil && m.activeResource == nil && m.play == nil {
+			return m.startBuild()
+		}
+		return m, nil
+	case "ctrl+e":
+		if m.document != nil && m.play == nil && m.activeResource == nil {
+			m.modal = "scene"
+			m.sceneField = 0
+			m.message = ""
+		}
+		return m, nil
+	case "ctrl+l":
+		m.openTools()
+		return m, nil
+	case "ctrl+n":
+		cmd := m.begin("new")
+		return m, cmd
+	case "ctrl+o":
+		cmd := m.begin("open")
+		return m, cmd
+	case "ctrl+s":
+		m.save()
+		return m, nil
+	case "esc", "q", "ctrl+c":
+		if m.play != nil {
+			m.stopPlay()
+			return m, nil
+		}
+		cmd := m.begin("quit")
+		return m, cmd
+	}
+	if m.document == nil {
+		if key == "n" {
+			m.modal = "new"
+			m.draft = ""
+		}
+		if key == "o" {
+			m.modal = "open"
+			m.draft = ""
+		}
+		return m, nil
+	}
+	if action := input.Resolve(m.project.Manifest.Bindings, key, m.focus == 2); action != "" {
+		key = action
+	}
+	switch key {
+	case "ui.hierarchy", "ui.inspector", "ui.viewport":
+		m.focus = map[string]int{"ui.hierarchy": 0, "ui.inspector": 1, "ui.viewport": 2}[key]
+		m.renderPreview()
+	case input.Pick:
+		m.pickReticle()
+	case input.Clear:
+		m.clearSelection()
+		m.message = "Selection cleared"
+		m.renderPreview()
+	case input.Next:
+		m.cycleSelection(1)
+	case input.Previous:
+		m.cycleSelection(-1)
+	case input.AimUp:
+		m.moveReticle(0, -1)
+	case input.AimDown:
+		m.moveReticle(0, 1)
+	case input.AimLeft:
+		m.moveReticle(-1, 0)
+	case input.AimRight:
+		m.moveReticle(1, 0)
+	case "tab":
+		m.focus = (m.focus + 1) % 3
+		m.renderPreview()
+	case "up", "down":
+		if m.focus == 2 {
+			break
+		}
+		delta := 1
+		if key == "up" {
+			delta = -1
+		}
+		if m.focus == 0 {
+			m.cycleSelection(delta)
+		} else {
+			count := max(1, len(m.inspectorRows()))
+			m.property = (m.property + count + delta) % count
+		}
+	case "1", "2", "3":
+		if m.play != nil {
+			break
+		}
+		m.view = 0
+		if key == "1" {
+			m.view = 1
+		}
+		if key == "2" {
+			m.view = 2
+		}
+		m.renderPreview()
+	case "+", "=":
+		m.zoom = max(.25, m.zoom*.8)
+		m.renderPreview()
+	case "-":
+		m.zoom = min(5, m.zoom*1.25)
+		m.renderPreview()
+	case input.Play:
+		if m.play == nil {
+			cmd := m.startPlay()
+			return m, cmd
+		}
+	case "f8":
+		m.stopPlay()
+	case "ctrl+y":
+		if m.play != nil {
+			m.toggleAudioMute()
+			return m, nil
+		}
+		e, _ := m.selectedEntity()
+		if m.document.Redo() {
+			m.selectID(e.ID)
+			m.refresh()
+			m.message = "Redo"
+		}
+	case input.Pause:
+		if m.play != nil {
+			m.play.SetPaused(!m.play.World.Stats().Paused)
+			m.renderPreview()
+			m.lastTick = time.Now()
+		}
+	case input.Step:
+		if m.play != nil && m.play.World.Stats().Paused {
+			if err := m.play.Step(); err != nil {
+				m.message = err.Error()
+			}
+			m.renderPreview()
+		}
+	case input.Impulse:
+		m.applyToolImpulse()
+	default:
+		if m.play != nil {
+			m.message = "Stop Play to edit authored properties"
+			return m, nil
+		}
+		switch key {
+		case "ctrl+k":
+			m.soundSelection, m.modal = 0, "sound_assets"
+		case "ctrl+x":
+			m.browseMeshes()
+		case "k":
+			m.modal = "bindings"
+			m.bindingSelected = 0
+		case "a", "r", "ctrl+r", "ctrl+u", "ctrl+t":
+			m.resourceCommand(key)
+		case "h":
+			if e, ok := m.selectedEntity(); ok {
+				m.modal = "parent"
+				m.message = "Choose a parent; local pose stays unchanged"
+				if e.Body != "none" {
+					m.message = "Physics roots: set Body to none before parenting"
+				}
+				m.parentChoice = 0
+				for i, p := range m.document.Document().ParentChoices(e.ID) {
+					if p.ID == e.Parent {
+						m.parentChoice = i + 1
+					}
+				}
+			}
+		case "enter", "e":
+			if e, ok := m.selectedEntity(); ok {
+				m.focus = 1
+				m.modal = "property"
+				m.draft = project.Properties[m.property].Get(e)
+			}
+		case "b", "g":
+			shape := "box"
+			if key == "g" {
+				shape = "sphere"
+			}
+			if id, err := m.document.Add(shape); err != nil {
+				m.message = err.Error()
+			} else {
+				m.selectID(id)
+				m.refresh()
+				m.message = "Added " + shape
+			}
+		case "delete":
+			if e, ok := m.selectedEntity(); ok {
+				if err := m.document.Delete(e.ID); err != nil {
+					m.message = err.Error()
+				} else {
+					m.refresh()
+					m.message = "Deleted subtree; Ctrl+Z undoes"
+				}
+			}
+		case "ctrl+d":
+			if e, ok := m.selectedEntity(); ok {
+				if id, err := m.document.Duplicate(e.ID); err != nil {
 					m.message = err.Error()
 				} else {
 					m.selectID(id)
 					m.refresh()
-					m.message = "Added " + shape
 				}
-			case "delete":
-				if e, ok := m.selectedEntity(); ok {
-					if err := m.document.Delete(e.ID); err != nil {
-						m.message = err.Error()
-					} else {
-						m.refresh()
-						m.message = "Deleted subtree; Ctrl+Z undoes"
-					}
-				}
-			case "ctrl+d":
-				if e, ok := m.selectedEntity(); ok {
-					if id, err := m.document.Duplicate(e.ID); err != nil {
-						m.message = err.Error()
-					} else {
-						m.selectID(id)
-						m.refresh()
-					}
-				}
-			case "ctrl+z":
-				e, _ := m.selectedEntity()
-				if m.document.Undo() {
-					m.selectID(e.ID)
-					m.refresh()
-					m.message = "Undo"
-				}
+			}
+		case "ctrl+z":
+			e, _ := m.selectedEntity()
+			if m.document.Undo() {
+				m.selectID(e.ID)
+				m.refresh()
+				m.message = "Undo"
 			}
 		}
 	}
@@ -828,14 +866,9 @@ func (m projectEditorModel) View() string {
 		return terminal.CenteredGameView(hud, rows, len(m.frame[0]), m.width, m.height)
 	}
 
-	if m.modal == "build" || m.modal == "child" || m.modal == "export" {
-		return m.buildView()
-	}
-	if m.modal == "scene" || m.modal == "scene_edit" {
-		return m.scenePanel()
-	}
-	if m.modal == "shortcuts" {
-		return m.shortcutView()
+	if m.modal != "" {
+		view, _ := m.dialogLayout()
+		return view
 	}
 	var out strings.Builder
 	if m.project == nil {
@@ -899,71 +932,12 @@ func (m projectEditorModel) View() string {
 				fmt.Fprintf(&out, "? shortcuts | F8 stop | Ctrl+L tools | %s\n", input.Help(m.project.Manifest.Bindings, input.Pause, input.Step))
 			}
 		} else {
-			fmt.Fprintf(&out, "? shortcuts | %s | E edit | Ctrl+S save | Tab focus\n", playKey)
+			fmt.Fprintf(&out, "Actions or ? shortcuts | %s | E edit | Tab focus\n", playKey)
 		}
 
 	}
-	if m.modal != "" {
-		if m.modal == "discard" {
-			out.WriteString("\n[Discard] [Cancel] Unsaved edits: D discard | Esc cancel\n")
-		} else if m.modal == "tools" {
-			out.WriteString(m.toolsView())
-		} else if m.modal == "tool_value" {
-			fmt.Fprintf(&out, "\nEdit %s: %s_\nEnter apply | Esc cancel\n", toolLabels[m.toolField], m.draft)
-		} else if m.modal == "spawn_confirm" {
-			e := m.spawnPreview
-			fmt.Fprintf(&out, "\nSpawn preview: %s\nPosition %.2f %.2f %.2f\nSize %.2f m | Mass %.2f kg\nEnter queue | Esc cancel\n", e.Shape, e.Position.X, e.Position.Y, e.Position.Z, e.Size.X, e.Mass)
-		} else if m.modal == "bindings" {
-			out.WriteString(m.bindingsView())
-		} else if m.modal == "binding" {
-			fmt.Fprintf(&out, "\nBind %s: %s_\nComma-separated keys | Enter save | Esc cancel\n", input.Definitions()[m.bindingSelected].Label, m.draft)
-		} else if m.modal == "sound_assets" {
-			out.WriteString(m.soundBrowser())
-		} else if m.modal == "sound_import" {
-			fmt.Fprintf(&out, "\nWAV file path  %s_\nEnter import | Esc close\n", m.draft)
-		} else if m.modal == "mesh_assets" {
-			out.WriteString(m.meshBrowser())
-		} else if m.modal == "mesh_import" {
-			fmt.Fprintf(&out, "\nImport GLB file: %s_\nEnter import | Esc close\n", m.draft)
-		} else if m.modal == "assets" {
-			out.WriteString(m.resourceBrowser())
-		} else if m.modal == "extract" {
-			fmt.Fprintf(&out, "\nResource name: %s_\nEnter create | Esc cancel\n", m.draft)
-		} else if m.modal == "parent" {
-			e, ok := m.selectedEntity()
-			if ok {
-				choices := m.document.Document().ParentChoices(e.ID)
-				out.WriteString("\nParent picker (keeps LOCAL pose)\n")
-				first := max(0, m.parentChoice-1)
-				for i := first; i < min(len(choices)+1, first+3); i++ {
-					label := "Scene root"
-					if i > 0 {
-						label = choices[i-1].Name + " [" + choices[i-1].ID + "]"
-					}
-					prefix := "  "
-					if i == m.parentChoice {
-						prefix = "> "
-					}
-					out.WriteString(prefix + label + "\n")
-				}
-				out.WriteString("Up/Down choose | Enter apply | Esc cancel\n")
-			}
-		} else if m.modal == "property" {
-			p := project.Properties[m.property]
-			fmt.Fprintf(&out, "\nEdit %s %s %v: %s_\nEnter apply | Esc cancel\n", p.Label, p.Units, p.Choices, m.draft)
-		} else {
-			fmt.Fprintf(&out, "\n%s project directory: %s_\nEnter confirm | Esc cancel\n", m.modal, m.draft)
-		}
-	}
 	out.WriteString("\n" + m.message)
-	// Keep dialogs and errors visible even in a short terminal.
 	view := out.String()
-	if m.modal != "" {
-		lines := strings.Split(view, "\n")
-		if len(lines) > m.height {
-			view = strings.Join(lines[len(lines)-m.height:], "\n")
-		}
-	}
 	view = fitView(view, m.width, m.height)
 	return m.stylePreview(view)
 }

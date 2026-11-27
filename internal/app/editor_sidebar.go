@@ -61,7 +61,7 @@ func (m *projectEditorModel) sidebarRows() []editorRow {
 }
 
 func (m projectEditorModel) clickSidebar(msg tea.MouseMsg) (tea.Model, tea.Cmd, bool) {
-	if m.document == nil || m.modal != "" || m.gameViewActive() || msg.X < 0 || msg.Y >= m.height || msg.Action != tea.MouseActionPress || msg.Button != tea.MouseButtonLeft {
+	if m.document == nil || m.modal != "" || m.gameViewActive() || msg.X < 0 || msg.Y >= m.height || msg.Action != tea.MouseActionPress {
 		return m, nil, false
 	}
 	top, x := 3, 0
@@ -76,10 +76,44 @@ func (m projectEditorModel) clickSidebar(msg tea.MouseMsg) (tea.Model, tea.Cmd, 
 		return m, nil, false
 	}
 	rows := m.sidebarRows()
+	if m.width < 65 && m.focus == 2 && y > 0 {
+		return m, nil, false
+	}
+	if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
+		delta := 1
+		if msg.Button == tea.MouseButtonWheelUp {
+			delta = -1
+		}
+		inspector := m.focus == 1
+		if y < len(rows) && m.width >= 65 {
+			if rows[y].property > 0 || strings.HasPrefix(rows[y].text, "Inspector") {
+				inspector = true
+			} else if rows[y].entity != "" || strings.Contains(rows[y].text, "Hierarchy") {
+				inspector = false
+			}
+		}
+		if inspector {
+			m.focus = 1
+			m.property = max(0, min(len(m.inspectorRows())-1, m.property+delta))
+		} else if m.focus != 2 || m.width >= 65 {
+			m.focus = 0
+			m.cycleSelection(delta)
+		}
+		return m, nil, true
+	}
+	if msg.Button != tea.MouseButtonLeft {
+		return m, nil, false
+	}
 	if y >= len(rows) || msg.X-x >= runewidth.StringWidth(rows[y].text) {
 		return m, nil, false
 	}
 	row := rows[y]
+	if strings.Contains(row.text, "Tab") && row.entity == "" && row.property == 0 &&
+		(strings.HasPrefix(row.text, "Hierarchy") || strings.HasPrefix(row.text, "Inspector") || strings.HasPrefix(row.text, "Viewport")) {
+		m.focus = (m.focus + 1) % 3
+		m.renderPreview()
+		return m, nil, true
+	}
 	if row.entity != "" {
 		m.selectID(row.entity)
 		m.focus, m.property = 0, 0

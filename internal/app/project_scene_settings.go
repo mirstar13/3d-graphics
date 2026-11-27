@@ -55,13 +55,12 @@ func (m *projectEditorModel) scenePanel() string {
 	title, v := sceneRow(s, m.sceneField)
 	value, _ := json.Marshal(v)
 	if m.modal == "scene_edit" {
-		return "Edit " + title + " (JSON)\n" + m.draft + "\nEnter apply | Ctrl+U clear | Esc cancel\n" + m.message
+		return "Edit " + title + " (JSON)\n" + m.draft + "\nEnter apply | Ctrl+U clear | Esc cancel"
 	}
-	return fmt.Sprintf("Scene settings\nUp/Down select | Enter edit | L add light | D delete\nC reset camera | R reset lighting | S inherit simulation | O clear objective | Esc close\n> %s\n%s\n%s", title, value, m.message)
+	return fmt.Sprintf("Scene settings\nUp/Down select | Enter edit | L add light | D delete\nC reset camera | R reset lighting | S inherit simulation | O clear objective | Esc close\n> %s\n%s", title, value)
 }
 
-func (m *projectEditorModel) sceneKey(msg tea.KeyMsg) {
-	key := msg.String()
+func (m *projectEditorModel) sceneKey(msg tea.KeyMsg, key string) {
 	s := m.document.Document().SceneSettings
 	rig := sceneRig(s)
 	if m.modal == "scene_edit" {
