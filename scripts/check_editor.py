@@ -1,5 +1,5 @@
 """Project editor PTY workflow; run after go build -race -o /tmp/graphics ."""
-import glob, subprocess, zipfile
+import glob, shutil, subprocess, zipfile
 import os, pty, fcntl, termios, struct, select, time, signal, sys, tempfile
 
 BINARY = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "/tmp/graphics")
@@ -352,3 +352,34 @@ entities:
     finally:
         s.cleanup()
 print("Player HUD, timeout, restart, movement and victory PASS")
+
+# Work on a copy so the sample remains reusable after editing and export.
+with tempfile.TemporaryDirectory() as parent:
+    source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "examples", "pulse-dock")
+    root = shutil.copytree(source, os.path.join(parent, "Pulse Dock"), ignore=shutil.ignore_patterns("build"))
+    s = Session(["-project", root])
+    try:
+        s.wait(b"Opened Pulse Dock")
+        s.send(b"\x1b[B\x1b[B"); s.wait(b"> Docking beacon")
+        s.send(b"\t"); s.wait(b"Inspector")
+        s.send(b"\x1b[B" * 3 + b"e"); s.wait(b"Edit Position X")
+        s.send(b"\x7f0\r"); s.wait(b"Property updated")
+        s.send(b"\x13"); s.wait(b"Saved scenes/dock.yaml")
+        s.send(b"p"); s.wait(b"Won | R restart")
+        s.send(b"\x1b"); s.wait(b"Stopped; authored scene preserved")
+        s.send(b"\x1b[20~"); s.wait(b"Exported build/game-", seconds=90)
+        s.send(b"\x1b"); s.wait(b"Hierarchy")
+        s.send(b"q"); s.close()
+    finally:
+        s.cleanup()
+    archive, = glob.glob(os.path.join(root, "build", "game-*.zip"))
+    release = os.path.join(parent, "Release")
+    with zipfile.ZipFile(archive) as package:
+        package.extractall(release)
+        for executable in ("play.sh", "game"):
+            os.chmod(os.path.join(release, executable), package.getinfo(executable).external_attr >> 16 & 0o777)
+    os.rename(root, root + "-unavailable")
+    run = subprocess.run([os.path.join(release, "play.sh")], cwd=parent, input=b".\nr\n.\nq\n",
+                         capture_output=True, check=True, timeout=15)
+    assert run.stdout.count(b"Won | R restart") == 2, run.stdout
+print("Pulse Dock sample edit, save, Play, export and standalone restart PASS")
