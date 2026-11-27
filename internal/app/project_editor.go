@@ -923,10 +923,10 @@ func (m *projectEditorModel) updateParentPicker(key string) {
 }
 
 // sampleProjectPath finds the editable example in a checkout or alongside the executable.
-func sampleProjectPath() string {
+func sampleProjectPath(name string) string {
 	executable, _ := os.Executable()
 	for _, base := range []string{".", filepath.Dir(executable)} {
-		path := filepath.Join(base, "examples", "pulse-dock")
+		path := filepath.Join(base, "examples", name)
 		if info, err := os.Stat(filepath.Join(path, "project.yaml")); err == nil && info.Mode().IsRegular() {
 			return path
 		}

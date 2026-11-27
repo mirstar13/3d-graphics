@@ -27,6 +27,7 @@ type menuModel struct {
 	editor        settingsModel
 	start         bool
 	playSample    bool
+	switchRoom    bool
 	projectEditor bool
 	editorAction  string
 }
@@ -92,6 +93,8 @@ func (m menuModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.scene {
 			case len(demo.Names):
 				m.playSample = true
+			case len(demo.Names) + 2:
+				m.switchRoom = true
 			case len(demo.Names) + 1:
 				m.projectEditor, m.editorAction = true, "open"
 			default:
@@ -136,7 +139,7 @@ func (m menuModel) View() string {
 	selected := m.selected
 	if m.page == scenePage {
 		title, help = "Load scene / project", "Up/Down select | Enter load | Esc back"
-		items, selected = append(append([]string{}, demo.Names...), "Pulse Dock (example game)", "Open project directory…"), m.scene
+		items, selected = append(append([]string{}, demo.Names...), "Pulse Dock (example game)", "Open project directory…", "Switch Room (first-person game)"), m.scene
 	}
 	var out strings.Builder
 	out.WriteString(title + "\n\n")
@@ -155,7 +158,9 @@ func (m menuModel) View() string {
 	}
 	if m.page == scenePage && m.height >= 9 {
 		description := "Open an existing project in the editor."
-		if selected < len(demo.Names) {
+		if selected == len(demo.Names)+2 {
+			description = "Explore a physics room, move crates and operate the gate."
+		} else if selected < len(demo.Names) {
 			description = demo.PresetAt(selected).Description
 		} else if selected == len(demo.Names) {
 			description = "Play Pulse Dock. Steer the tug with the arrow keys."
@@ -166,7 +171,7 @@ func (m menuModel) View() string {
 	return fitView(out.String(), m.width, m.height)
 }
 
-func catalogSize() int { return len(demo.Names) + 2 }
+func catalogSize() int { return len(demo.Names) + 3 }
 func showStartMenu(settings config.Settings, path string, openSettings bool) (menuModel, error) {
 	result, err := tea.NewProgram(newMenuModel(settings, path, openSettings), tea.WithAltScreen()).Run()
 	if err != nil {

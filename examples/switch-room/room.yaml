@@ -1,0 +1,106 @@
+version: 1
+name: Switch Room
+objective:
+  text: Open the gate with the green button, then reach the gold exit
+  signal: exit
+entities:
+  - id: player
+    name: Player
+    shape: sphere
+    body: dynamic
+    position: {x: 0, y: 0.45, z: -4}
+    size: {x: 0.45, y: 0.45, z: 0.45}
+    color: {r: 120, g: 140, b: 150}
+    mass: 1
+    linear_damping: 1
+    sphere_ccd: "on"
+  - id: floor
+    name: Floor
+    shape: box
+    body: static
+    position: {x: 0, y: -0.25, z: 1}
+    size: {x: 5, y: 0.25, z: 8}
+    color: {r: 110, g: 125, b: 145}
+    mass: 1
+  - id: west
+    name: West
+    shape: box
+    body: static
+    position: {x: -5, y: 1.5, z: 1}
+    size: {x: 0.2, y: 1.5, z: 8}
+    color: {r: 88, g: 120, b: 145}
+    mass: 1
+  - id: east
+    name: East
+    shape: box
+    body: static
+    position: {x: 5, y: 1.5, z: 1}
+    size: {x: 0.2, y: 1.5, z: 8}
+    color: {r: 88, g: 120, b: 145}
+    mass: 1
+  - id: back
+    name: Back
+    shape: box
+    body: static
+    position: {x: 0, y: 1.5, z: -7}
+    size: {x: 5, y: 1.5, z: 0.2}
+    color: {r: 88, g: 120, b: 145}
+    mass: 1
+  - id: front
+    name: Front
+    shape: box
+    body: static
+    position: {x: 0, y: 1.5, z: 9}
+    size: {x: 5, y: 1.5, z: 0.2}
+    color: {r: 88, g: 120, b: 145}
+    mass: 1
+  - id: partition
+    name: Partition
+    shape: box
+    body: static
+    position: {x: -2, y: 1.5, z: 4}
+    size: {x: 3, y: 1.5, z: 0.2}
+    color: {r: 88, g: 120, b: 145}
+    mass: 1
+  - id: rightwall
+    name: Rightwall
+    shape: box
+    body: static
+    position: {x: 4, y: 1.5, z: 4}
+    size: {x: 1, y: 1.5, z: 0.2}
+    color: {r: 88, g: 120, b: 145}
+    mass: 1
+  - id: gate
+    name: Gate
+    shape: box
+    body: static
+    position: {x: 2, y: 1.5, z: 4}
+    size: {x: 1, y: 1.5, z: 0.2}
+    color: {r: 170, g: 95, b: 55}
+    mass: 1
+  - id: button
+    name: Button
+    shape: box
+    body: static
+    position: {x: 0, y: 1.2, z: 3.65}
+    size: {x: 0.35, y: 0.35, z: 0.16}
+    color: {r: 40, g: 240, b: 85}
+    mass: 1
+  - id: crate
+    name: Crate
+    shape: box
+    body: dynamic
+    position: {x: 0, y: 0.72, z: -1.8}
+    size: {x: 0.72, y: 0.72, z: 0.72}
+    color: {r: 220, g: 135, b: 65}
+    mass: 1
+  - id: exit
+    name: Exit
+    shape: box
+    body: static
+    position: {x: 2, y: 0.15, z: 6}
+    size: {x: 1, y: 0.15, z: 1}
+    color: {r: 250, g: 200, b: 55}
+    mass: 1
+    sensor: true
+    plate_signal: exit

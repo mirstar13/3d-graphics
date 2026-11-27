@@ -113,7 +113,7 @@ func Run() {
 		}()
 	}
 	if options.playProject != "" {
-		if err := runProjectPlayer(options.playProject, options.playerID, settings.Color, settings.Physics.WorldOptions()); err != nil {
+		if err := runProjectPlayer(options.playProject, options.playerID, false, settings.Color, settings.Physics.WorldOptions()); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 		}
 		return
@@ -146,11 +146,15 @@ func Run() {
 			return
 		}
 		settings = menu.settings
-		if menu.playSample {
-			path := sampleProjectPath()
+		if menu.playSample || menu.switchRoom {
+			name, actor := "pulse-dock", "tug"
+			if menu.switchRoom {
+				name, actor = "switch-room", "player"
+			}
+			path := sampleProjectPath(name)
 			if path == "" {
-				fmt.Fprintln(os.Stderr, "Cannot locate examples/pulse-dock")
-			} else if err := runProjectPlayer(path, "tug", settings.Color, settings.Physics.WorldOptions()); err != nil {
+				fmt.Fprintln(os.Stderr, "Cannot locate examples/"+name)
+			} else if err := runProjectPlayer(path, actor, menu.switchRoom, settings.Color, settings.Physics.WorldOptions()); err != nil {
 				fmt.Fprintln(os.Stderr, err)
 			}
 			continue

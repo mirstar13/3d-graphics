@@ -24,6 +24,18 @@ cockpit directly, run `go run .` inside `examples/pulse-dock`. Copy the sample
 directory to customize it. Its Go package guide (`go doc .` in that directory)
 covers editing, play and standalone export.
 
+## First-person example
+
+Run `go run .`, choose **Load scene / project**, and select **Switch Room**.
+Walk with WASD and look with the arrow keys. Aim the center marker at the crate
+and press F to push or G to grab. Press G again to release it. Approach the
+green button, aim at it and press E to open the gate. Reach the gold pad to
+finish. R restarts a completed round and Q returns to the launcher.
+
+For a finer grid, open [terminal-games.code-workspace](terminal-games.code-workspace)
+in VS Code. Its integrated terminal uses an 11 px font, so more rows and columns
+fit in the same window. Adjust `terminal.integrated.fontSize` to taste.
+
 ## Project editor (prototype)
 
 Run `go run . -editor`, select **New scene / project** (or press **E**) in the start menu, or open an existing project

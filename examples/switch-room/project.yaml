@@ -1,0 +1,3 @@
+version: 1
+name: Switch Room
+entry_scene: room.yaml

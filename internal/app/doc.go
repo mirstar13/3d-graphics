@@ -24,6 +24,13 @@
 // project in a new directory. O opens an existing one. Tab cycles hierarchy,
 // inspector and viewport focus. The viewport uses the configured terminal color mode.
 // Click a viewport cell to pick geometry or scroll to zoom. Press ? for editor shortcuts. B and G add primitives. H reparents a subtree.
+// Switch Room is a first-person physics game in Load scene / project. WASD walks,
+// arrows look, F pushes, G grabs or releases the crate, and E operates the green
+// gate button. Reach the gold pad to finish, then press R to restart.
+// For a denser terminal grid in VS Code, open terminal-games.code-workspace.
+// Its 11-pixel integrated terminal font gives the renderer more cells at the
+// same window size. Terminal resize events update the framebuffer dimensions.
+//
 // Selecting Pulse Dock in the launcher starts its real-time game. Q returns to the launcher.
 // Running Play fills the viewport with the game and objective HUD. Tab opens inspection.
 // Play focuses the viewport and controls the selected dynamic body, falling back to the

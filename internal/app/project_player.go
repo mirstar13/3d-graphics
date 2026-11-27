@@ -17,6 +17,7 @@ import (
 
 // projectPlayer owns the terminal while a saved scene runs outside the editor.
 type projectPlayer struct {
+	room          *switchRoom
 	renderer      *terminal.TerminalRenderer
 	project       *project.Project
 	options       physics.Options
@@ -47,6 +48,10 @@ func (m *projectPlayer) reset() error {
 		}
 	}
 	m.session = s
+	if m.room != nil {
+		*m.room = switchRoom{}
+		m.room.camera(s)
+	}
 	m.last = time.Now()
 	return nil
 }
@@ -58,7 +63,16 @@ func (m *projectPlayer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = v.Height
 	case editorTick:
 		now := time.Time(v)
+		if m.room != nil {
+			if err := m.room.tick(m.session, now.Sub(m.last), now); err != nil {
+				m.err = err
+				return m, tea.Quit
+			}
+		}
 		m.err = m.session.Advance(now.Sub(m.last))
+		if m.room != nil {
+			m.room.camera(m.session)
+		}
 		m.last = now
 		if m.err != nil {
 			return m, tea.Quit
@@ -78,6 +92,13 @@ func (m *projectPlayer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, tea.Quit
 				}
 				return m, nextEditorTick()
+			}
+			return m, nil
+		}
+		if m.room != nil {
+			m.err = m.room.key(m.session, key)
+			if m.err != nil {
+				return m, tea.Quit
 			}
 			return m, nil
 		}
@@ -110,7 +131,10 @@ func objectiveHUD(o game.ObjectiveStatus) string {
 func (m *projectPlayer) View() string {
 	var out strings.Builder
 	out.WriteString(objectiveHUD(m.session.Objective()))
-	if m.playerID != "" {
+	if m.room != nil {
+		out.WriteString("WASD walk | Arrows look | F push | G grab/drop | E button | ")
+		out.WriteString(m.room.message + "\n")
+	} else if m.playerID != "" {
 		out.WriteString("Arrows move | Space jump | ")
 	}
 	out.WriteString("Q quit\n")
@@ -125,13 +149,18 @@ func (m *projectPlayer) View() string {
 	r := m.renderer
 	r.SetLightingSystem(m.session.Lighting)
 	r.RenderScene(m.session.Scene)
+	aimX, aimY := -1, -1
+	if m.room != nil {
+		aimX, aimY = w/2, h/2
+		r.Surface[aimY][aimX] = '+'
+	}
 	if m.colorMode != "" && m.colorMode != "none" {
 		hud := fitView(strings.TrimSuffix(out.String(), "\n"), m.width, m.height)
 		count := max(0, m.height-1-strings.Count(hud, "\n"))
 		if count == 0 {
 			return hud
 		}
-		return hud + "\n" + strings.Join(coloredRows(r, -1, -1, m.colorMode)[:min(h, count)], "\n")
+		return hud + "\n" + strings.Join(coloredRows(r, aimX, aimY, m.colorMode)[:min(h, count)], "\n")
 	}
 	for _, row := range r.Surface {
 		out.WriteString(string(row))
@@ -139,13 +168,16 @@ func (m *projectPlayer) View() string {
 	}
 	return fitView(out.String(), m.width, m.height)
 }
-func runProjectPlayer(root, id, color string, options physics.Options) error {
+func runProjectPlayer(root, id string, firstPerson bool, color string, options physics.Options) error {
 	p, err := project.Open(root)
 	if err != nil {
 		return err
 	}
 	mode, _ := terminal.ResolveColorMode(color)
 	m := &projectPlayer{colorMode: mode, project: p, options: options, playerID: id, width: 80, height: 24}
+	if firstPerson {
+		m.room = &switchRoom{}
+	}
 	if err = m.reset(); err != nil {
 		return err
 	}
