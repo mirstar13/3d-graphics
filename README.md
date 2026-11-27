@@ -292,6 +292,23 @@ initialization and shutdown. An adapter named example can be selected with
 A renderer that needs drawing calls on the calling thread implements
 `engine.MainThreadRenderer`.
 
+### Experimental offscreen OpenGL FXAA
+
+On Linux amd64 or arm64 with a surfaceless EGL driver that supports OpenGL 3.3,
+build and run with:
+
+```sh
+go run -tags terminalgl . -renderer terminal-gl -aa fxaa
+```
+
+The terminal backend still rasterizes geometry on the CPU. OpenGL filters the
+color cells, and the terminal presenter writes ANSI output after color readback.
+Use any existing CPU render mode and press **T** for timings. The renderer
+reports the active OpenGL device. Builds without the tag, unavailable devices,
+and filter errors fall back to CPU FXAA. Other AA modes use their normal CPU
+paths. The default renderer is `terminal`.
+
+
 Local branches `renderers/opengl` and `renderers/vulkan` preserve the original
 combined implementation at the pre-refactor commit. They are starting points
 for extracting those adapters onto this interface. Their historical code still

@@ -135,7 +135,7 @@ func Run() {
 	for {
 		// Validate terminal access before starting the launcher.
 		runtimeConfig := settings.EngineConfig()
-		if runtimeConfig.Backend == "terminal" {
+		if isTerminalBackend(runtimeConfig.Backend) {
 			if err := terminal.ConfigureTerminal(&runtimeConfig, settings.Color); err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				return
@@ -172,7 +172,7 @@ func Run() {
 		}
 		for {
 			runtimeConfig = settings.EngineConfig()
-			if runtimeConfig.Backend == "terminal" {
+			if isTerminalBackend(runtimeConfig.Backend) {
 				if err := terminal.ConfigureTerminal(&runtimeConfig, settings.Color); err != nil {
 					fmt.Fprintln(os.Stderr, err)
 					return

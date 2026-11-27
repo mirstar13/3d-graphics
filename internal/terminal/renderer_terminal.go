@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +20,9 @@ type TerminalRenderer struct {
 	sampleCount         int
 	sampleDepth         []float64
 	sampleColor         []engine.Color
+	UseOpenGLFXAA       bool
+	fxaaDevice          fxaaDevice
+	fxaaError           error
 	// LOD masks partition screen cells between outgoing and incoming geometry.
 	lodMask     bool
 	lodIncoming bool
@@ -115,6 +119,15 @@ func (r *TerminalRenderer) Initialize() error {
 		return err
 	}
 	r.restoreConsole = restore
+	if r.UseOpenGLFXAA {
+		device, err := openFXAADevice()
+		r.fxaaDevice = device
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "OpenGL FXAA unavailable, using CPU FXAA: %v\n", err)
+		} else {
+			fmt.Fprintf(os.Stderr, "OpenGL FXAA device: %s\n", device.name())
+		}
+	}
 	// Enter alternate screen buffer
 	r.Writer.WriteString("\033[?1049h")
 	// Hide cursor
@@ -127,6 +140,10 @@ func (r *TerminalRenderer) Initialize() error {
 
 // Shutdown cleans up the terminal renderer
 func (r *TerminalRenderer) Shutdown() {
+	if r.fxaaDevice != nil {
+		r.fxaaDevice.close()
+		r.fxaaDevice = nil
+	}
 	if r.Writer != nil {
 		r.Writer.WriteString("\033[0m\033[?25h") // Show cursor
 		r.Writer.WriteString("\033[?1049l")      // Exit alternate screen
@@ -135,6 +152,10 @@ func (r *TerminalRenderer) Shutdown() {
 	if r.restoreConsole != nil {
 		r.restoreConsole()
 		r.restoreConsole = nil
+	}
+	if r.fxaaError != nil {
+		fmt.Fprintf(os.Stderr, "OpenGL FXAA failed, switched to CPU: %v\n", r.fxaaError)
+		r.fxaaError = nil
 	}
 }
 

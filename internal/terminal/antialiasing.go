@@ -14,6 +14,7 @@ type AARenderer struct {
 	ssaaSurface [][]rune
 	ssaaColor   [][]engine.Color
 	ssaaDepth   [][]float64
+	fxaaScratch []engine.Color
 }
 
 // NewAARenderer creates a filter without allocating unused supersampling buffers.
@@ -45,102 +46,22 @@ func (aar *AARenderer) RenderScene(scene *engine.Scene) {
 	aar.RenderWithAA(scene)
 }
 
-// applyFXAA applies Fast Approximate Anti-Aliasing as a post-process
+// applyFXAA filters only colors. Glyphs, depth and overlays retain the raster result.
 func (aar *AARenderer) applyFXAA() {
-	// Access the underlying TerminalRenderer's buffers
 	tr, ok := terminalBuffer(aar.Renderer)
-	if !ok {
-		return // FXAA only works with TerminalRenderer
+	if !ok || tr.Width < 3 || tr.Height < 3 {
+		return
 	}
-
-	width, height := tr.GetDimensions()
-
-	// Create temporary buffer for output
-	output := make([][]engine.Color, height)
-	for i := 0; i < height; i++ {
-		output[i] = make([]engine.Color, width)
-		copy(output[i], tr.ColorBuffer[i])
-	}
-
-	// FXAA parameters
-	const (
-		edgeThresholdMin = 0.0312
-		edgeThreshold    = 0.125
-		subpixelQuality  = 0.75
-	)
-
-	for y := 1; y < height-1; y++ {
-		for x := 1; x < width-1; x++ {
-			// Sample 3x3 neighborhood
-			center := tr.ColorBuffer[y][x]
-
-			n := tr.ColorBuffer[y-1][x]
-			s := tr.ColorBuffer[y+1][x]
-			e := tr.ColorBuffer[y][x+1]
-			w := tr.ColorBuffer[y][x-1]
-
-			ne := tr.ColorBuffer[y-1][x+1]
-			nw := tr.ColorBuffer[y-1][x-1]
-			se := tr.ColorBuffer[y+1][x+1]
-			sw := tr.ColorBuffer[y+1][x-1]
-
-			// Calculate luminance
-			lumCenter := luminance(center)
-			lumN := luminance(n)
-			lumS := luminance(s)
-			lumE := luminance(e)
-			lumW := luminance(w)
-			lumNE := luminance(ne)
-			lumNW := luminance(nw)
-			lumSE := luminance(se)
-			lumSW := luminance(sw)
-
-			// Find min/max luminance
-			lumMin := math.Min(lumCenter, math.Min(math.Min(lumN, lumS), math.Min(lumE, lumW)))
-			lumMax := math.Max(lumCenter, math.Max(math.Max(lumN, lumS), math.Max(lumE, lumW)))
-			lumRange := lumMax - lumMin
-
-			// Skip if range is too small (not an edge)
-			if lumRange < math.Max(edgeThresholdMin, lumMax*edgeThreshold) {
-				output[y][x] = center
-				continue
-			}
-
-			// Calculate edge direction
-			horizontal := math.Abs(-2*lumW + -2*lumCenter + -2*lumE + lumNW + lumNE + lumSW + lumSE)
-			vertical := math.Abs(-2*lumN + -2*lumCenter + -2*lumS + lumNW + lumNE + lumSW + lumSE)
-
-			isHorizontal := horizontal >= vertical
-
-			// Calculate blend factor
-			var blend float64
-			if isHorizontal {
-				blend = math.Abs((-2*lumN + lumNW + lumNE) - (-2*lumS + lumSW + lumSE))
-			} else {
-				blend = math.Abs((-2*lumW + lumNW + lumSW) - (-2*lumE + lumNE + lumSE))
-			}
-			blend = blend / (2 * lumRange)
-
-			// Simple blend along detected edge
-			if blend > 0.5 {
-				// Average with neighbors along edge direction
-				if isHorizontal {
-					output[y][x] = averageColors([]engine.Color{center, e, w})
-				} else {
-					output[y][x] = averageColors([]engine.Color{center, n, s})
-				}
-			} else {
-				output[y][x] = center
-			}
+	if tr.fxaaDevice != nil {
+		if err := tr.fxaaDevice.apply(tr.ColorBuffer); err == nil {
+			return
+		} else {
+			tr.fxaaError = err
+			tr.fxaaDevice.close()
+			tr.fxaaDevice = nil
 		}
 	}
-
-	// Copy output back to color buffer
-	for y := 1; y < height-1; y++ {
-		for x := 1; x < width-1; x++ {
-			tr.ColorBuffer[y][x] = output[y][x]
-		}
-	}
+	aar.fxaaScratch = filterFXAA(tr.ColorBuffer, aar.fxaaScratch)
 }
 
 // renderMSAA resolves per-sample coverage and depth after one geometry pass.

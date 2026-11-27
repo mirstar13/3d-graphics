@@ -22,17 +22,25 @@ type BackendAdapter struct {
 type BackendFactory func(engine.EngineConfig) (BackendAdapter, error)
 
 var backendFactories = map[string]BackendFactory{
-	"terminal": func(config engine.EngineConfig) (BackendAdapter, error) {
-		renderer := terminal.NewTerminalRenderer(bufio.NewWriter(os.Stdout), config.Height, config.Width)
-		renderer.ColorMode = config.ColorMode
-		renderer.RequestedWidth, renderer.RequestedHeight = config.RequestedWidth, config.RequestedHeight
-		return BackendAdapter{
-			Renderer:    renderer,
-			NewInput:    func() engine.InputManager { return terminal.NewTerminalInputManager() },
-			Orientation: engine.OrientationTerminal,
-			Terminal:    true,
-		}, nil
-	},
+	"terminal":    terminalBackend,
+	"terminal-gl": terminalBackend,
+}
+
+func isTerminalBackend(name string) bool { return name == "terminal" || name == "terminal-gl" }
+
+func terminalBackend(config engine.EngineConfig) (BackendAdapter, error) {
+	renderer := terminal.NewTerminalRenderer(bufio.NewWriter(os.Stdout), config.Height, config.Width)
+	if config.Backend == "terminal-gl" && config.AAMode == engine.AAFXAA {
+		renderer.UseOpenGLFXAA = true
+	}
+	renderer.ColorMode = config.ColorMode
+	renderer.RequestedWidth, renderer.RequestedHeight = config.RequestedWidth, config.RequestedHeight
+	return BackendAdapter{
+		Renderer:    renderer,
+		NewInput:    func() engine.InputManager { return terminal.NewTerminalInputManager() },
+		Orientation: engine.OrientationTerminal,
+		Terminal:    true,
+	}, nil
 }
 
 // RegisterBackend lets a compiled-in adapter register from its init function.
