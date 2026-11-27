@@ -62,30 +62,38 @@ func ConfigureTerminal(config *engine.EngineConfig, colorMode string) error {
 	return nil
 }
 
-// Foreground maps RGB colors into the selected terminal palette.
-func Foreground(c engine.Color, mode string) string {
-	if mode == "truecolor" || mode == "" {
-		return c.ToANSI()
-	}
+// Build the immutable palette once, rather than allocating it for every color
+// encountered in each frame. Shared palette reads are safe for all renderers.
+var terminalPalette = func() []engine.Color {
 	palette := []engine.Color{
 		{R: 0, G: 0, B: 0}, {R: 128, G: 0, B: 0}, {R: 0, G: 128, B: 0}, {R: 128, G: 128, B: 0},
 		{R: 0, G: 0, B: 128}, {R: 128, G: 0, B: 128}, {R: 0, G: 128, B: 128}, {R: 192, G: 192, B: 192},
 		{R: 128, G: 128, B: 128}, {R: 255, G: 0, B: 0}, {R: 0, G: 255, B: 0}, {R: 255, G: 255, B: 0},
 		{R: 0, G: 0, B: 255}, {R: 255, G: 0, B: 255}, {R: 0, G: 255, B: 255}, {R: 255, G: 255, B: 255},
 	}
-	if mode == "256" {
-		levels := []uint8{0, 95, 135, 175, 215, 255}
-		for _, r := range levels {
-			for _, g := range levels {
-				for _, b := range levels {
-					palette = append(palette, engine.Color{R: r, G: g, B: b})
-				}
+	levels := []uint8{0, 95, 135, 175, 215, 255}
+	for _, r := range levels {
+		for _, g := range levels {
+			for _, b := range levels {
+				palette = append(palette, engine.Color{R: r, G: g, B: b})
 			}
 		}
-		for i := 0; i < 24; i++ {
-			v := uint8(8 + i*10)
-			palette = append(palette, engine.Color{R: v, G: v, B: v})
-		}
+	}
+	for i := 0; i < 24; i++ {
+		v := uint8(8 + i*10)
+		palette = append(palette, engine.Color{R: v, G: v, B: v})
+	}
+	return palette
+}()
+
+// Foreground maps RGB colors into the selected terminal palette.
+func Foreground(c engine.Color, mode string) string {
+	if mode == "truecolor" || mode == "" {
+		return c.ToANSI()
+	}
+	palette := terminalPalette[:16]
+	if mode == "256" {
+		palette = terminalPalette
 	}
 	best, distance := 0, 3*256*256
 	for i, color := range palette {

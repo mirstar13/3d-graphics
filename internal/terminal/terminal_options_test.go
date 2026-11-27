@@ -48,6 +48,17 @@ func TestTerminalDimensions(t *testing.T) {
 	}
 }
 
+func BenchmarkTerminalForeground(b *testing.B) {
+	for _, mode := range []string{"16", "256", "truecolor"} {
+		b.Run(mode, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				Foreground(engine.Color{R: 113, G: 157, B: 193}, mode)
+			}
+		})
+	}
+}
+
 func TestTerminalOutputColorModes(t *testing.T) {
 	for _, mode := range []string{"none", "16", "256", "truecolor"} {
 		var output bytes.Buffer

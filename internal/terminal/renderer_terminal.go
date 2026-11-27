@@ -2,6 +2,7 @@ package terminal
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"math"
 	"strings"
@@ -41,6 +42,8 @@ type TerminalRenderer struct {
 	ShowDebugInfo                   bool
 	debugBuffer                     strings.Builder
 	lastDebugLine                   string
+	presentBuffer                   bytes.Buffer
+	presentColors                   map[engine.Color]string
 
 	// Clipping bounds (inclusive min, exclusive max)
 	ClipMinX, ClipMinY int
@@ -156,7 +159,9 @@ func (r *TerminalRenderer) GetRenderContext() *engine.RenderContext {
 
 // Present writes the frame to the terminal
 func (r *TerminalRenderer) Present() {
-	builder := strings.Builder{}
+	// Keep the large output allocation between frames, including after resize.
+	builder := &r.presentBuffer
+	builder.Reset()
 	builder.Grow(r.Height * r.Width * 25)
 
 	// Move cursor to home position
@@ -165,7 +170,11 @@ func (r *TerminalRenderer) Present() {
 	if r.UseColor {
 		currentColor := engine.ColorBlack
 		firstColor := true
-		colorCodes := make(map[engine.Color]string)
+		if r.presentColors == nil {
+			r.presentColors = make(map[engine.Color]string)
+		}
+		clear(r.presentColors)
+		colorCodes := r.presentColors
 		for i := 0; i < r.Height; i++ {
 			for j := 0; j < r.Width; j++ {
 				char := r.Surface[i][j]
@@ -202,7 +211,7 @@ func (r *TerminalRenderer) Present() {
 		}
 	}
 
-	r.Writer.WriteString(builder.String())
+	r.Writer.Write(builder.Bytes())
 	r.Writer.Flush()
 
 	now := time.Now()
