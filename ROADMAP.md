@@ -1,0 +1,51 @@
+# Engine review and feature roadmap
+
+Review of the terminal renderer, simulation, editor and creator workflow at commit `8965b51`. The proposed sequence prioritizes smoother play in large terminals, then the ability for a creator to build and export a second game without modifying the launcher. Milestones describe independently testable releases. Dates depend on the results of the first milestone.
+
+## Performance baseline
+
+Median of three 300 ms benchmark runs on Linux amd64, AMD EPYC 9V45, Go 1.24.6, with one logical Go CPU. Each row measures a different operation. Adding these times together would mix different scenes, resolutions and execution paths.
+
+| Existing benchmark | ms per operation | Allocations per operation | What it measures |
+| --- | ---: | ---: | --- |
+| Physics playground, 160×60 | 0.985 | 4,811 | Rasterize a fixed scene, without advancing physics or writing a frame |
+| Truecolor presentation, 240×80 | 2.835 | 19,204 | Encode a frame with a different RGB value in every cell and write to a discard sink |
+| Dense physics world, 128 spheres | 0.661 | 1,179 | Advance one fixed tick, including collision detection and solving |
+| Settled physics world, 128 spheres | 0.148 | 306 | Advance one fixed tick after settling |
+| Pulse Dock view, 120×40 | 0.088 | 271 | Build a monochrome game view and HUD |
+
+Reproduce from the repository root. Compare changes on the same machine and Go version.
+
+```sh
+go test -p 1 ./internal/demo ./internal/terminal ./internal/physics ./internal/app \
+  -run '^$' -bench 'Benchmark(SceneRaster|PresentLargeFrame|WorldLayouts|PulseDockView)$' \
+  -benchmem -benchtime=300ms -count=3 -cpu=1
+```
+
+## Prioritized improvements
+
+1. **Measure frame stalls in the playable demos.** The demo runner measures update, rendering and presentation, but the profiler keeps the latest phase duration and exposes aggregate frame min/mean/max. The terminal status shows FPS and physics cost. A fast average can hide the individual frames the player feels. Record a fixed window of phase timings, frame-to-frame intervals, catch-up ticks and bytes written. Compare the same camera path at 120×40 and 160×60 in both a PTY and a native terminal. Record terminal, grid, color mode and AA so subsequent runs are comparable. A PTY measures application-side write stalls, while native testing also exercises the terminal emulator. [Frame loop](internal/app/runner.go) · [Profiler](internal/engine/profiling.go)
+
+2. **Remove allocations from ordinary triangle clipping.** In a one-second allocation profile of the 160×60 playground raster benchmark, `ClipTriangleToNearPlane` accounted for 99.3% of sampled allocation objects. Even a fully visible triangle returns a new one-element slice. The renderer also computes three view depths immediately before the clipper computes them again. Reuse those depths, draw fully visible triangles directly, and give the intersecting path caller-owned space for its maximum of two triangles. First check allocations per frame and raster time on the same fixture. Require matching depth, UVs and winding on both sides of the near plane, including the rotating floor regression and tiled rendering. [Clipper](internal/engine/clipping.go) · [Triangle draw path](internal/terminal/renderer_terminal.go) · [Regression coverage](internal/terminal/rendering_regressions_test.go)
+
+3. **Reduce ANSI formatting and output volume separately.** Almost every sampled allocation in the large truecolor presentation fixture came from `fmt.Sprintf` through `Color.ToANSI`. The frame buffer is already reused. Append RGB numbers directly to the output buffer and compare exact terminal sequences across palettes. Then measure bytes/frame for a static camera, a single moving crate and a full camera turn. Try writing only changed spans if the first two cases benefit. Resize, mode changes and returning from settings need a full repaint, and dense motion needs a cheap full-frame path. The benchmark's distinct color per cell makes it a formatting stress case. Real terminal throughput needs its own measurement. [Presentation benchmark](internal/terminal/presentation_bench_test.go) · [Presenter](internal/terminal/renderer_terminal.go) · [Color encoding](internal/engine/color.go)
+
+4. **Give one component ownership of frame preparation.** The demo loop calls `BeginFrame`, then the terminal renderer clears the buffers again in `prepareScene`. The tiled renderer bins nodes, renders each node again in every intersected tile, and creates workers and a queue each frame. The jobs renderer serializes framebuffer drawing with a mutex. These are source findings whose frame-time costs still need isolation. Benchmark all four CPU modes with one and four workers, including a large floor crossing many tiles. First remove redundant clears while preserving the backend contract. Only move vertex transformation ahead of tile binning if the comparison shows repeated work dominates. Keep single-thread framebuffer parity, AA resolve, post-AA overlays and resize tests as acceptance checks. [Runner](internal/app/runner.go) · [Terminal renderer](internal/terminal/renderer_terminal.go) · [Parallel renderer](internal/terminal/renderer_parallel.go)
+
+5. **Share viewport behavior between editor Play and the launcher player.** The project player retains its framebuffer and centres a capped grid below the HUD. The editor builds a new renderer in each preview render and its game view derives dimensions directly from the full terminal. Opening the same scene through these two routes can change workload and layout. Benchmark editor Play before factoring out sizing, buffer lifetime and text/color row conversion. Keep picking, selection outlines and inspector layout with the editor. A resize from 321×121 to 80×24 and back should preserve the aim point and restore the previous editor focus on Stop. Update the package help that still describes a forced 11-pixel font. [Editor](internal/app/project_editor.go) · [Player](internal/app/project_player.go) · [Package help](internal/app/doc.go)
+
+6. **Make game actions portable between a sample and an exported project.** Switch Room implements walking, grab, push and button use inside the app package, with direct key handling and hard-coded entity IDs. The runtime already supports picking and queued manipulation. The public creator interface exposes snapshots, contacts and impulses. Move one interaction through the public boundary first, with project bindings supplying an action and the fixed tick consuming it. An external sample module should be able to drive the interaction, handle a stale entity and restart without importing internal packages. Keep scene storage, runtime commands and terminal key translation in their existing layers. [Switch Room](internal/app/switch_room.go) · [Runtime manipulation](internal/game/manipulation.go) · [Creator API](creator/creator.go)
+
+7. **Profile physics under sustained activity before changing the broad phase.** At 128 spheres the dense fixture ended with 3,072 pair tests and 360 contacts on the last tick. The settled fixture ended with 1,152 tests and 128 contacts. These counters describe the last tick, whereas benchmark time spans the whole run. Record distributions of active bodies, pair tests and solver time in a repeatable moving stack before choosing between candidate pruning, contact storage reuse and solver work. Preserve contact ordering, sleep/wake behavior and sensor transitions. [World benchmarks](internal/physics/stability_test.go) · [Pair generation](internal/physics/broadphase.go)
+
+## Feature milestones
+
+| Order | Player or creator outcome | Depends on | Acceptance |
+| --- | --- | --- | --- |
+| 1. Frame-time diagnostics | Toggle a compact timing view in the playground and export a short timing trace on demand. | Existing profiler and fixed-step counters. | The trace identifies update, raster and write time on the slowest frames and reports p50, p95 and p99 frame intervals. Disabling capture avoids per-frame trace allocations. Publish a baseline for both grids above. |
+| 2. Smoother terminal play | Keep the existing quality controls and centred viewport while reducing recurring allocations. | Milestone 1 and the clipping and ANSI profiles above. | Halve allocation counts in each targeted stress benchmark as an initial goal. Compare p95/p99 and bytes/frame before and after on the same terminal. Pass clipping, color, resize and input restoration checks. Ship individual optimizations when their workload benefits. |
+| 3. Consistent editor Play | Preview the same playable frame, HUD and controls from the editor and launcher. | Common viewport rules from improvement 5. Can start alongside milestone 2. | Switch Room or an equivalent first-person fixture retains the centred reticle in monochrome and color. Resizing preserves picking. Play/Stop preserves unsaved edits and editor selection. Compare allocations per editor tick at fixed size. |
+| 4. Project-defined interactions | Bind a use or grab action in a project and implement its behavior through the creator API. | Stable input ownership from milestone 3 and the runtime command boundary from improvement 6. | A project outside the engine module defines an interaction, rebinds its key, advances it one tick at a time and runs it from an extracted export. Existing Pulse Dock projects still build and play. |
+| 5. Multi-room games | Add a scene-transition action so reaching an exit can load the next authored room. | Project-defined actions and the existing scene loader/exporter. | A two-room sample exports and plays from a relocated directory. Validate the destination before switching, retain the current room on load failure, clear stale entity handles on success, and define which room Restart reloads. Existing single-scene projects keep their current behavior. |
+
+**First implementation task.** Capture a repeatable 160×60 playground run with the timing diagnostics, then land the fully visible triangle fast path as a separate change. This gives the team both a player-facing frame-time comparison and a narrow allocation regression to track. Revisit SIMD after the profile identifies a remaining CPU kernel with enough frame cost to justify a platform-specific implementation.

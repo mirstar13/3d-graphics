@@ -3,6 +3,8 @@
 The active development branch focuses on the terminal renderer. Go 1.24.6 or
 newer is required. The terminal build uses pure Go and can run with CGO disabled.
 
+See the [engine review and feature roadmap](ROADMAP.md) for measured bottlenecks and planned milestones.
+
 Run from the repository directory in an interactive terminal:
 
 ```sh
