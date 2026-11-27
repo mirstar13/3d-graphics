@@ -221,6 +221,35 @@ terminals with xterm-256color, xterm, and linux settings. Windows amd64 and
 macOS arm64 are cross-compiled; interactive behavior on those systems still
 needs native validation.
 
+### Renderer performance measurements
+
+Run the raster benchmark independently of terminal output and simulation:
+
+```sh
+go test ./internal/demo -run '^$' -bench BenchmarkSceneRaster -benchmem -count=3
+```
+
+On Linux amd64, Go 1.24.6, AMD EPYC 9V45, two 300 ms runs per case measured
+the following mean frame costs before and after optimizing cached transform
+access and common specular exponents. Both runs used single-threaded rendering,
+no AA, and the same initial scene state. These are raster times, not end-to-end
+FPS; physics simulation, terminal output and terminal display latency are excluded.
+
+| Scene | Grid | Before | After |
+| --- | --- | --- | --- |
+| Kinetic gallery | 160×60 | 0.821 ms | 0.484 ms |
+| Kinetic gallery | 320×120 | 2.542 ms | 1.427 ms |
+| Wave field | 160×60 | 0.680 ms | 0.426 ms |
+| Wave field | 320×120 | 1.735 ms | 1.065 ms |
+| Physics playground | 160×60 | 1.810 ms | 0.971 ms |
+| Physics playground | 320×120 | 2.964 ms | 1.697 ms |
+
+An SSE2 prototype computed pairs of edge weights. Scene-level measurements
+overlapped the scalar baseline, so that prototype was removed. The retained
+optimizations use portable Go and preserve support for arbitrary shininess
+values; powers of two from 2 through 256 use repeated squaring. Floating-point
+results can differ by roundoff from `math.Pow`.
+
 ## Architecture
 
 The root entry point calls `internal/app.Run`, preserving `go run .`.

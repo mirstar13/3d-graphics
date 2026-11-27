@@ -46,6 +46,20 @@ func TestParentTransformInvalidatesChild(t *testing.T) {
 	if got := child.InverseTransformPoint(Point{X: 6}).X; math.Abs(got) > 1e-9 {
 		t.Errorf("inverse X=%v, want 0", got)
 	}
+	// Reparenting and detaching must invalidate even clean accessor caches.
+	other := NewTransformAt(10, 0, 0)
+	for _, tc := range []struct {
+		parent *Transform
+		want   float64
+	}{{other, 11}, {nil, 1}, {parent, 6}} {
+		child.SetParent(tc.parent)
+		if got := child.TransformPoint(Point{}).X; got != tc.want {
+			t.Errorf("reparented X=%v, want %v", got, tc.want)
+		}
+		if got := child.InverseTransformPoint(Point{X: tc.want}).X; math.Abs(got) > 1e-9 {
+			t.Errorf("reparented inverse X=%v, want 0", got)
+		}
+	}
 	local := NewTransform()
 	local.GetLocalMatrix()
 	local.SetPosition(3, 0, 0)

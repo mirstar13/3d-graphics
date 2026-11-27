@@ -188,7 +188,7 @@ func (ls *LightingSystem) CalculateLighting(
 		}
 
 		// Apply shininess (specular exponent)
-		specularIntensity = math.Pow(specularIntensity, material.GetShininess())
+		specularIntensity = specularPower(specularIntensity, material.GetShininess())
 		specularIntensity *= material.GetSpecularStrength() * light.Intensity * attenuation
 
 		// Additional clamp to prevent over-bright specular
@@ -233,6 +233,38 @@ func (ls *LightingSystem) CalculateLighting(
 		R: uint8(totalR),
 		G: uint8(totalG),
 		B: uint8(totalB),
+	}
+}
+
+// specularPower evaluates common material exponents by repeated squaring.
+// Arbitrary authored exponents retain math.Pow semantics.
+func specularPower(value, exponent float64) float64 {
+	switch exponent {
+	case 256:
+		value *= value
+		fallthrough
+	case 128:
+		value *= value
+		fallthrough
+	case 64:
+		value *= value
+		fallthrough
+	case 32:
+		value *= value
+		fallthrough
+	case 16:
+		value *= value
+		fallthrough
+	case 8:
+		value *= value
+		fallthrough
+	case 4:
+		value *= value
+		fallthrough
+	case 2:
+		return value * value
+	default:
+		return math.Pow(value, exponent)
 	}
 }
 

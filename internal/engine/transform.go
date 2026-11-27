@@ -124,6 +124,16 @@ func (t *Transform) RotateAxisAngle(axis Point, angle float64) {
 
 // GetWorldMatrix returns the cached world transformation matrix
 func (t *Transform) GetWorldMatrix() Matrix4x4 {
+	t.updateWorldMatrix()
+	return t.worldMatrix
+}
+
+// Internal readers use the cached matrix in place instead of copying 128 bytes
+// through each accessor. Parented transforms still check their parent's matrix.
+func (t *Transform) updateWorldMatrix() {
+	if t.Parent == nil && t.cachedParent == nil && !t.worldMatrixDirty {
+		return
+	}
 	parentMatrix := IdentityMatrix()
 	if t.Parent != nil {
 		parentMatrix = t.Parent.GetWorldMatrix()
@@ -135,7 +145,6 @@ func (t *Transform) GetWorldMatrix() Matrix4x4 {
 		t.worldMatrixDirty = false
 		t.inverseMatrixDirty = true
 	}
-	return t.worldMatrix
 }
 
 // GetLocalMatrix returns the cached local transformation matrix
@@ -149,36 +158,40 @@ func (t *Transform) GetLocalMatrix() Matrix4x4 {
 
 // GetInverseMatrix returns the cached inverse world matrix
 func (t *Transform) GetInverseMatrix() Matrix4x4 {
-	mat := t.GetWorldMatrix()
+	t.updateInverseMatrix()
+	return t.inverseMatrix
+}
+
+func (t *Transform) updateInverseMatrix() {
+	t.updateWorldMatrix()
 	if t.inverseMatrixDirty {
-		t.inverseMatrix = mat.Invert()
+		t.inverseMatrix = t.worldMatrix.Invert()
 		t.inverseMatrixDirty = false
 	}
-	return t.inverseMatrix
 }
 
 // TransformPoint transforms a point from local space to world space (CACHED)
 func (t *Transform) TransformPoint(p Point) Point {
-	mat := t.GetWorldMatrix()
-	return mat.TransformPoint(p)
+	t.updateWorldMatrix()
+	return t.worldMatrix.TransformPoint(p)
 }
 
 // TransformDirection transforms a direction vector (CACHED)
 func (t *Transform) TransformDirection(d Point) Point {
-	mat := t.GetWorldMatrix()
-	return mat.TransformDirection(d)
+	t.updateWorldMatrix()
+	return t.worldMatrix.TransformDirection(d)
 }
 
 // InverseTransformPoint transforms a world-space point to local space (CACHED)
 func (t *Transform) InverseTransformPoint(worldPoint Point) Point {
-	mat := t.GetInverseMatrix()
-	return mat.TransformPoint(worldPoint)
+	t.updateInverseMatrix()
+	return t.inverseMatrix.TransformPoint(worldPoint)
 }
 
 // GetWorldPosition returns the world-space position (CACHED)
 func (t *Transform) GetWorldPosition() Point {
-	mat := t.GetWorldMatrix()
-	return Point{X: mat.M[3], Y: mat.M[7], Z: mat.M[11]}
+	t.updateWorldMatrix()
+	return Point{X: t.worldMatrix.M[3], Y: t.worldMatrix.M[7], Z: t.worldMatrix.M[11]}
 }
 
 // GetWorldRotation returns the world-space rotation as Euler angles
