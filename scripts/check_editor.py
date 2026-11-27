@@ -1,4 +1,5 @@
 """Project editor PTY workflow; run after go build -race -o /tmp/graphics ."""
+import glob, subprocess, zipfile
 import os, pty, fcntl, termios, struct, select, time, signal, sys, tempfile
 
 BINARY = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "/tmp/graphics")
@@ -256,6 +257,48 @@ func main() {
             assert file.read() == authored_before_tools, "Play tools modified saved scene"
     finally:
         s.cleanup()
+    # The exported executable must use the packaged files, even from another cwd.
+    with open(os.path.join(root, "assets", "message.txt"), "w") as file:
+        file.write("Packaged asset loaded")
+    with open(source_path, "w") as file:
+        file.write("""package main
+import ("fmt"; "os"; "github.com/mirstar13/go-3d-graphics/creator")
+func main() {
+    g, err := creator.Open(".", nil); if err != nil { panic(err) }
+    if err := g.Step(); err != nil { panic(err) }
+    data, err := os.ReadFile("assets/message.txt"); if err != nil { panic(err) }
+    fmt.Println(string(data))
+}
+""")
+    s = Session(["-project", root])
+    try:
+        s.wait(b"Opened Example")
+        s.send(b"\x1b[20~"); s.wait(b"Exported build/game-", seconds=90)
+        archive, = glob.glob(os.path.join(root, "build", "game-*.zip"))
+        with open(archive, "rb") as file:
+            successful = file.read()
+        with open(source_path, "a") as file:
+            file.write("\nvar _ = invalidExportSource\n")
+        s.send(b"\x1b[20~"); s.wait(b"invalidExportSource", seconds=30)
+        with open(archive, "rb") as file:
+            assert file.read() == successful, "failed export replaced the package"
+        s.send(b"\x1b"); s.wait(b"Hierarchy")
+        s.send(b"q"); s.close()
+    finally:
+        s.cleanup()
+    release = os.path.join(parent, "Relocated game")
+    with zipfile.ZipFile(archive) as package:
+        assert "main.go" not in package.namelist() and "go.mod" not in package.namelist()
+        package.extractall(release)
+        for executable in ("play.sh", "game"):
+            mode = package.getinfo(executable).external_attr >> 16
+            assert mode & 0o111
+            os.chmod(os.path.join(release, executable), mode & 0o777)
+    os.rename(root, root + "-unavailable")
+    result = subprocess.run([os.path.join(release, "play.sh")], cwd=parent,
+                            capture_output=True, check=True, timeout=15)
+    assert b"Packaged asset loaded" in result.stdout
+print("Standalone export, failed replacement and relocated launcher PASS")
 print("Built game exit/crash/restart/stop and unsaved editor state PASS")
 print("Play tools configure/preview/cancel/spawn/impulse/delete/reset/isolation PASS")
 print("Bindings edit/persist/reset, viewport picking/clear/cycle, paused actions PASS")

@@ -231,6 +231,14 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.build.output = msg.status()
 		return m, nil
+	case projectExportResult:
+		m.build.cancel()
+		m.build.cancel = nil
+		m.build.output = "Exported " + msg.path
+		if msg.err != nil {
+			m.build.output = "Export failed\n" + msg.err.Error()
+		}
+		return m, nil
 	case projectBuildResult:
 		if m.build.cancel != nil {
 			m.build.cancel()
@@ -276,7 +284,7 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		key := msg.String()
-		if m.modal == "build" || m.modal == "child" {
+		if m.modal == "build" || m.modal == "child" || m.modal == "export" {
 			return m.buildKey(key)
 		}
 		if m.modal == "scene" || m.modal == "scene_edit" {
@@ -399,6 +407,11 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "f6":
 			if m.project != nil && m.activeResource == nil && m.play == nil {
 				return m.startChild()
+			}
+			return m, nil
+		case "f9":
+			if m.project != nil && m.activeResource == nil && m.play == nil {
+				return m.startExport()
 			}
 			return m, nil
 		case "ctrl+b":
@@ -604,7 +617,7 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 func (m projectEditorModel) View() string {
-	if m.modal == "build" || m.modal == "child" {
+	if m.modal == "build" || m.modal == "child" || m.modal == "export" {
 		return m.buildView()
 	}
 	if m.modal == "scene" || m.modal == "scene_edit" {
@@ -721,7 +734,7 @@ func (m projectEditorModel) View() string {
 		if m.focus == 2 {
 			out.WriteString(input.Help(bindings, input.AimUp, input.AimDown, input.AimLeft, input.AimRight) + "\n")
 		} else {
-			out.WriteString("F6 run build | Ctrl+B build | Ctrl+E scene settings | H parent | 1/2/3 camera | +/- zoom | Q exit editor\n")
+			out.WriteString("F9 export | F6 run build | Ctrl+B build | Ctrl+E scene settings | H parent | 1/2/3 camera | +/- zoom | Q exit editor\n")
 		}
 		if m.play != nil {
 			fmt.Fprintf(&out, "Ctrl+L tools | Impulse (%s,%s,%s) %s\n", m.toolValues[0], m.toolValues[1], m.toolValues[2], m.toolValues[3])

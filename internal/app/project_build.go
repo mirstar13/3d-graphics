@@ -38,6 +38,10 @@ func (m projectEditorModel) buildLines() []string {
 }
 func (m projectEditorModel) buildKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
+	case "f9":
+		if m.build.cancel == nil {
+			return m.startExport()
+		}
 	case "f6":
 		if m.build.cancel == nil {
 			return m.startChild()
@@ -51,6 +55,9 @@ func (m projectEditorModel) buildKey(key string) (tea.Model, tea.Cmd) {
 		if m.build.cancel != nil {
 			m.build.cancel()
 			m.build.output = "Canceling build…"
+			if m.modal == "export" {
+				m.build.output = "Canceling export…"
+			}
 			if m.modal == "child" {
 				m.restartChild = false
 				m.build.output = "Stopping game…"
@@ -87,6 +94,13 @@ func (m projectEditorModel) buildView() string {
 	} else if m.build.cancel == nil {
 		help = "Up/Down scroll | Ctrl+B rebuild | F6 run | Esc close"
 	}
+	if m.modal == "export" {
+		title = "Project export"
+		help = "Esc cancel"
+		if m.build.cancel == nil {
+			help = "Up/Down scroll | F9 export again | Esc close"
+		}
+	}
 	return fitView(title+"\n"+help+"\n"+strings.Join(lines[first:min(len(lines), first+rows)], "\n"), m.width, m.height)
 }
 
@@ -114,4 +128,17 @@ func (m projectEditorModel) startChild() (tea.Model, tea.Cmd) {
 	m.build = buildPanel{cancel: cancel, output: "Running last build with saved project files…"}
 	p := m.project
 	return m, func() tea.Msg { output, err := p.RunBuilt(ctx); return childResult{output, err} }
+}
+
+type projectExportResult struct {
+	path string
+	err  error
+}
+
+func (m projectEditorModel) startExport() (tea.Model, tea.Cmd) {
+	ctx, cancel := context.WithCancel(m.lifetime)
+	m.modal = "export"
+	m.build = buildPanel{cancel: cancel, output: "Exporting saved project…"}
+	p := m.project
+	return m, func() tea.Msg { path, err := p.Export(ctx); return projectExportResult{path, err} }
 }

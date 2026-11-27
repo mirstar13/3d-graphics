@@ -62,6 +62,19 @@
 // Arrows apply horizontal impulses and Space jumps. Omit -player to watch the
 // simulation. Q exits. A restart restores the saved positions and timer.
 //
+// # Standalone export
+//
+// Save scene edits and press F9 in Edit mode. Export compiles the root Go
+// package and packages its executable, project manifest, entry scene and the
+// scenes, resources and assets directories into build/game-OS-ARCH.zip.
+// A project-root renderer.yaml is included when present.
+// Store additional runtime data under assets. Use ordinary files in these
+// directories. An OBJ's material libraries must also be included in the export.
+// On a matching platform, extract the complete ZIP and run play.sh (Unix)
+// or play.cmd (Windows). The launcher sets the working directory for the game.
+// Players need the runtime libraries required by their executable. Building
+// requires Go; launching the package uses the compiled program.
+//
 // # Visual assets
 //
 // Put Wavefront files in the project assets directory (create it in existing
