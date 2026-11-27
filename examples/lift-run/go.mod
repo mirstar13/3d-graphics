@@ -30,4 +30,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/mirstar13/go-3d-graphics => ../..
+replace github.com/mirstar13/go-3d-graphics => github.com/mirstar13/3d-graphics v0.0.0-20261127230642-c1c3e991fe42
