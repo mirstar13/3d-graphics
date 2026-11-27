@@ -74,13 +74,6 @@ func (o *compilerOutput) Write(p []byte) (int, error) {
 // Windows). It publishes a completed executable only after a successful build.
 // Compiler errors include their file and line locations.
 func (p *Project) Build(ctx context.Context) (string, error) {
-	module, err := scenePath(p.Root, "go.mod")
-	if err != nil {
-		return "", err
-	}
-	if _, err = os.Stat(module); err != nil {
-		return "", fmt.Errorf("project requires go.mod and a root main package: %w", err)
-	}
 	dir, err := scenePath(p.Root, "build")
 	if err != nil {
 		return "", err
@@ -95,6 +88,24 @@ func (p *Project) Build(ctx context.Context) (string, error) {
 	defer os.RemoveAll(stage)
 	name := gameExecutable()
 	tmp := filepath.Join(stage, name)
+	if err = p.compile(ctx, tmp); err != nil {
+		return "", err
+	}
+	dest := filepath.Join(dir, name)
+	if err = os.Rename(tmp, dest); err != nil {
+		return "", err
+	}
+	return filepath.Join("build", name), nil
+}
+
+func (p *Project) compile(ctx context.Context, tmp string) error {
+	module, err := scenePath(p.Root, "go.mod")
+	if err != nil {
+		return err
+	}
+	if _, err = os.Stat(module); err != nil {
+		return fmt.Errorf("project requires go.mod and a root main package: %w", err)
+	}
 	cmd := exec.CommandContext(ctx, "go", "build", "-mod=mod", "-buildmode=exe", "-buildvcs=false", "-o", tmp, ".")
 	cmd.Dir = p.Root
 	cmd.Env = append(os.Environ(), "GOWORK=off", "GOOS="+runtime.GOOS, "GOARCH="+runtime.GOARCH)
@@ -103,22 +114,18 @@ func (p *Project) Build(ctx context.Context) (string, error) {
 	cmd.Stderr = &output
 	if err = cmd.Run(); err != nil {
 		if ctx.Err() != nil {
-			return "", ctx.Err()
+			return ctx.Err()
 		}
 		msg := strings.TrimSpace(output.data.String())
 		if output.truncated {
 			msg += "\n(compiler output truncated)"
 		}
 		if msg != "" {
-			return "", fmt.Errorf("%w\n%s", err, msg)
+			return fmt.Errorf("%w\n%s", err, msg)
 		}
-		return "", err
+		return err
 	}
-	dest := filepath.Join(dir, name)
-	if err = os.Rename(tmp, dest); err != nil {
-		return "", err
-	}
-	return filepath.Join("build", name), nil
+	return nil
 }
 
 func gameExecutable() string {
