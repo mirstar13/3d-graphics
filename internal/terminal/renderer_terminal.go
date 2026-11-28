@@ -125,6 +125,20 @@ func (r *TerminalRenderer) Initialize() error {
 		return err
 	}
 	r.restoreConsole = restore
+	r.InitializeOffscreen()
+	// Enter alternate screen buffer
+	r.Writer.WriteString("\033[?1049h")
+	// Hide cursor
+	r.Writer.WriteString("\033[?25l")
+	// Clear screen
+	r.Writer.WriteString("\033[2J\033[H")
+	r.Writer.Flush()
+	return nil
+}
+
+// InitializeOffscreen opens the requested graphics device without accessing
+// the terminal. Call Shutdown from the same goroutine to release the device.
+func (r *TerminalRenderer) InitializeOffscreen() {
 	if r.UseOpenGLRaster {
 		var err error
 		r.rasterDevice, err = openRasterDevice()
@@ -142,14 +156,6 @@ func (r *TerminalRenderer) Initialize() error {
 			fmt.Fprintf(os.Stderr, "OpenGL FXAA device: %s\n", device.name())
 		}
 	}
-	// Enter alternate screen buffer
-	r.Writer.WriteString("\033[?1049h")
-	// Hide cursor
-	r.Writer.WriteString("\033[?25l")
-	// Clear screen
-	r.Writer.WriteString("\033[2J\033[H")
-	r.Writer.Flush()
-	return nil
 }
 
 // Shutdown cleans up the terminal renderer
@@ -162,7 +168,7 @@ func (r *TerminalRenderer) Shutdown() {
 		r.fxaaDevice.close()
 		r.fxaaDevice = nil
 	}
-	if r.Writer != nil {
+	if r.Writer != nil && r.restoreConsole != nil {
 		r.Writer.WriteString("\033[0m\033[?25h") // Show cursor
 		r.Writer.WriteString("\033[?1049l")      // Exit alternate screen
 		r.Writer.Flush()

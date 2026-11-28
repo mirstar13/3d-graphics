@@ -32,9 +32,7 @@ func TestOpenGLRasterDemoParity(t *testing.T) {
 			scene, lighting := presetScene(index, 1.25, true)
 			cpu := demoRenderer(index, 160, 60, false, scene, lighting)
 			gl := demoRenderer(index, 160, 60, true, scene, lighting)
-			if err := gl.Initialize(); err != nil {
-				t.Fatal(err)
-			}
+			gl.InitializeOffscreen()
 			defer gl.Shutdown()
 			for _, size := range [][2]int{{160, 60}, {320, 120}, {120, 40}} {
 				cpu.Resize(size[0], size[1])
@@ -88,9 +86,7 @@ func BenchmarkOpenGLSceneRaster(b *testing.B) {
 					scene, lighting := presetScene(index, 1.25, true)
 					r := demoRenderer(index, size[0], size[1], useGL, scene, lighting)
 					if useGL {
-						if err := r.Initialize(); err != nil {
-							b.Fatal(err)
-						}
+						r.InitializeOffscreen()
 						defer r.Shutdown()
 					}
 					var renderer engine.Renderer = r

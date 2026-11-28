@@ -28,7 +28,7 @@ jobs:
         run: |
           log="$RUNNER_TEMP/opengl.log"
           status=0
-          go test -tags terminalgl -v -run '^TestOpenGL' ./... >"$log" 2>&1 || status=$?
+          go test -tags terminalgl -count=1 -v -run '^TestOpenGL' ./... >"$log" 2>&1 || status=$?
           cat "$log"
           if [ "$status" -ne 0 ]; then
             python - "$log" <<'PY'
