@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
+
+	"github.com/mirstar13/go-3d-graphics/internal/engine"
 )
 
 // Property supplies inspector metadata and conversion in one place.
@@ -295,4 +298,26 @@ func (e *Editor) Redo() bool {
 	e.document = e.future[len(e.future)-1]
 	e.future = e.future[:len(e.future)-1]
 	return true
+}
+
+// SetPose records a viewport operation as one undoable change.
+func (e *Editor) SetPose(id string, position, rotation engine.Point) error {
+	next := e.Document()
+	for i := range next.Entities {
+		entity := &next.Entities[i]
+		if entity.ID != id {
+			continue
+		}
+		before := *entity
+		entity.Position, entity.Rotation = position, rotation
+		for _, p := range Properties {
+			if strings.HasPrefix(p.Key, "position.") || strings.HasPrefix(p.Key, "rotation.") {
+				if p.Get(before) != p.Get(*entity) {
+					next.recordOverride(id, p.Key, p.Get(*entity))
+				}
+			}
+		}
+		return e.change(next)
+	}
+	return fmt.Errorf("entity no longer exists")
 }

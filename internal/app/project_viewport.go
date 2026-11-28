@@ -38,6 +38,9 @@ func (m *projectEditorModel) viewportMouse(msg tea.MouseMsg) {
 		m.reticleU = (float64(msg.X) + .5) / float64(len(m.frame[y]))
 		m.reticleV = (float64(y) + .5) / float64(len(m.frame))
 		m.pickReticle()
+		if m.transformTool != 0 {
+			m.transformDrag = m.beginTransform(msg.X, msg.Y)
+		}
 	case tea.MouseButtonWheelUp:
 		m.zoom = max(.25, m.zoom*.8)
 		m.renderPreview()

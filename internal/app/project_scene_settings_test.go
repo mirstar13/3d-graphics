@@ -38,17 +38,21 @@ func TestSceneSettingsWorkflow(t *testing.T) {
 	m = resourceKey(m, tea.KeyEsc)
 	m, _ = editorRune(m, "1")
 	m, _ = editorRune(m, "+")
+	editorPosition := m.preview.Scene.Camera.GetPosition()
 	m.startPlay()
-	if m.play.Scene.Camera.GetPosition() != camera.Position {
+	if m.play.Scene.Camera.GetPosition() != editorPosition {
 		t.Fatal("Play camera")
 	}
 	m.view = 2
 	m.zoom = 2
 	m.resetPlay()
-	if m.play.Scene.Camera.GetPosition() != camera.Position {
+	if m.play.Scene.Camera.GetPosition() != editorPosition {
 		t.Fatal("reset camera")
 	}
-	m.play = nil
+	m.stopPlay()
+	if m.preview.Scene.Camera.GetPosition() != editorPosition {
+		t.Fatal("Stop should restore the editor camera")
+	}
 	m.activeResource = &project.Resource{}
 	m = resourceKey(m, tea.KeyCtrlE)
 	if m.modal != "" {

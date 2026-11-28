@@ -19,6 +19,7 @@ type Inspection struct {
 	Entity            project.Entity
 	Spawned           bool
 	Body              *physics.BodyState
+	Contacts          int
 }
 
 // Inspect returns live pose, ownership and an independent body-state snapshot.
@@ -39,6 +40,11 @@ func (s *Session) Inspect(id EntityID) (Inspection, error) {
 		}
 		_, out.EnterImpulseArmed = s.enterImpulses[e.body]
 		out.Body = &b
+		for _, contact := range s.World.Contacts() {
+			if contact.A == e.body || contact.B == e.body {
+				out.Contacts++
+			}
+		}
 		out.Entity.Position = b.Position
 		pitch, yaw, roll := b.Rotation.ToEuler()
 		out.Entity.Rotation = engine.Point{X: pitch * 180 / math.Pi, Y: yaw * 180 / math.Pi, Z: roll * 180 / math.Pi}

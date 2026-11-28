@@ -68,7 +68,11 @@ type projectEditorModel struct {
 	toolValues                                     [9]string
 	toolField                                      int
 	playActor                                      string
-	editFocus                                      int
+	editFocus, editView, editProperty              int
+	editZoom                                       float64
+	transformTool, transformAxis                   int
+	transformSnap                                  bool
+	transformDrag                                  *viewportDrag
 	runtimeSelection, pendingSpawn                 string
 	hitAnchor                                      *game.Anchor
 	spawnPreview                                   project.Entity
@@ -177,15 +181,21 @@ func (m *projectEditorModel) renderPreview() {
 		session.Scene.Camera.SetPosition(target.X+(eye.X-target.X)*m.zoom, target.Y+(eye.Y-target.Y)*m.zoom, target.Z+(eye.Z-target.Z)*m.zoom)
 		session.Scene.Camera.LookAt(target)
 	}
-	renderer.RenderScene(session.Scene)
-	if e, ok := m.selectedEntity(); ok && m.play == nil {
+	draw := func() { renderer.RenderScene(session.Scene) }
+	if m.transformDrag != nil {
+		p, q := m.transformDrag.pose()
+		session.PreviewPose(m.transformDrag.handle, p, q, draw)
+	} else {
+		draw()
+	}
+	if e, ok := m.selectedEntity(); ok && m.transformSession() != nil && m.transformDrag == nil {
 		if id, ok := session.Find(e.ID); ok {
 			renderer.RenderPhysicsDebug(session.SelectionLines(id), session.Scene.Camera)
 		}
 	}
 	m.frame = terminal.GlyphRows(m.frame, renderer.Surface)
 	x, y := m.reticleCell(w, h)
-	if m.play != nil {
+	if m.gameViewActive() {
 		m.colorPreview(renderer, -1, -1)
 		return
 	}
@@ -243,13 +253,20 @@ func (m *projectEditorModel) newPlaySession() (*game.Session, error) {
 	if err == nil && m.scriptedPlay {
 		s.EnableBehaviors(m.lifetime, m.project)
 	}
+	if err != nil && s != nil {
+		s.Close()
+		s = nil
+	}
 	return s, err
 }
 
 func (m *projectEditorModel) stopPlay() {
 	if m.play != nil {
 		m.play.Close()
-		m.focus = m.editFocus
+		m.focus, m.view, m.zoom, m.property = m.editFocus, m.editView, m.editZoom, m.editProperty
+		m.runtimeSelection, m.pendingSpawn, m.hitAnchor = "", "", nil
+		m.lookDrag.Reset(false)
+		m.transformDrag = nil
 		m.play = nil
 	}
 	m.scriptedPlay = false
@@ -273,10 +290,13 @@ func (m *projectEditorModel) startPlay() tea.Cmd {
 	if ok {
 		m.runtimeSelection = selected.ID
 	}
-	m.view, m.zoom = 0, 1
 	if m.play == nil {
-		m.editFocus = m.focus
+		m.editFocus, m.editView, m.editZoom, m.editProperty = m.focus, m.view, m.zoom, m.property
+		if m.preview != nil {
+			*session.Scene.Camera.Transform = *m.preview.Scene.Camera.Transform
+		}
 	}
+	m.transformDrag = nil
 	m.focus = 2
 	m.playActor = ""
 	for _, entry := range m.document.Document().Hierarchy() {
@@ -337,9 +357,13 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case tea.BlurMsg:
+		m.cancelTransform()
 		m.lookDrag.Reset(false)
 		return m, nil
 	case tea.MouseMsg:
+		if m.dragMouse(msg) {
+			return m, nil
+		}
 		if m.modal != "" {
 			return m.dialogMouse(msg)
 		}
@@ -364,6 +388,7 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewportMouse(msg)
 		return m, nil
 	case tea.WindowSizeMsg:
+		m.transformDrag = nil
 		m.lookDrag.Reset(false)
 		m.width, m.height = msg.Width, msg.Height
 		m.renderPreview()
@@ -383,8 +408,10 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.lookDrag.Reset(false)
 		}
 		if err := m.play.Advance(elapsed); err != nil {
-			m.play.SetPaused(true)
+			m.stopPlay()
+			m.timerScheduled = false
 			m.message = err.Error()
+			return m, nil
 		}
 		m.renderPreview()
 		return m, nextEditorTick()
@@ -411,6 +438,16 @@ func (m projectEditorModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m projectEditorModel) handleEditorKey(msg tea.KeyMsg, key string) (tea.Model, tea.Cmd) {
+	if key == "esc" && m.transformDrag != nil {
+		m.cancelTransform()
+		return m, nil
+	}
+	if m.transformKey(key) {
+		return m, nil
+	}
+	if m.transformDrag != nil {
+		m.cancelTransform()
+	}
 	if key == "ui.keyboard" {
 		m.keyboard = !m.keyboard
 		m.keyPage = 0
@@ -761,6 +798,7 @@ func (m projectEditorModel) handleEditorKey(msg tea.KeyMsg, key string) (tea.Mod
 		}
 	case input.Pause:
 		if m.play != nil {
+			m.lookDrag.Reset(false)
 			m.play.SetPaused(!m.play.World.Stats().Paused)
 			m.renderPreview()
 			m.lastTick = time.Now()
@@ -768,6 +806,7 @@ func (m projectEditorModel) handleEditorKey(msg tea.KeyMsg, key string) (tea.Mod
 	case input.Step:
 		if m.play != nil && m.play.World.Stats().Paused {
 			if err := m.play.Step(); err != nil {
+				m.stopPlay()
 				m.message = err.Error()
 			}
 			m.renderPreview()

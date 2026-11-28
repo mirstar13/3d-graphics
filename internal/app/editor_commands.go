@@ -10,6 +10,9 @@ func (m projectEditorModel) commands() []editorButton {
 		{"Hierarchy", "ui.hierarchy"}, {"Inspector", "ui.inspector"}, {"Viewport", "ui.viewport"},
 		{"Clear selection", input.Clear}, {"Zoom in", "+"}, {"Zoom out", "-"},
 	}
+	if m.transformSession() != nil {
+		common = append(common, editorButton{"Cycle viewport tool", "ui.transform"}, editorButton{"Cycle transform axis", "ui.axis"}, editorButton{"Toggle transform snapping", "ui.snap"})
+	}
 	if m.play != nil {
 		return append(common, []editorButton{
 			{"Pause / resume", input.Pause}, {"Step", input.Step}, {"Impulse", input.Impulse},

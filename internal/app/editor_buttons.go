@@ -27,6 +27,16 @@ func (m projectEditorModel) buttonBar() (row int, buttons []editorButton) {
 	default:
 		row, buttons = 1, []editorButton{{"Play", input.Play}, {"Actions", "ui.commands"}, {"Save", "ctrl+s"}, {"Open", "ctrl+o"}, {"New", "ctrl+n"}}
 	}
+	if m.project != nil && m.transformSession() != nil {
+		tool := [...]string{"Select", "Move", "Rotate"}[m.transformTool]
+		axis := string("XYZ"[m.transformAxis])
+		snap := "Snap off"
+		if m.transformSnap {
+			snap = "Snap on"
+		}
+
+		buttons = append(buttons, editorButton{tool, "ui.transform"}, editorButton{axis, "ui.axis"}, editorButton{snap, "ui.snap"})
+	}
 	if m.project != nil && m.width < 18 {
 		buttons = []editorButton{{"Actions", "ui.commands"}}
 	}

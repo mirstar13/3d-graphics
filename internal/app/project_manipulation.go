@@ -190,7 +190,10 @@ func (m *projectEditorModel) resetPlay() {
 		return
 	}
 
-	m.view, m.zoom = 0, 1
+	m.transformDrag = nil
+	if m.preview != nil {
+		*session.Scene.Camera.Transform = *m.preview.Scene.Camera.Transform
+	}
 	m.lookDrag.Reset(false)
 	m.play.Close()
 	session.AttachAudio(m.audio)
@@ -315,7 +318,7 @@ func (m *projectEditorModel) inspectorRows() []string {
 		}
 
 		rows = append(rows, fmt.Sprintf("Mass: %.2f kg", b.Mass), fmt.Sprintf("Velocity: %.2f %.2f %.2f", b.Velocity.X, b.Velocity.Y, b.Velocity.Z), fmt.Sprintf("Angular: %.2f %.2f %.2f", b.AngularVelocity.X, b.AngularVelocity.Y, b.AngularVelocity.Z), fmt.Sprintf("Sleeping: %t", b.Sleeping), fmt.Sprintf("Sensor: %t", b.Collider.Sensor), fmt.Sprintf("Friction: %g", b.Collider.Friction), fmt.Sprintf("Restitution: %g", b.Collider.Restitution))
-		rows = append(rows, fmt.Sprintf("Linear damping: %g", b.LinearDamping), fmt.Sprintf("Angular damping: %g", b.AngularDamping), fmt.Sprintf("CCD: %t", b.CCD))
+		rows = append(rows, fmt.Sprintf("Linear damping: %g", b.LinearDamping), fmt.Sprintf("Angular damping: %g", b.AngularDamping), fmt.Sprintf("CCD: %t", b.CCD), fmt.Sprintf("Contacts: %d", inspection.Contacts))
 		rows = append(rows, fmt.Sprintf("Collision layer: 0x%08X", b.Collider.Layer), fmt.Sprintf("Collision mask: 0x%08X", b.Collider.Mask))
 	}
 	return rows
