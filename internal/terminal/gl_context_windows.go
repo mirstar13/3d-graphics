@@ -4,6 +4,9 @@ package terminal
 
 import (
 	"fmt"
+	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"unsafe"
 
@@ -31,7 +34,12 @@ var (
 )
 
 type nativeGLContext struct {
-	window, dc, context uintptr
+	window, dc, context     uintptr
+	affinityDC              uintptr
+	deleteAffinityDC        func(uintptr) int32
+	makeAssociatedCurrent   func(uintptr) int32
+	deleteAssociatedContext func(uintptr) int32
+	associatedContext       uintptr
 }
 
 type glWindowClass struct {
@@ -113,14 +121,8 @@ func (d *glContext) initialize() error {
 		return fmt.Errorf("get WGL window device context: %w", err)
 	}
 	d.dc = dc
-	pfd := pixelFormatDescriptor{version: 1, flags: 0x24, colorBits: 24} // PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL
-	pfd.size = uint16(unsafe.Sizeof(pfd))
-	format, _, err := choosePixelFormat.Call(dc, uintptr(unsafe.Pointer(&pfd)))
-	if format == 0 {
-		return fmt.Errorf("choose WGL pixel format: %w", err)
-	}
-	if ok, _, err := setPixelFormat.Call(dc, format, uintptr(unsafe.Pointer(&pfd))); ok == 0 {
-		return fmt.Errorf("set WGL pixel format: %w", err)
+	if err := setWindowPixelFormat(dc, true); err != nil {
+		return err
 	}
 	legacy, _, err := wglCreateContext.Call(dc)
 	if legacy == 0 {
@@ -131,11 +133,57 @@ func (d *glContext) initialize() error {
 	if ok, _, err := wglMakeCurrent.Call(dc, legacy); ok == 0 {
 		return fmt.Errorf("activate bootstrap WGL context: %w", err)
 	}
+	attrs := [...]int32{0x2091, 3, 0x2092, 3, 0x9126, 1, 0}
+	if route := os.Getenv("GRAPHICS_WGL_GPU"); route != "" {
+		kind, number, _ := strings.Cut(route, ":")
+		id, err := strconv.ParseUint(number, 10, 32)
+		if err != nil {
+			return fmt.Errorf("invalid WGL adapter %q", route)
+		}
+		switch kind {
+		case "amd":
+			var create func(uint32, uintptr, *int32) uintptr
+			if err := bindGLFunctions(wglLookup, []glBinding{
+				{"wglCreateAssociatedContextAttribsAMD", &create},
+				{"wglMakeAssociatedContextCurrentAMD", &d.makeAssociatedCurrent},
+				{"wglDeleteAssociatedContextAMD", &d.deleteAssociatedContext},
+			}); err != nil {
+				return err
+			}
+			d.associatedContext = create(uint32(id), 0, &attrs[0])
+			if d.associatedContext == 0 || d.makeAssociatedCurrent(d.associatedContext) == 0 {
+				return fmt.Errorf("activate associated context on WGL GPU %d", id)
+			}
+			return d.initializeGL(wglLookup)
+		case "nv":
+			var enumerate func(uint32, *uintptr) int32
+			var create func(*uintptr) uintptr
+			if err := bindGLFunctions(wglLookup, []glBinding{
+				{"wglEnumGpusNV", &enumerate}, {"wglCreateAffinityDCNV", &create},
+				{"wglDeleteDCNV", &d.deleteAffinityDC},
+			}); err != nil {
+				return err
+			}
+			var mask [2]uintptr // Single HGPUNV followed by NULL.
+			if enumerate(uint32(id), &mask[0]) == 0 {
+				return fmt.Errorf("WGL GPU %d unavailable", id)
+			}
+			d.affinityDC = create(&mask[0])
+			if d.affinityDC == 0 {
+				return fmt.Errorf("create WGL affinity DC for GPU %d", id)
+			}
+			dc = d.affinityDC
+			if err := setWindowPixelFormat(dc, false); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("unknown WGL GPU route %q", route)
+		}
+	}
 	var createCore func(uintptr, uintptr, *int32) uintptr
 	if err := bindGLFunctions(wglLookup, []glBinding{{"wglCreateContextAttribsARB", &createCore}}); err != nil {
 		return fmt.Errorf("WGL driver does not support OpenGL 3.3 core: %w", err)
 	}
-	attrs := [...]int32{0x2091, 3, 0x2092, 3, 0x9126, 1, 0}
 	core := createCore(dc, 0, &attrs[0])
 	if core == 0 {
 		return fmt.Errorf("WGL driver could not create an OpenGL 3.3 core context")
@@ -149,10 +197,33 @@ func (d *glContext) initialize() error {
 	return d.initializeGL(wglLookup)
 }
 
+func setWindowPixelFormat(dc uintptr, window bool) error {
+	pfd := pixelFormatDescriptor{version: 1, flags: 0x24, colorBits: 24} // PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL
+	if !window {
+		pfd.flags = 0x20
+	}
+	pfd.size = uint16(unsafe.Sizeof(pfd))
+	format, _, err := choosePixelFormat.Call(dc, uintptr(unsafe.Pointer(&pfd)))
+	if format == 0 {
+		return fmt.Errorf("choose WGL pixel format: %w", err)
+	}
+	if ok, _, err := setPixelFormat.Call(dc, format, uintptr(unsafe.Pointer(&pfd))); ok == 0 {
+		return fmt.Errorf("set WGL pixel format: %w", err)
+	}
+	return nil
+}
+
 func (d *glContext) closeNative() {
+	if d.associatedContext != 0 {
+		d.makeAssociatedCurrent(0)
+		d.deleteAssociatedContext(d.associatedContext)
+	}
 	if d.context != 0 {
 		wglMakeCurrent.Call(0, 0)
 		wglDeleteContext.Call(d.context)
+	}
+	if d.affinityDC != 0 {
+		d.deleteAffinityDC(d.affinityDC)
 	}
 	if d.dc != 0 {
 		releaseWindowDC.Call(d.window, d.dc)
@@ -160,4 +231,36 @@ func (d *glContext) closeNative() {
 	if d.window != 0 {
 		destroyWindow.Call(d.window)
 	}
+}
+
+// OpenGLRendererIDs enumerates GPU handles visible to the active Windows ICD.
+// These selectors have meaning only in processes with the same driver route.
+func OpenGLRendererIDs() ([]string, error) {
+	d, err := openGLContext()
+	if err != nil {
+		return nil, err
+	}
+	defer d.close()
+	ids := []string{}
+	var amd func(uint32, *uint32) uint32
+	if bindGLFunctions(wglLookup, []glBinding{{"wglGetGPUIDsAMD", &amd}}) == nil {
+		count := amd(0, nil)
+		if count > 0 && count <= 256 {
+			values := make([]uint32, count)
+			n := amd(count, &values[0])
+			for _, id := range values[:min(count, n)] {
+				if id != 0 {
+					ids = append(ids, fmt.Sprintf("amd:%d", id))
+				}
+			}
+		}
+	}
+	var nv func(uint32, *uintptr) int32
+	if bindGLFunctions(wglLookup, []glBinding{{"wglEnumGpusNV", &nv}}) == nil {
+		var handle uintptr
+		for i := uint32(0); i < 256 && nv(i, &handle) != 0; i++ {
+			ids = append(ids, fmt.Sprintf("nv:%d", i))
+		}
+	}
+	return ids, nil
 }

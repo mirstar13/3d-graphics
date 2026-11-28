@@ -1,4 +1,4 @@
-//go:build !darwin || !terminalgl || (!amd64 && !arm64)
+//go:build (!darwin && !windows) || !terminalgl || (!amd64 && !arm64)
 
 package terminal
 

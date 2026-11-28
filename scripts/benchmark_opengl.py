@@ -3,6 +3,7 @@
 
 import argparse
 import csv
+from contextlib import ExitStack
 from dataclasses import dataclass, field
 import hashlib
 from html import escape
@@ -35,6 +36,7 @@ class Adapter:
     stages: dict = field(default_factory=dict)
     verified_env: dict = field(default_factory=dict)
     errors: dict = field(default_factory=dict)
+    stage_binaries: dict = field(default_factory=dict)
 
     @property
     def label(self):
@@ -64,10 +66,10 @@ class Case:
         return self.group[:-1]
 
 
-def tool_json(command):
+def tool_json(command, env=None):
     try:
         return json.loads(subprocess.check_output(command, text=True, encoding="utf-8",
-                          errors="replace", stderr=subprocess.DEVNULL, timeout=20))
+                          errors="replace", stderr=subprocess.DEVNULL, timeout=20, env=env))
     except (OSError, ValueError, subprocess.SubprocessError):
         return None
 
@@ -116,10 +118,10 @@ def discover_adapters(system, binary):
     return chips
 
 
-def matches(driver, expected):
+def matches(driver, expected, full=False):
     def normalize(value):
         return re.sub(r"[^a-z0-9]", "", re.sub(r"\((?:tm|r)\)|[™®]", "", value.casefold()))
-    model = re.search(r"\b(?:RTX|GTX|RX|Arc [AB])\s*\d{3,4}\b", expected, re.I)
+    model = None if full else re.search(r"\b(?:RTX|GTX|RX|Arc [AB])\s*\d{3,4}\b", expected, re.I)
     wanted = normalize(model[0] if model else expected)
     return bool(wanted) and wanted in normalize(driver)
 
@@ -138,27 +140,62 @@ def run(log, command, env=None, live=False, timeout=None):
     return output
 
 
-def probe(adapter, stage, output, base_env, args, ambiguous):
-    for index, route in enumerate(adapter.routes):
-        log = output / f"probe-{adapter.binary.stem}-{stage}-{index}.txt"
+def windows_wgl_routes(binary, env):
+    # A selector is local to the ICD loaded by this particular executable.
+    default = {"GRAPHICS_WGL_GPU": ""}
+    ids = tool_json([str(binary), "-inventory"], env={**env, **default}) or []
+    return [(binary, {"GRAPHICS_WGL_GPU": value}) for value in ids
+            if isinstance(value, str) and re.fullmatch(r"(amd|nv):[0-9]+", value)] + [(binary, default)]
+
+
+def windows_preference_routes(binary, env, cleanup):
+    import winreg
+
+    # Windows reads the per-application preference at process startup. Unique
+    # paths isolate concurrent sweeps and preserve existing user preferences.
+    directory = Path(cleanup.enter_context(tempfile.TemporaryDirectory(dir=binary.parent)))
+    routes = []
+    try:
+        key = cleanup.enter_context(winreg.CreateKeyEx(
+            winreg.HKEY_CURRENT_USER, r"Software\Microsoft\DirectX\UserGpuPreferences",
+            0, winreg.KEY_SET_VALUE))
+        for name, preference in (("minimum-power", 1), ("high-performance", 2)):
+            helper = directory / (name + ".exe")
+            shutil.copyfile(binary, helper)
+            winreg.SetValueEx(key, str(helper), 0, winreg.REG_SZ, f"GpuPreference={preference};")
+            cleanup.callback(winreg.DeleteValue, key, str(helper))
+            routes.extend(windows_wgl_routes(helper, env))
+    except OSError as error:
+        print(f"Windows GPU preference probe unavailable: {error}", flush=True)
+    return routes
+
+
+def probe(adapter, stage, output, base_env, args, ambiguous, routes=None):
+    if routes is None:
+        routes = [(adapter.binary, route) for route in adapter.routes]
+    for index, (executable, route) in enumerate(routes):
+        log = output / f"probe-{adapter.binary.stem}-{executable.stem}-{stage}-{index}.txt"
         env = {**base_env, **route}
         try:
-            result = run(log, [str(adapter.binary), "-probe", "-filter", "gl" if stage == "filter" else "none"],
+            result = run(log, [str(executable), "-probe", "-filter", "gl" if stage == "filter" else "none"],
                          env, timeout=25)
             driver = json.loads(result.splitlines()[-1])["driver"]
             if SOFTWARE.search(driver) and (not args.allow_software or adapter.id != "default"):
                 raise RuntimeError(f"selected software renderer {driver}")
-            expected = args.require_renderer or (adapter.name if adapter.id != "default" else "")
+            expected = adapter.name if adapter.id != "default" else args.require_renderer
             # The EGL device path was resolved to the exact PCI address.
             exact = bool(route.get("GRAPHICS_EGL_PCI") or route.get("GRAPHICS_CGL_RENDERER"))
             if ambiguous and not exact:
                 raise RuntimeError("identical adapter names and no verifiable device selector")
-            if expected and (args.require_renderer or not exact) and not matches(driver, expected):
+            if args.require_renderer and not matches(driver, args.require_renderer):
+                raise RuntimeError(f"selected {driver}, expected {args.require_renderer}")
+            if expected and not exact and not matches(driver, expected, full=adapter.id != "default" and platform.system() == "Windows"):
                 raise RuntimeError(f"selected {driver}, expected {expected}")
         except (OSError, ValueError, KeyError, IndexError, RuntimeError) as error:
             adapter.errors[stage] = str(error)
             continue
         adapter.stages[stage], adapter.verified_env[stage] = driver, route
+        adapter.stage_binaries[stage] = str(executable)
         adapter.errors.pop(stage, None)
         return
 
@@ -207,6 +244,8 @@ def summarize(sample, fps):
     presented = [f for f in frames if f["Presented"]]
     presentation = [f["PresentNS"] / 1e6 for f in presented if f["PresentNS"]]
     grids = list(dict.fromkeys(f'{f["Columns"]}x{f["Rows"]}' for f in frames))
+    if elapsed <= 0:
+        raise RuntimeError("benchmark clock did not advance during the repetition")
     result = {
         "observed_grid": ", ".join(grids),
         "grid_changed": len(grids) > 1,
@@ -215,6 +254,7 @@ def summarize(sample, fps):
         "coalesced_frames": len(frames) - len(presented) if sample["Presentation"] == "Bubble Tea" else 0,
         "p99_submission_ms": quantile(presentation, .99),
         "frames": len(frames), "fps": len(frames) / elapsed, "elapsed_s": elapsed,
+        "zero_duration_frames": wall.count(0),
         "median_ms": statistics.median(wall), "p95_ms": quantile(wall, .95), "p99_ms": quantile(wall, .99),
         "p95_interval_ms": quantile(intervals, .95), "p99_interval_ms": quantile(intervals, .99),
         "over_budget_frames": sum(value > 1000/fps for value in wall),
@@ -246,7 +286,7 @@ def execute_case(case, args, index, adapters, binary, env, output, states):
     active = rgpu or fgpu
     stage = "raster" if rgpu else "filter"
     active_env = {**env, **active.verified_env[stage]} if active else env
-    command = [str(active.binary if active else binary),
+    command = [str(active.stage_binaries[stage] if active else binary),
                "-workload", case.scene, "-profile", args.profile, "-raster", case.raster, "-filter", case.filter,
                "-columns", str(case.columns), "-rows", str(case.rows), "-viewport", case.viewport,
                "-fps", str(args.fps), "-tile", str(args.tile), "-duration", args.benchtime,
@@ -255,8 +295,8 @@ def execute_case(case, args, index, adapters, binary, env, output, states):
         command += ["-paced"]
     if case.live:
         command += ["-live"]
-    if rgpu and fgpu and (rgpu.id != fgpu.id or rgpu.verified_env["raster"] != fgpu.verified_env["filter"]):
-        command += ["-filter-worker", str(fgpu.binary), "-filter-env", json.dumps(fgpu.verified_env["filter"])]
+    if rgpu and fgpu and (rgpu.id != fgpu.id or rgpu.stage_binaries["raster"] != fgpu.stage_binaries["filter"] or rgpu.verified_env["raster"] != fgpu.verified_env["filter"]):
+        command += ["-filter-worker", fgpu.stage_binaries["filter"], "-filter-env", json.dumps(fgpu.verified_env["filter"])]
     if args.gc:
         command += ["-memory-bytes", str(args.memory_mib * 1024 * 1024)]
         # Keep the memory limit identical in each half of the pair.
@@ -282,6 +322,8 @@ def execute_case(case, args, index, adapters, binary, env, output, states):
                         raise RuntimeError("replay final state differs from the CPU reference")
                 stats = summarize(sample, args.fps)
                 reason = ""
+                if stats["median_ms"] <= 0:
+                    reason = "clock resolution insufficient for frame timing"
                 if gc == "off" and stats["gc_cycles"]:
                     reason = "GC ran with GOGC=off under the configured memory limit"
                 expected_grid = f"{case.columns}x{case.rows}"
@@ -345,7 +387,8 @@ def detail_html(case, raw, output):
     pair = (min(frames, key=lambda f: abs(f["TotalNS"] - elapsed)), max(frames, key=lambda f: f["TotalNS"]))
     times = [f["TotalNS"] / 1e6 for f in frames]
     width = 700
-    points = " ".join(f"{i * width / max(1, len(times)-1):.2f},{110 - 100 * ms / max(times):.2f}"
+    scale = max(times) or 1
+    points = " ".join(f"{i * width / max(1, len(times)-1):.2f},{110 - 100 * ms / scale:.2f}"
                       for i, ms in enumerate(times))
     timeline = (f'<svg viewBox="0 0 {width} 115" role="img" aria-label="Frame times">'
                 f'<polyline points="{points}" fill="none" stroke="#44b9b0" stroke-width="2"/></svg>')
@@ -547,7 +590,7 @@ def main():
         parser.error("Go 1.24.6 or newer must be on PATH")
     cpu_count = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count() or 1
     env = {**os.environ, "GOMAXPROCS": str(args.cpu or min(4, cpu_count))}
-    for key in ("GRAPHICS_EGL_PCI", "GRAPHICS_CGL_RENDERER", "DRI_PRIME"):
+    for key in ("GRAPHICS_EGL_PCI", "GRAPHICS_CGL_RENDERER", "GRAPHICS_WGL_GPU", "DRI_PRIME"):
         env.pop(key, None)
     cache = ROOT / ".cache"
     cache.mkdir(exist_ok=True)
@@ -587,14 +630,23 @@ def main():
         adapter = Adapter(id_, name, executable, routes)
         adapters[id_] = adapter
         print(f"{adapter.label}: {executable}", flush=True)
-    if system == "Windows" and adapters:
-        print("Assign each printed executable to its named GPU in Windows Settings → System → Display → Graphics.", flush=True)
     if args.prepare_only:
         return 0
+    with ExitStack() as cleanup:
+        return sweep(args, output, binary, adapters, env, system, cleanup)
+
+
+def sweep(args, output, binary, adapters, env, system, cleanup):
+    preference_routes = None
     for adapter in adapters.values():
+        routes = windows_wgl_routes(adapter.binary, env) if system == "Windows" else None
         ambiguous = sum(gpu.name == adapter.name for gpu in adapters.values()) > 1
         for stage in ("raster", "filter"):
-            probe(adapter, stage, output, env, args, ambiguous)
+            probe(adapter, stage, output, env, args, ambiguous, routes)
+            if system == "Windows" and stage not in adapter.stages and not ambiguous:
+                if preference_routes is None:
+                    preference_routes = windows_preference_routes(binary, env, cleanup)
+                probe(adapter, stage, output, env, args, ambiguous, preference_routes)
         if adapter.name.startswith("CGL renderer ") and adapter.stages:
             adapter.name = next(iter(adapter.stages.values()))
         print(f"{adapter.label} · raster {adapter.stages.get('raster') or adapter.errors['raster']}"

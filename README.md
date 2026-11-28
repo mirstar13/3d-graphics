@@ -362,12 +362,15 @@ Install Python 3 and Go 1.24.6 or newer. Run from the repository checkout.
 python3 scripts/benchmark_opengl.py
 ```
 
-On Windows, use `py -3` in place of `python3`. On a hybrid Windows machine,
-run `py -3 scripts/benchmark_opengl.py --prepare-only` once. Under
-**Settings → System → Display → Graphics**, add each printed
-`benchmark-gpu-*.exe` and select its named GPU. Windows stores the preference
-by executable path. Run the script normally afterward to sweep all verified
-adapters without prompts. Linux tries PCI-addressed EGL devices and Mesa
+On Windows, use `py -3` in place of `python3`. The default sweep discovers
+all display adapters and tries the GPU selectors exposed by the active WGL
+driver. When needed it also probes temporary helper processes with Windows
+minimum-power and high-performance preferences. Each requested stage must
+report a matching OpenGL renderer before it can contribute timings. The sweep
+removes its temporary per-user preferences and helpers on exit. For a driver
+that ignores these requests, `--prepare-only` prints stable executable paths
+that can also be assigned individually in Windows Graphics settings.
+Linux tries PCI-addressed EGL devices and Mesa
 PRIME routing. macOS probes accelerated renderer IDs exposed by CGL.
 
 The default sweep covers every pairing of single, tiles, jobs, batched, and
@@ -375,7 +378,7 @@ per-GPU OpenGL raster with FXAA off, CPU FXAA, or FXAA on any verified GPU.
 Cross-adapter pairs pass host RGB buffers through an FXAA worker process.
 The measured time includes the round trip. The report shows unreachable
 adapters, validation failures, and the renderer observed for each stage.
-Use `--dry-run` to inspect the matrix, `--require-renderer "RTX 4050"` to
+Use `--dry-run` to inspect the matrix, `--require-renderer MODEL` to
 narrow it, or `--cpu-only` to run without GL. Software GL requires
 `--allow-software`.
 
