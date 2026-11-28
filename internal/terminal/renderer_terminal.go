@@ -201,12 +201,23 @@ func (r *TerminalRenderer) BeginFrame() {
 	r.ClipMaxX = r.Width
 	r.ClipMaxY = r.Height
 
-	for y := 0; y < r.Height; y++ {
-		for x := 0; x < r.Width; x++ {
-			r.Surface[y][x] = ' '
-			r.ColorBuffer[y][x] = engine.ColorBlack
-			r.ZBuffer[y][x] = math.Inf(1)
-		}
+	if r.Height == 0 || r.Width == 0 {
+		return
+	}
+	// Seed one row, then let the runtime's optimized memory copy fill the
+	// remaining rows using the vector instructions available on this CPU.
+	glyphs := r.Surface[0][:r.Width]
+	colors := r.ColorBuffer[0][:r.Width]
+	depths := r.ZBuffer[0][:r.Width]
+	for x := range glyphs {
+		glyphs[x] = ' '
+		colors[x] = engine.ColorBlack
+		depths[x] = math.Inf(1)
+	}
+	for y := 1; y < r.Height; y++ {
+		copy(r.Surface[y], glyphs)
+		copy(r.ColorBuffer[y], colors)
+		copy(r.ZBuffer[y], depths)
 	}
 }
 
