@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"runtime/trace"
+	"slices"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -32,11 +33,14 @@ type benchmarkOptions struct {
 	viewport, output, workerPath, workerEnv, tracePath, allocPath string
 	width, height, frames, warmup, fps, tile                      int
 	duration                                                      time.Duration
-	paced, live, detail, worker, probe                            bool
+	paced, live, detail, worker, probe, adaptive                  bool
 	memoryBytes                                                   uint64
 }
 
 type benchmarkFrame struct {
+	Tier                                                                                                                  terminal.QualityTier
+	RasterWidth, RasterHeight                                                                                             int
+	InputToWriteNS, InputStartNS                                                                                          int64
 	Presented                                                                                                             bool
 	PresentNS                                                                                                             int64
 	Frame, Columns, Rows, Width, Height                                                                                   int
@@ -47,7 +51,16 @@ type benchmarkFrame struct {
 	RasterDevice, FilterDevice                                                                                            terminal.DeviceStages
 }
 
+type benchmarkDelivery struct {
+	Submitted, Completed, Coalesced                    int
+	Bytes                                              int64
+	CompletedPerSecond, BytesPerSecond, SampleFraction float64
+	InputToWriteP50NS, InputToWriteP99NS               int64
+}
+
 type benchmarkResult struct {
+	Delivery *benchmarkDelivery
+
 	RasterDriver, FilterDriver, Transport, Presentation string
 	Frames                                              []benchmarkFrame
 	GC                                                  benchmarkGC
@@ -91,6 +104,7 @@ func RunTerminalBenchmark(args []string) error {
 	f.IntVar(&o.fps, "fps", 60, "target frame rate")
 	f.IntVar(&o.tile, "tile", 32, "CPU raster tile size")
 	f.DurationVar(&o.duration, "duration", 300*time.Millisecond, "minimum timed duration")
+	f.BoolVar(&o.adaptive, "adaptive", false, "adapt scene quality during gameplay replay")
 	f.BoolVar(&o.paced, "paced", false, "pace frame starts to target FPS")
 	f.BoolVar(&o.live, "live", false, "submit gameplay frames to the current terminal")
 	f.BoolVar(&o.detail, "detail", false, "record raster, transfer, and GPU timings")
@@ -125,6 +139,9 @@ func RunTerminalBenchmark(args []string) error {
 		o.fps < 1 || o.fps > 1000 || o.tile < 1 || o.warmup < 0 || o.frames < 0 ||
 		(o.frames == 0 && o.duration <= 0) || o.output == "" {
 		return errors.New("invalid benchmark settings; see -help")
+	}
+	if o.adaptive && (o.profile != "gameplay" || o.workload == "fxaa") {
+		return errors.New("adaptive quality requires a scene gameplay replay")
 	}
 	if o.live && (o.profile != "gameplay" || !term.IsTerminal(int(os.Stdout.Fd()))) {
 		return errors.New("live output requires a gameplay replay and an interactive terminal")
@@ -221,16 +238,18 @@ func benchmarkProbe(o benchmarkOptions) error {
 }
 
 type timedBenchmarkWriter struct {
-	writer  io.Writer
-	bytes   int
-	elapsed time.Duration
-	err     error
+	writer   io.Writer
+	bytes    int
+	elapsed  time.Duration
+	finished time.Time
+	err      error
 }
 
 func (w *timedBenchmarkWriter) Write(p []byte) (int, error) {
 	start := perfclock.Now()
 	n, err := w.writer.Write(p)
-	w.elapsed += perfclock.Since(start)
+	w.finished = perfclock.Now()
+	w.elapsed += w.finished.Sub(start)
 	w.bytes += n
 	if err != nil {
 		w.err = err
@@ -326,6 +345,9 @@ func runTerminalReplay(ctx context.Context, o benchmarkOptions) (benchmarkResult
 	var renderErr error
 	var previous benchmarkCells
 	var frame *benchmarkFrame
+	var quality terminal.AdaptiveQuality
+	var priorWork, priorWrite time.Duration
+	var hasLayout bool
 	dt := time.Second / time.Duration(o.fps)
 	draw := terminal.ComposeRenderer(r, engine.EngineConfig{
 		RenderMode: benchmarkModes[o.raster], NumWorkers: runtime.GOMAXPROCS(0), TileSize: o.tile,
@@ -343,7 +365,7 @@ func runTerminalReplay(ctx context.Context, o benchmarkOptions) (benchmarkResult
 				return
 			}
 		}
-		if filter != nil {
+		if filter != nil && !r.ReducedShadingActive() {
 			start := perfclock.Now()
 			stages.FXAA, frame.ExchangeNS, renderErr = filter.apply(r)
 			frame.FilterNS = perfclock.Since(start).Nanoseconds()
@@ -366,6 +388,13 @@ func runTerminalReplay(ctx context.Context, o benchmarkOptions) (benchmarkResult
 		}
 		defer player.session.Close()
 		player.last = time.Unix(0, 0)
+		player.adaptive, player.budget = o.adaptive, dt
+		player.behind = func(budget time.Duration) bool {
+			if presentation != nil {
+				return presentation.pressure.behind(budget)
+			}
+			return priorWrite > budget
+		}
 		scene = player.session.Scene
 		r.UseColor, r.ShadowRenderer = false, nil
 	} else if o.workload != "fxaa" {
@@ -406,6 +435,11 @@ func runTerminalReplay(ctx context.Context, o benchmarkOptions) (benchmarkResult
 		if err != nil {
 			return err
 		}
+		if !hasLayout || columns != newColumns || rows != newRows {
+			quality = terminal.AdaptiveQuality{}
+			hasLayout = true
+		}
+		sample.InputStartNS = perfclock.Since(start).Nanoseconds()
 		if player != nil {
 			if player.width == 0 || newColumns != columns || newRows != rows {
 				player.Update(tea.WindowSizeMsg{Width: newColumns, Height: newRows})
@@ -417,6 +451,7 @@ func runTerminalReplay(ctx context.Context, o benchmarkOptions) (benchmarkResult
 				player.requestedWidth, player.requestedHeight = math.MaxInt, math.MaxInt
 			}
 			inputStart := perfclock.Now()
+			sample.InputStartNS = inputStart.Sub(start).Nanoseconds()
 			if i%48 < 24 {
 				player.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
 				sample.InputEvents++
@@ -459,7 +494,11 @@ func runTerminalReplay(ctx context.Context, o benchmarkOptions) (benchmarkResult
 			}
 			if sim != nil {
 				cameraStart := perfclock.Now()
-				controller.Update(engine.InputState{}, engine.OrientationTerminal, dt.Seconds())
+				sample.InputStartNS = cameraStart.Sub(start).Nanoseconds()
+				if o.workload != "physics" || i%120 >= 20 && i%120 < 90 {
+					controller.Update(engine.InputState{}, engine.OrientationTerminal, dt.Seconds())
+					sample.InputEvents++
+				}
 				sample.InputNS = perfclock.Since(cameraStart).Nanoseconds()
 				simulationStart := perfclock.Now()
 				if err := sim.advance(dt, engine.SimulationCommands{}); err != nil {
@@ -476,10 +515,11 @@ func runTerminalReplay(ctx context.Context, o benchmarkOptions) (benchmarkResult
 		}
 		columns, rows = newColumns, newRows
 		sample.UpdateNS = perfclock.Since(start).Nanoseconds()
-		writer.bytes, writer.elapsed, writer.err = 0, 0, nil
+		writer.bytes, writer.elapsed, writer.err, writer.finished = 0, 0, nil, time.Time{}
 		if player != nil {
 			viewStart := perfclock.Now()
 			view := player.View()
+			sample.Tier, sample.RasterWidth, sample.RasterHeight = player.quality.Tier, player.rasterWidth, player.rasterHeight
 			sample.EncodeNS = perfclock.Since(viewStart).Nanoseconds() - sample.RasterNS - sample.FilterNS
 			if presentation != nil {
 				presentation.submit(i+1, view)
@@ -495,7 +535,10 @@ func runTerminalReplay(ctx context.Context, o benchmarkOptions) (benchmarkResult
 				sim.prepareRender()
 				sample.PrepareNS = perfclock.Since(prep).Nanoseconds()
 			}
-			drawFrame(r)
+			if o.adaptive {
+				sample.Tier = quality.Update(scene.Camera, priorWork, priorWrite > dt, dt)
+			}
+			sample.RasterWidth, sample.RasterHeight = r.RenderQuality(sample.Tier, func() { drawFrame(r) })
 			if o.profile == "gameplay" {
 				present := perfclock.Now()
 				draw.EndFrame()
@@ -519,6 +562,14 @@ func runTerminalReplay(ctx context.Context, o benchmarkOptions) (benchmarkResult
 		if o.detail && o.profile == "gameplay" {
 			sample.ChangedCells = previous.observe(r, o.color != "none")
 		}
+		if sample.Presented {
+			if writer.finished.IsZero() {
+				writer.finished = perfclock.Now()
+			}
+			sample.PresentNS = writer.finished.Sub(start).Nanoseconds()
+			sample.InputToWriteNS = sample.PresentNS - sample.InputStartNS
+		}
+		priorWork, priorWrite = perfclock.Since(start), writer.elapsed
 		return renderErr
 	}
 
@@ -542,7 +593,7 @@ func runTerminalReplay(ctx context.Context, o benchmarkOptions) (benchmarkResult
 			return out, err
 		}
 	}
-	if o.warmup > 0 && scene != nil && (r.UseOpenGLRaster || out.FilterDriver != "") {
+	if o.warmup > 0 && !o.adaptive && scene != nil && (r.UseOpenGLRaster || out.FilterDriver != "") {
 		if err := validateBenchmarkFrame(r, scene, filter != nil, sim); err != nil {
 			return out, err
 		}
@@ -580,9 +631,7 @@ func runTerminalReplay(ctx context.Context, o benchmarkOptions) (benchmarkResult
 		}
 		finished := perfclock.Now()
 		sample.TotalNS = finished.Sub(start).Nanoseconds()
-		if sample.Presented {
-			sample.PresentNS = sample.TotalNS
-		}
+
 		if !last.IsZero() {
 			sample.IntervalNS = finished.Sub(last).Nanoseconds()
 		}
@@ -598,6 +647,9 @@ func runTerminalReplay(ctx context.Context, o benchmarkOptions) (benchmarkResult
 		if err := presentation.collect(ctx, o.warmup, started, out.Frames); err != nil {
 			return out, err
 		}
+	}
+	if o.profile == "gameplay" {
+		out.Delivery = summarizeBenchmarkDelivery(out.Frames, out.ElapsedNS)
 	}
 	out.GC = meter.end()
 	if filter != nil && filter.end != nil {
@@ -616,7 +668,7 @@ func runTerminalReplay(ctx context.Context, o benchmarkOptions) (benchmarkResult
 		}
 	}
 	out.State.Tick = tick
-	if scene != nil && (r.UseOpenGLRaster || out.FilterDriver != "") {
+	if !o.adaptive && scene != nil && (r.UseOpenGLRaster || out.FilterDriver != "") {
 		if err := validateBenchmarkFrame(r, scene, filter != nil, sim); err != nil {
 			return out, err
 		}
@@ -714,4 +766,32 @@ func countBenchmarkDifferences(a, b *terminal.TerminalRenderer) int {
 		}
 	}
 	return diff
+}
+
+func summarizeBenchmarkDelivery(frames []benchmarkFrame, elapsed int64) *benchmarkDelivery {
+	out := &benchmarkDelivery{Submitted: len(frames)}
+	var samples []int64
+	for _, f := range frames {
+		if !f.Presented {
+			continue
+		}
+		out.Completed++
+		out.Bytes += int64(f.Bytes)
+		elapsed = max(elapsed, f.StartNS+f.PresentNS)
+		samples = append(samples, f.InputToWriteNS)
+	}
+	out.Coalesced = out.Submitted - out.Completed
+	if out.Submitted > 0 {
+		out.SampleFraction = float64(out.Completed) / float64(out.Submitted)
+	}
+	if elapsed > 0 {
+		seconds := time.Duration(elapsed).Seconds()
+		out.CompletedPerSecond, out.BytesPerSecond = float64(out.Completed)/seconds, float64(out.Bytes)/seconds
+	}
+	if len(samples) > 0 {
+		slices.Sort(samples)
+		out.InputToWriteP50NS = samples[(len(samples)*50+99)/100-1]
+		out.InputToWriteP99NS = samples[(len(samples)*99+99)/100-1]
+	}
+	return out
 }

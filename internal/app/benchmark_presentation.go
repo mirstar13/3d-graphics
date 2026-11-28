@@ -43,6 +43,7 @@ type replayPresentation struct {
 	submissions map[int]replaySubmission
 	err         error
 	buffer      bytes.Buffer
+	pressure    presentationPressure
 }
 
 func startReplayPresentation(ctx context.Context, live bool, fps, columns, rows int) *replayPresentation {
@@ -101,7 +102,7 @@ func (p *replayPresentation) Write(data []byte) (int, error) {
 		sink = p.File
 	}
 	start := perfclock.Now()
-	n, err := sink.Write(actual)
+	n, err := p.pressure.write(sink, actual)
 	finished := perfclock.Now()
 	if err == nil && n != len(actual) {
 		err = io.ErrShortWrite
@@ -136,6 +137,7 @@ func (p *replayPresentation) collect(ctx context.Context, warmup int, started ti
 				if record, ok := p.submissions[warmup+i+1]; ok {
 					f.Presented = true
 					f.PresentNS = record.finished.Sub(started).Nanoseconds() - f.StartNS
+					f.InputToWriteNS = f.PresentNS - f.InputStartNS
 					f.Bytes, f.WriteNS = record.size, record.write.Nanoseconds()
 					if !last.IsZero() {
 						f.IntervalNS = record.finished.Sub(last).Nanoseconds()
