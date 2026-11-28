@@ -368,6 +368,14 @@ python3 scripts/benchmark_opengl.py
 
 On Windows, use `py -3 scripts/benchmark_opengl.py` from PowerShell.
 
+For a Windows system with two GPUs, first run
+`py -3 scripts/benchmark_opengl.py --prepare-only`. In **Settings → System →
+Display → Graphics**, add the two desktop apps printed by the script
+(`opengl-raster.exe` and `opengl-fxaa.exe` under `.cache/opengl-bin`).
+Set both to **High performance** and confirm Windows lists the GPU you want.
+Then run `py -3 scripts/benchmark_opengl.py --require-renderer "RTX 4050"`
+or substitute a substring of your GPU's renderer name.
+
 The script reports the active OpenGL renderers and checks CPU/OpenGL image
 agreement before timing. It compares scene rasterization with single and
 batched CPU modes and compares the CPU and OpenGL FXAA filters separately.

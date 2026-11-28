@@ -20,16 +20,20 @@ BENCHMARK = re.compile(r"^(Benchmark\w+(?:/[\w]+)+)(?:-\d+)?\s+(.*)$")
 SAMPLE = re.compile(r"\s*\d+\s+([\d.]+)\s+ns/op\b")
 
 
-def run(log, *args):
+def run(log, *command, cwd=ROOT):
     with log.open("w", encoding="utf-8") as file:
         result = subprocess.run(
-            ["go", *args], cwd=ROOT, stdout=file, stderr=subprocess.STDOUT, check=False,
+            command, cwd=cwd, stdout=file, stderr=subprocess.STDOUT, check=False,
         )
     output = log.read_text(encoding="utf-8", errors="replace")
     if result.returncode:
         print(output[-6000:], file=sys.stderr)
-        raise RuntimeError(f"go {args[0]} exited with status {result.returncode}. See {log}")
+        raise RuntimeError(f"{Path(command[0]).name} exited with status {result.returncode}. See {log}")
     return output
+
+
+def renderer_names(output, kind):
+    return {name.strip() for name in re.findall(rf"OpenGL {kind} device: ([^\r\n]+)", output)}
 
 
 def parse_samples(output):
@@ -89,6 +93,8 @@ def main():
     parser.add_argument("--benchtime", default="300ms", help="Go duration per repetition (default: 300ms)")
     parser.add_argument("--cpu", type=int, help="Go CPU budget and batched workers (default: up to 4)")
     parser.add_argument("--allow-software", action="store_true", help="continue with a known software renderer")
+    parser.add_argument("--prepare-only", action="store_true", help="build the benchmark executables and print their paths")
+    parser.add_argument("--require-renderer", help="require this substring in every OpenGL renderer name (case-insensitive)")
     args = parser.parse_args()
     system = platform.system()
     if system not in {"Linux", "Windows", "Darwin"} or platform.machine().lower() not in {"amd64", "x86_64", "aarch64", "arm64"}:
@@ -108,37 +114,57 @@ def main():
         output.mkdir(parents=True, exist_ok=False)
     print(f"Results directory: {output}", flush=True)
 
-    version = run(output / "go-version.txt", "version").strip()
+    version = run(output / "go-version.txt", "go", "version").strip()
     print(f"{version}, CPU budget {cpu}", flush=True)
     (output / "settings.txt").write_text(
         f"{version}\n{platform.system()} {platform.release()} {platform.machine()}\n"
         f"cpu={cpu}\ncount={args.count}\nbenchtime={args.benchtime}\n", encoding="utf-8",
     )
+    binary_dir = ROOT / ".cache" / "opengl-bin"
+    binary_dir.mkdir(parents=True, exist_ok=True)
+    extension = ".exe" if system == "Windows" else ""
+    packages = {"raster": "internal/demo", "FXAA": "internal/terminal"}
+    executables = {}
+    for kind, package in packages.items():
+        binary = binary_dir / f"opengl-{kind.lower()}{extension}"
+        run(output / f"build-{kind.lower()}.txt", "go", "test", "-tags", "terminalgl",
+            "-c", "-o", str(binary), f"./{package}")
+        print(f"OpenGL {kind} executable: {binary}", flush=True)
+        executables[kind] = binary
+    if args.prepare_only:
+        return
+
     print("Checking the native OpenGL driver and CPU/OpenGL rendering agreement...", flush=True)
-    parity = run(
-        output / "parity.txt", "test", "-tags", "terminalgl", "-count=1", "-v",
-        "-run", "^TestOpenGL(RasterDemoParity|VisibilityAndFallback|FXAAMatchesCPU)$",
-        "./internal/demo", "./internal/terminal",
-    )
     drivers = {}
-    for kind, driver in re.findall(r"OpenGL (raster|FXAA) device: ([^\r\n]+)", parity):
-        drivers.setdefault(kind, set()).add(driver.strip())
-    for kind, names in drivers.items():
-        print(f"OpenGL {kind}: {', '.join(sorted(names))}", flush=True)
-    if set(drivers) != {"raster", "FXAA"} or "--- SKIP:" in parity:
-        raise RuntimeError(f"OpenGL validation was skipped. Check native OpenGL driver availability in {output / 'parity.txt'}")
+    for kind, package in packages.items():
+        parity_log = output / f"parity-{kind.lower()}.txt"
+        parity = run(
+            parity_log, str(executables[kind]), "-test.count=1", "-test.v",
+            "-test.run=^TestOpenGL(RasterDemoParity|VisibilityAndFallback|FXAAMatchesCPU)$",
+            cwd=ROOT / package,
+        )
+        drivers[kind] = renderer_names(parity, kind)
+        if not drivers[kind] or "--- SKIP:" in parity:
+            raise RuntimeError(f"OpenGL {kind} validation was skipped. Check {parity_log}")
+        print(f"OpenGL {kind}: {', '.join(sorted(drivers[kind]))}", flush=True)
+        if args.require_renderer and any(args.require_renderer.casefold() not in name.casefold() for name in drivers[kind]):
+            raise RuntimeError(f"OpenGL {kind} did not select {args.require_renderer!r}. Check the graphics preference for {executables[kind]}")
     if any(SOFTWARE.search(name) for names in drivers.values() for name in names):
         if not args.allow_software:
             raise RuntimeError("OpenGL selected a software renderer. Select your GPU driver or use --allow-software.")
         print("Software rendering enabled. These timings do not measure hardware GPU performance.", flush=True)
 
-    flags = ["test", "-tags", "terminalgl", "-run", "^$", "-benchmem",
-             f"-count={args.count}", f"-cpu={cpu}", f"-benchtime={args.benchtime}"]
-    print("Benchmarking scene rasterization...", flush=True)
-    raster = parse_samples(run(output / "raster.txt", *flags, "-bench", "^BenchmarkOpenGLSceneRaster$", "./internal/demo"))
-    print("Benchmarking FXAA...", flush=True)
-    fxaa = parse_samples(run(output / "fxaa.txt", *flags, "-bench", "^BenchmarkFXAADevice$", "./internal/terminal"))
-    compare(output, args.count, raster, fxaa)
+    flags = ["-test.run=^$", "-test.benchmem", f"-test.count={args.count}",
+             f"-test.cpu={cpu}", f"-test.benchtime={args.benchtime}"]
+    samples = {}
+    for kind, benchmark in (("raster", "BenchmarkOpenGLSceneRaster"), ("FXAA", "BenchmarkFXAADevice")):
+        print(f"Benchmarking {kind}...", flush=True)
+        log = output / f"{kind.lower()}.txt"
+        result = run(log, str(executables[kind]), *flags, f"-test.bench=^{benchmark}$", cwd=ROOT / packages[kind])
+        if renderer_names(result, kind) != drivers[kind]:
+            raise RuntimeError(f"OpenGL {kind} renderer changed between validation and timing. Check {log}")
+        samples[kind] = parse_samples(result)
+    compare(output, args.count, samples["raster"], samples["FXAA"])
     print(f"CSV summary: {output / 'summary.csv'}")
 
 

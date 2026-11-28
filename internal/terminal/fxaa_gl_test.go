@@ -5,6 +5,7 @@ package terminal
 import (
 	"fmt"
 	"math/rand"
+	"os"
 	"slices"
 	"testing"
 
@@ -79,6 +80,7 @@ func BenchmarkFXAADevice(b *testing.B) {
 						b.Skip(err)
 					}
 					defer device.close()
+					fmt.Fprintf(os.Stderr, "OpenGL FXAA device: %s\n", device.name())
 					if err := device.apply(frame); err != nil {
 						b.Fatal(err)
 					}
