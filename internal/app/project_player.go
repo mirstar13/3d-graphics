@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -20,14 +21,22 @@ import (
 
 // projectPlayer owns the terminal while a saved scene runs outside the editor.
 type projectPlayer struct {
-	controlStatus string
-	screens       bool
-	menu          bool
-	mouseLook     bool
-	dragging      bool
-	help          string
-	control       playerControl
-	newControl    func() playerControl
+	adaptive                  bool
+	present                   func(projectView)
+	previousView              projectView
+	quality                   terminal.AdaptiveQuality
+	work                      time.Duration
+	budget                    time.Duration
+	behind                    func(time.Duration) bool
+	rasterWidth, rasterHeight int
+	controlStatus             string
+	screens                   bool
+	menu                      bool
+	mouseLook                 bool
+	dragging                  bool
+	help                      string
+	control                   playerControl
+	newControl                func() playerControl
 
 	audio                           *audio.Manager
 	sounds                          map[string]*audio.Clip
@@ -53,6 +62,7 @@ type projectPlayer struct {
 }
 
 func (m *projectPlayer) reset() error {
+	m.quality = terminal.AdaptiveQuality{}
 	s, err := game.NewProjectSession(m.project.Root, m.project.Scene, m.options)
 	if err != nil {
 		return err
@@ -142,7 +152,9 @@ func (m *projectPlayer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.frameClock != nil {
 		now = m.frameClock
 	}
-	return m.update(msg, now)
+	model, cmd := m.update(msg, now)
+	m.submitView()
+	return model, cmd
 }
 
 func (m *projectPlayer) update(msg tea.Msg, nowFn func() time.Time) (tea.Model, tea.Cmd) {
@@ -176,6 +188,7 @@ func (m *projectPlayer) update(msg tea.Msg, nowFn func() time.Time) (tea.Model, 
 			m.audioStatus = v.err.Error()
 		}
 	case tea.BlurMsg:
+		m.quality = terminal.AdaptiveQuality{}
 		m.pointer.Reset(false)
 		m.dragging, m.mouseLook = false, false
 		return m, tea.EnableMouseCellMotion
@@ -199,6 +212,7 @@ func (m *projectPlayer) update(msg tea.Msg, nowFn func() time.Time) (tea.Model, 
 			}
 		}
 	case tea.WindowSizeMsg:
+		m.quality = terminal.AdaptiveQuality{}
 		m.dragging = false
 		m.pointer.Reset(m.mouseLook)
 		m.width = v.Width
@@ -327,6 +341,8 @@ func (m *projectPlayer) View() string {
 }
 
 func (m *projectPlayer) renderView() string {
+	start := time.Now()
+	defer func() { m.work = time.Since(start) }()
 	var out strings.Builder
 	out.WriteString(objectiveHUD(m.session.Objective()))
 	if m.room != nil {
@@ -369,11 +385,17 @@ func (m *projectPlayer) renderView() string {
 	}
 	r := m.renderer
 	r.SetLightingSystem(m.session.Lighting)
-	if m.drawFrame != nil {
-		m.drawFrame(r)
-	} else {
-		r.RenderScene(m.session.Scene)
+	tier := terminal.FullQuality
+	if m.adaptive {
+		tier = m.quality.Update(m.session.Scene.Camera, m.work, m.behind != nil && m.behind(m.budget), m.budget)
 	}
+	m.rasterWidth, m.rasterHeight = r.RenderQuality(tier, func() {
+		if m.drawFrame != nil {
+			m.drawFrame(r)
+		} else {
+			r.RenderScene(m.session.Scene)
+		}
+	})
 	aimX, aimY := -1, -1
 	if m.room != nil {
 		aimX, aimY = w/2, h/2
@@ -410,7 +432,11 @@ func runPlayer(root string, profile gameProfile, screens bool, color string, opt
 		return err
 	}
 	defer func() { m.session.Close() }()
-	_, err = tea.NewProgram(m, tea.WithAltScreen(), tea.WithReportFocus(), tea.WithMouseCellMotion()).Run()
+	if os.Getenv("GRAPHICS_ADAPTIVE_QUALITY") == "1" {
+		err = runAdaptivePlayer(m)
+	} else {
+		_, err = tea.NewProgram(m, tea.WithAltScreen(), tea.WithReportFocus(), tea.WithMouseCellMotion()).Run()
+	}
 	if err != nil {
 		return err
 	}

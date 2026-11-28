@@ -49,7 +49,7 @@ func (aar *AARenderer) RenderScene(scene *engine.Scene) {
 // applyFXAA filters only colors. Glyphs, depth and overlays retain the raster result.
 func (aar *AARenderer) applyFXAA() {
 	tr, ok := terminalBuffer(aar.Renderer)
-	if !ok || tr.Width < 3 || tr.Height < 3 {
+	if !ok || tr.cheapShading || tr.Width < 3 || tr.Height < 3 {
 		return
 	}
 	if tr.fxaaDevice != nil {

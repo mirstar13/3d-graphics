@@ -26,7 +26,9 @@ func (r *TerminalRenderer) FitTerminal(width, height, columns, rows int) {
 	if r.Resize(width, height) || moved {
 		r.previousPresentation.valid = false
 		r.lastDebugLine = ""
-		fmt.Fprint(r.Writer, "\033[2J\033[H")
+		if !r.latestPresentation {
+			fmt.Fprint(r.Writer, "\033[2J\033[H")
+		}
 	}
 }
 
@@ -36,6 +38,14 @@ func (r *TerminalRenderer) Resize(width, height int) bool {
 	if width < 1 || height < 1 || (width == r.Width && height == r.Height) {
 		return false
 	}
+	r.allocateGrid(width, height)
+	r.previousPresentation.valid = false
+	r.lastDebugLine = ""
+	r.BeginFrame()
+	return true
+}
+
+func (r *TerminalRenderer) allocateGrid(width, height int) {
 	r.Width, r.Height = width, height
 	r.Surface = make([][]rune, height)
 	r.ColorBuffer = make([][]engine.Color, height)
@@ -45,8 +55,4 @@ func (r *TerminalRenderer) Resize(width, height int) bool {
 		r.ColorBuffer[y] = make([]engine.Color, width)
 		r.ZBuffer[y] = make([]float64, width)
 	}
-	r.previousPresentation.valid = false
-	r.lastDebugLine = ""
-	r.BeginFrame()
-	return true
 }

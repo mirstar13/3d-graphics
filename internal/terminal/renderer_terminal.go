@@ -16,6 +16,9 @@ import (
 
 // TerminalRenderer renders to a terminal using ANSI escape codes
 type TerminalRenderer struct {
+	latestPresentation  bool
+	adaptiveGrid        frameGrid
+	cheapShading        bool
 	simulationStatus    engine.SimulationStatus
 	hasSimulationStatus bool
 	sampleCount         int
@@ -348,7 +351,7 @@ func (r *TerminalRenderer) prepareScene(scene *engine.Scene) []*engine.SceneNode
 	}
 	if r.LightingSystem != nil {
 		r.LightingSystem.SetCamera(scene.Camera)
-		if r.ShadowRenderer != nil {
+		if !r.cheapShading && r.ShadowRenderer != nil {
 			for _, light := range r.LightingSystem.Lights {
 				if light.IsEnabled {
 					r.ShadowRenderer.RenderShadowMap(light, scene)

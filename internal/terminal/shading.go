@@ -5,6 +5,11 @@ import "github.com/mirstar13/go-3d-graphics/internal/engine"
 // shadeFragment evaluates lighting once for a covered triangle/cell.
 func (r *TerminalRenderer) shadeFragment(t *engine.Triangle, camera *engine.Camera, normal, pixelWorldPos engine.Point, u, v float64) engine.Color {
 	material := t.Material
+	if r.cheapShading {
+		color := material.GetDiffuseColor(u, v)
+		factor := .55 + .45*max(0, normal.Y)
+		return engine.Color{R: uint8(float64(color.R) * factor), G: uint8(float64(color.G) * factor), B: uint8(float64(color.B) * factor)}
+	}
 	var pixelColor engine.Color
 	if r.LightingSystem != nil {
 		if pbrMat, ok := material.(*engine.PBRMaterial); ok {

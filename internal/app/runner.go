@@ -90,6 +90,19 @@ func runEngine(demoType int, config engine.EngineConfig, physicsSettings setting
 	}
 
 	fps := config.FPS
+	var presentLatest func()
+	var presentationBehind func(time.Duration) bool
+	tr, isTerminal := baseRenderer.(*terminal.TerminalRenderer)
+	adaptive := isTerminal && os.Getenv("GRAPHICS_ADAPTIVE_QUALITY") == "1"
+	var quality terminal.AdaptiveQuality
+	var work time.Duration
+	var layout [4]int
+	if adaptive {
+		presentation := tr.StartLatestPresentation()
+		defer presentation.Close()
+		presentLatest = func() { tr.QueuePresentation(presentation) }
+		presentationBehind = presentation.Behind
+	}
 	simulation, err := newConfiguredSimulation(scene, lightingSystem, demoType, physicsSettings)
 	if err != nil {
 		fmt.Printf("Failed to initialize simulation: %v\n", err)
@@ -121,7 +134,6 @@ func runEngine(demoType int, config engine.EngineConfig, physicsSettings setting
 		elapsed := now.Sub(lastFrame)
 		dt := elapsed.Seconds()
 		lastFrame = now
-		tr, isTerminal := baseRenderer.(*terminal.TerminalRenderer)
 		if isTerminal {
 			tr.SyncSize()
 		} else {
@@ -186,7 +198,18 @@ func runEngine(demoType int, config engine.EngineConfig, physicsSettings setting
 			rasterStart = time.Now()
 		}
 		simulation.prepareRender()
-		finalRenderer.RenderScene(scene)
+		if adaptive {
+			next := [4]int{tr.Width, tr.Height, tr.OffsetX, tr.OffsetY}
+			if next != layout {
+				quality = terminal.AdaptiveQuality{}
+				layout = next
+			}
+			budget := time.Duration(float64(time.Second) / fps)
+			tier := quality.Update(scene.Camera, work, presentationBehind(budget), budget)
+			tr.RenderQuality(tier, func() { finalRenderer.RenderScene(scene) })
+		} else {
+			finalRenderer.RenderScene(scene)
+		}
 		if simulation.overlay {
 			if display, ok := baseRenderer.(engine.PhysicsDebugRenderer); ok {
 				display.RenderPhysicsDebug(simulation.world.DebugLines(), scene.Camera)
@@ -206,7 +229,12 @@ func runEngine(demoType int, config engine.EngineConfig, physicsSettings setting
 			presentStart = time.Now()
 		}
 		finalRenderer.EndFrame()
-		finalRenderer.Present()
+		if adaptive {
+			presentLatest()
+			work = time.Since(now)
+		} else {
+			finalRenderer.Present()
+		}
 		if measuring {
 			tick := simulation.world.Stats().Tick
 			w, h := finalRenderer.GetDimensions()
