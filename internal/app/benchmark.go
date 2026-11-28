@@ -20,6 +20,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mirstar13/go-3d-graphics/internal/demo"
 	"github.com/mirstar13/go-3d-graphics/internal/engine"
+	"github.com/mirstar13/go-3d-graphics/internal/perfclock"
 	"github.com/mirstar13/go-3d-graphics/internal/physics"
 	"github.com/mirstar13/go-3d-graphics/internal/project"
 	"github.com/mirstar13/go-3d-graphics/internal/terminal"
@@ -227,9 +228,9 @@ type timedBenchmarkWriter struct {
 }
 
 func (w *timedBenchmarkWriter) Write(p []byte) (int, error) {
-	start := time.Now()
+	start := perfclock.Now()
 	n, err := w.writer.Write(p)
-	w.elapsed += time.Since(start)
+	w.elapsed += perfclock.Since(start)
 	w.bytes += n
 	if err != nil {
 		w.err = err
@@ -334,18 +335,18 @@ func runTerminalReplay(ctx context.Context, o benchmarkOptions) (benchmarkResult
 			r.Stages = &stages
 		}
 		if o.workload != "fxaa" {
-			start := time.Now()
+			start := perfclock.Now()
 			draw.RenderScene(scene)
-			frame.RasterNS = time.Since(start).Nanoseconds()
+			frame.RasterNS = perfclock.Since(start).Nanoseconds()
 			if r.UseOpenGLRaster && !r.UsedOpenGLRaster() {
 				renderErr = errors.New("requested OpenGL raster fell back to CPU")
 				return
 			}
 		}
 		if filter != nil {
-			start := time.Now()
+			start := perfclock.Now()
 			stages.FXAA, frame.ExchangeNS, renderErr = filter.apply(r)
-			frame.FilterNS = time.Since(start).Nanoseconds()
+			frame.FilterNS = perfclock.Since(start).Nanoseconds()
 		}
 	}
 	if o.workload == "switch-room" {
@@ -400,7 +401,7 @@ func runTerminalReplay(ctx context.Context, o benchmarkOptions) (benchmarkResult
 	frameStep := func(i int, sample *benchmarkFrame) error {
 		frame, stages = sample, terminal.FrameStages{}
 		clock = time.Unix(0, 0).Add(time.Duration(i+1) * dt)
-		start := time.Now()
+		start := perfclock.Now()
 		newColumns, newRows, err := benchmarkGrid(o)
 		if err != nil {
 			return err
@@ -415,7 +416,7 @@ func runTerminalReplay(ctx context.Context, o benchmarkOptions) (benchmarkResult
 			if o.viewport != "centered" {
 				player.requestedWidth, player.requestedHeight = math.MaxInt, math.MaxInt
 			}
-			inputStart := time.Now()
+			inputStart := perfclock.Now()
 			if i%48 < 24 {
 				player.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
 				sample.InputEvents++
@@ -431,10 +432,10 @@ func runTerminalReplay(ctx context.Context, o benchmarkOptions) (benchmarkResult
 				player.Update(tea.MouseMsg{Action: tea.MouseActionRelease, Button: tea.MouseButtonRight})
 				sample.InputEvents++
 			}
-			sample.InputNS = time.Since(inputStart).Nanoseconds()
-			simulationStart := time.Now()
+			sample.InputNS = perfclock.Since(inputStart).Nanoseconds()
+			simulationStart := perfclock.Now()
 			player.Update(editorTick(clock))
-			sample.SimulationNS = time.Since(simulationStart).Nanoseconds()
+			sample.SimulationNS = perfclock.Since(simulationStart).Nanoseconds()
 			if player.err != nil {
 				return player.err
 			}
@@ -457,14 +458,14 @@ func runTerminalReplay(ctx context.Context, o benchmarkOptions) (benchmarkResult
 				r.Resize(w, h)
 			}
 			if sim != nil {
-				cameraStart := time.Now()
+				cameraStart := perfclock.Now()
 				controller.Update(engine.InputState{}, engine.OrientationTerminal, dt.Seconds())
-				sample.InputNS = time.Since(cameraStart).Nanoseconds()
-				simulationStart := time.Now()
+				sample.InputNS = perfclock.Since(cameraStart).Nanoseconds()
+				simulationStart := perfclock.Now()
 				if err := sim.advance(dt, engine.SimulationCommands{}); err != nil {
 					return err
 				}
-				sample.SimulationNS = time.Since(simulationStart).Nanoseconds()
+				sample.SimulationNS = perfclock.Since(simulationStart).Nanoseconds()
 				r.SetSimulationStatus(sim.status())
 				nextTick := sim.world.Stats().Tick
 				if nextTick != tick {
@@ -474,12 +475,12 @@ func runTerminalReplay(ctx context.Context, o benchmarkOptions) (benchmarkResult
 			}
 		}
 		columns, rows = newColumns, newRows
-		sample.UpdateNS = time.Since(start).Nanoseconds()
+		sample.UpdateNS = perfclock.Since(start).Nanoseconds()
 		writer.bytes, writer.elapsed, writer.err = 0, 0, nil
 		if player != nil {
-			viewStart := time.Now()
+			viewStart := perfclock.Now()
 			view := player.View()
-			sample.EncodeNS = time.Since(viewStart).Nanoseconds() - sample.RasterNS - sample.FilterNS
+			sample.EncodeNS = perfclock.Since(viewStart).Nanoseconds() - sample.RasterNS - sample.FilterNS
 			if presentation != nil {
 				presentation.submit(i+1, view)
 			} else {
@@ -490,20 +491,20 @@ func runTerminalReplay(ctx context.Context, o benchmarkOptions) (benchmarkResult
 			}
 		} else {
 			if sim != nil {
-				prep := time.Now()
+				prep := perfclock.Now()
 				sim.prepareRender()
-				sample.PrepareNS = time.Since(prep).Nanoseconds()
+				sample.PrepareNS = perfclock.Since(prep).Nanoseconds()
 			}
 			drawFrame(r)
 			if o.profile == "gameplay" {
-				present := time.Now()
+				present := perfclock.Now()
 				draw.EndFrame()
 				draw.Present()
 				sample.Presented = true
 				if writer.err != nil {
 					return writer.err
 				}
-				sample.EncodeNS = time.Since(present).Nanoseconds() - writer.elapsed.Nanoseconds()
+				sample.EncodeNS = perfclock.Since(present).Nanoseconds() - writer.elapsed.Nanoseconds()
 			}
 			if sim != nil {
 				sim.bindings.synchronize()
@@ -553,7 +554,7 @@ func runTerminalReplay(ctx context.Context, o benchmarkOptions) (benchmarkResult
 			return out, err
 		}
 	}
-	started := time.Now()
+	started := perfclock.Now()
 	var last time.Time
 	var workNS int64
 	for i := 0; ; i++ {
@@ -563,13 +564,13 @@ func runTerminalReplay(ctx context.Context, o benchmarkOptions) (benchmarkResult
 		if o.memoryBytes > 0 && meter.memory() > o.memoryBytes {
 			return out, errors.New("replay reached the GC experiment memory ceiling")
 		}
-		waitStart := time.Now()
+		waitStart := perfclock.Now()
 		if o.paced && i > 0 {
-			if wait := time.Until(started.Add(time.Duration(i) * dt)); wait > 0 {
+			if wait := started.Add(time.Duration(i) * dt).Sub(perfclock.Now()); wait > 0 {
 				time.Sleep(wait)
 			}
 		}
-		start := time.Now()
+		start := perfclock.Now()
 		sample := benchmarkFrame{Frame: i + 1, StartNS: start.Sub(started).Nanoseconds(), PaceNS: start.Sub(waitStart).Nanoseconds()}
 		region := trace.StartRegion(ctx, "game frame")
 		err := frameStep(i+o.warmup, &sample)
@@ -577,7 +578,7 @@ func runTerminalReplay(ctx context.Context, o benchmarkOptions) (benchmarkResult
 		if err != nil {
 			return out, err
 		}
-		finished := time.Now()
+		finished := perfclock.Now()
 		sample.TotalNS = finished.Sub(start).Nanoseconds()
 		if sample.Presented {
 			sample.PresentNS = sample.TotalNS

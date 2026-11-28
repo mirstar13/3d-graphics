@@ -7,9 +7,9 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"time"
 
 	"github.com/mirstar13/go-3d-graphics/internal/engine"
+	"github.com/mirstar13/go-3d-graphics/internal/perfclock"
 	"github.com/mirstar13/go-3d-graphics/internal/terminal"
 )
 
@@ -174,7 +174,7 @@ func remoteReplayFilter(path, overrides string, memory uint64, tracePath string)
 		},
 		close: stop,
 		apply: func(r *terminal.TerminalRenderer) (terminal.DeviceStages, int64, error) {
-			start := time.Now()
+			start := perfclock.Now()
 			pixels = encodeColors(r.ColorBuffer, pixels)
 			err := exchange(filterRequest{Width: r.Width, Height: r.Height, Pixels: pixels,
 				Detail: r.Stages != nil, MemoryBytes: memory})
@@ -185,7 +185,7 @@ func remoteReplayFilter(path, overrides string, memory uint64, tracePath string)
 				return terminal.DeviceStages{}, 0, fmt.Errorf("FXAA worker returned %d bytes for %dx%d", len(response.Pixels), r.Width, r.Height)
 			}
 			decodeColors(response.Pixels, r.ColorBuffer)
-			return response.Stages, time.Since(start).Nanoseconds(), nil
+			return response.Stages, perfclock.Since(start).Nanoseconds(), nil
 		},
 	}, nil
 }

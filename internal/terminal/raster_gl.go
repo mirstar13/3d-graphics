@@ -4,8 +4,9 @@ package terminal
 
 import (
 	"fmt"
-	"time"
 	"unsafe"
+
+	"github.com/mirstar13/go-3d-graphics/internal/perfclock"
 )
 
 const rasterVertex = `#version 330 core
@@ -140,9 +141,9 @@ func (d *glRaster) visibility(width, height int, vertices []float32) ([]uint32, 
 	start := stageStart(stages)
 	d.bufferData(glArrayBuffer, len(vertices)*4, unsafe.Pointer(&vertices[0]), 0x88E0) // GL_STREAM_DRAW.
 	if stages != nil {
-		stages.UploadNS = time.Since(start).Nanoseconds()
+		stages.UploadNS = perfclock.Since(start).Nanoseconds()
 		stages.UploadBytes = len(vertices) * 4
-		start = time.Now()
+		start = perfclock.Now()
 		d.beginTiming(true)
 	}
 	zero := [4]uint32{}
@@ -151,12 +152,12 @@ func (d *glRaster) visibility(width, height int, vertices []float32) ([]uint32, 
 	d.gl.drawArrays(4, 0, int32(len(vertices)/4))
 	if stages != nil {
 		d.endTiming()
-		stages.SubmitNS = time.Since(start).Nanoseconds()
-		start = time.Now()
+		stages.SubmitNS = perfclock.Since(start).Nanoseconds()
+		start = perfclock.Now()
 	}
 	d.gl.readPixels(0, 0, int32(width), int32(height), glRedInteger, glUnsignedInt, unsafe.Pointer(&d.ids[0]))
 	if stages != nil {
-		stages.ReadbackNS = time.Since(start).Nanoseconds()
+		stages.ReadbackNS = perfclock.Since(start).Nanoseconds()
 		stages.ReadbackBytes = len(d.ids) * 4
 		stages.GPUNS = d.gpuTime()
 	}

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/mirstar13/go-3d-graphics/internal/perfclock"
 )
 
 type replayView string
@@ -99,9 +100,9 @@ func (p *replayPresentation) Write(data []byte) (int, error) {
 	if p.File != nil {
 		sink = p.File
 	}
-	start := time.Now()
+	start := perfclock.Now()
 	n, err := sink.Write(actual)
-	finished := time.Now()
+	finished := perfclock.Now()
 	if err == nil && n != len(actual) {
 		err = io.ErrShortWrite
 	}

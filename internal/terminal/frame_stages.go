@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/mirstar13/go-3d-graphics/internal/engine"
+	"github.com/mirstar13/go-3d-graphics/internal/perfclock"
 )
 
 // FrameStages records host durations in nanoseconds. GPUNS overlaps the host
@@ -29,7 +30,7 @@ func stageStart[T any](stages *T) time.Time {
 	if stages == nil {
 		return time.Time{}
 	}
-	return time.Now()
+	return perfclock.Now()
 }
 
 // ColorFilter applies FXAA to a terminal color buffer. The OpenGL variant

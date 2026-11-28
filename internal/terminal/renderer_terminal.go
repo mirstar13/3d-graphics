@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/mirstar13/go-3d-graphics/internal/engine"
+	"github.com/mirstar13/go-3d-graphics/internal/perfclock"
 )
 
 // TerminalRenderer renders to a terminal using ANSI escape codes
@@ -345,7 +346,7 @@ func (r *TerminalRenderer) prepareScene(scene *engine.Scene) []*engine.SceneNode
 		}
 	}
 	if r.Stages != nil {
-		r.Stages.PrepareNS = time.Since(start).Nanoseconds()
+		r.Stages.PrepareNS = perfclock.Since(start).Nanoseconds()
 	}
 	return nodes
 }

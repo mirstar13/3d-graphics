@@ -3,9 +3,9 @@ package terminal
 import (
 	"fmt"
 	"math"
-	"time"
 
 	"github.com/mirstar13/go-3d-graphics/internal/engine"
+	"github.com/mirstar13/go-3d-graphics/internal/perfclock"
 )
 
 type rasterDevice interface {
@@ -106,7 +106,7 @@ func (r *TerminalRenderer) drawWithOpenGL(nodes []*engine.SceneNode, camera *eng
 		}
 	}
 	if r.Stages != nil {
-		r.Stages.ShadeNS = time.Since(start).Nanoseconds()
+		r.Stages.ShadeNS = perfclock.Since(start).Nanoseconds()
 	}
 	for _, node := range nodes[prefix:] {
 		r.renderNode(node, node.Transform.GetWorldMatrix(), camera)
