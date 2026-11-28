@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mirstar13/go-3d-graphics/internal/terminal"
+	"golang.org/x/term"
 )
 
 type projectView struct {
@@ -18,6 +19,12 @@ type projectView struct {
 }
 
 func runAdaptivePlayer(m *projectPlayer) error {
+	fd := int(os.Stdin.Fd())
+	state, err := term.MakeRaw(fd)
+	if err != nil {
+		return err
+	}
+	defer term.Restore(fd, state)
 	writer := bufio.NewWriter(os.Stdout)
 	console := terminal.NewTerminalRenderer(writer, 1, 1)
 	if err := console.Initialize(); err != nil {
@@ -61,8 +68,9 @@ func runAdaptivePlayer(m *projectPlayer) error {
 	defer presenter.Close()
 	m.adaptive, m.budget, m.behind = true, time.Second/60, presenter.Behind
 	m.present = presenter.Submit
+	m.checkTerminalSize()
 	m.submitView()
-	_, err := tea.NewProgram(m, tea.WithoutRenderer(), tea.WithReportFocus(), tea.WithMouseCellMotion()).Run()
+	_, err = tea.NewProgram(m, tea.WithoutRenderer(), tea.WithInput(os.Stdin), tea.WithReportFocus(), tea.WithMouseCellMotion()).Run()
 	return err
 }
 
@@ -74,5 +82,18 @@ func (m *projectPlayer) submitView() {
 	if view != m.previousView {
 		m.present(view)
 		m.previousView = view
+	}
+}
+
+type playerResizePoll struct{}
+
+func pollPlayerTerminal() tea.Cmd {
+	return tea.Tick(200*time.Millisecond, func(time.Time) tea.Msg { return playerResizePoll{} })
+}
+
+func (m *projectPlayer) checkTerminalSize() {
+	width, height, err := term.GetSize(int(os.Stdout.Fd()))
+	if err == nil && width > 1 && height > 1 && (width != m.width || height != m.height) {
+		m.update(tea.WindowSizeMsg{Width: width, Height: height}, time.Now)
 	}
 }

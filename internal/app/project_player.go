@@ -21,6 +21,7 @@ import (
 
 // projectPlayer owns the terminal while a saved scene runs outside the editor.
 type projectPlayer struct {
+	qualityYaw, qualityPitch  float64
 	adaptive                  bool
 	present                   func(projectView)
 	previousView              projectView
@@ -110,10 +111,14 @@ func (m *projectPlayer) reset() error {
 	return nil
 }
 func (m *projectPlayer) Init() tea.Cmd {
-	if m.menu {
-		return waitAudio(m.audio)
+	commands := []tea.Cmd{waitAudio(m.audio)}
+	if !m.menu {
+		commands = append(commands, nextEditorTick())
 	}
-	return tea.Batch(nextEditorTick(), waitAudio(m.audio))
+	if m.present != nil {
+		commands = append(commands, pollPlayerTerminal())
+	}
+	return tea.Batch(commands...)
 }
 
 func (m *projectPlayer) gameScreen() (terminal.GameScreen, bool) {
@@ -148,6 +153,11 @@ func (m *projectPlayer) startRound() (tea.Model, tea.Cmd) {
 	return m, tea.Batch(tea.EnableMouseCellMotion, nextEditorTick())
 }
 func (m *projectPlayer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if _, ok := msg.(playerResizePoll); ok {
+		m.checkTerminalSize()
+		m.submitView()
+		return m, pollPlayerTerminal()
+	}
 	now := time.Now
 	if m.frameClock != nil {
 		now = m.frameClock
@@ -387,7 +397,14 @@ func (m *projectPlayer) renderView() string {
 	r.SetLightingSystem(m.session.Lighting)
 	tier := terminal.FullQuality
 	if m.adaptive {
-		tier = m.quality.Update(m.session.Scene.Camera, m.work, m.behind != nil && m.behind(m.budget), m.budget)
+		behind := m.behind != nil && m.behind(m.budget)
+		if m.room != nil {
+			moving := m.last.Before(m.room.walkUntil) || m.room.yaw != m.qualityYaw || m.room.pitch != m.qualityPitch
+			m.qualityYaw, m.qualityPitch = m.room.yaw, m.room.pitch
+			tier = m.quality.UpdateMotion(moving, m.work, behind, m.budget)
+		} else {
+			tier = m.quality.Update(m.session.Scene.Camera, m.work, behind, m.budget)
+		}
 	}
 	m.rasterWidth, m.rasterHeight = r.RenderQuality(tier, func() {
 		if m.drawFrame != nil {

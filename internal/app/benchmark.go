@@ -391,7 +391,7 @@ func runTerminalReplay(ctx context.Context, o benchmarkOptions) (benchmarkResult
 		player.adaptive, player.budget = o.adaptive, dt
 		player.behind = func(budget time.Duration) bool {
 			if presentation != nil {
-				return presentation.pressure.behind(budget)
+				return presentation.behind(budget)
 			}
 			return priorWrite > budget
 		}
@@ -452,18 +452,18 @@ func runTerminalReplay(ctx context.Context, o benchmarkOptions) (benchmarkResult
 			}
 			inputStart := perfclock.Now()
 			sample.InputStartNS = inputStart.Sub(start).Nanoseconds()
-			if i%48 < 24 {
+			if i%240 >= 20 && i%240 < 45 {
 				player.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
 				sample.InputEvents++
 			}
-			if i%60 == 0 {
+			if i%240 == 20 {
 				player.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonRight, X: 10, Y: 10})
 				sample.InputEvents++
 			}
-			if i%60 < 30 {
-				player.Update(tea.MouseMsg{Action: tea.MouseActionMotion, X: 10 + (i%60)/4, Y: 10})
+			if i%240 >= 20 && i%240 < 80 {
+				player.Update(tea.MouseMsg{Action: tea.MouseActionMotion, X: 10 + (i%240-20)/4, Y: 10})
 				sample.InputEvents++
-			} else if i%60 == 30 {
+			} else if i%240 == 80 {
 				player.Update(tea.MouseMsg{Action: tea.MouseActionRelease, Button: tea.MouseButtonRight})
 				sample.InputEvents++
 			}

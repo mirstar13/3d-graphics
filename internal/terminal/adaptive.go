@@ -26,21 +26,29 @@ func (a *AdaptiveQuality) Update(camera *engine.Camera, work time.Duration, pres
 	position, forward := camera.GetPosition(), camera.GetForwardVectorPoint()
 	if !a.ready {
 		a.position, a.forward, a.ready = position, forward, true
+		a.quiet = 8
 		return a.Tier
 	}
 	dx, dy, dz := position.X-a.position.X, position.Y-a.position.Y, position.Z-a.position.Z
 	dot := engine.DotProduct(forward.X, forward.Y, forward.Z, a.forward.X, a.forward.Y, a.forward.Z)
 	moving := dx*dx+dy*dy+dz*dz > 1e-8 || dot < .999999
 	a.position, a.forward = position, forward
+	return a.UpdateMotion(moving, work, presentationBehind, budget)
+}
+
+// UpdateMotion handles controllers that distinguish user-driven movement from
+// small physics adjustments to the camera while the controls are idle.
+func (a *AdaptiveQuality) UpdateMotion(moving bool, work time.Duration, presentationBehind bool, budget time.Duration) QualityTier {
 	if !moving {
-		a.misses = 0
 		a.quiet++
 		if a.quiet >= 8 {
 			a.Tier = FullQuality
+			a.misses = 0
+			return a.Tier
 		}
-		return a.Tier
+	} else {
+		a.quiet = 0
 	}
-	a.quiet = 0
 	behind := work > budget || presentationBehind
 	if a.Tier == ReducedShading {
 		behind = presentationBehind

@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -36,14 +37,15 @@ type replaySubmission struct {
 
 type replayPresentation struct {
 	*os.File
-	program     *tea.Program
-	done        chan struct{}
-	notify      chan struct{}
-	mu          sync.Mutex
-	submissions map[int]replaySubmission
-	err         error
-	buffer      bytes.Buffer
-	pressure    presentationPressure
+	program              *tea.Program
+	done                 chan struct{}
+	notify               chan struct{}
+	mu                   sync.Mutex
+	submissions          map[int]replaySubmission
+	err                  error
+	buffer               bytes.Buffer
+	pressure             presentationPressure
+	submitted, completed atomic.Int64
 }
 
 func startReplayPresentation(ctx context.Context, live bool, fps, columns, rows int) *replayPresentation {
@@ -78,6 +80,7 @@ func (p *replayPresentation) Fd() uintptr {
 }
 
 func (p *replayPresentation) submit(id int, frame string) {
+	p.submitted.Store(int64(id))
 	p.program.Send(replayView(replayMarker + strconv.Itoa(id) + replayMarkerEnd + frame))
 }
 
@@ -112,6 +115,7 @@ func (p *replayPresentation) Write(data []byte) (int, error) {
 		return 0, err
 	}
 	if id > 0 {
+		p.completed.Store(int64(id))
 		p.submissions[id] = replaySubmission{finished, finished.Sub(start), n}
 		select {
 		case p.notify <- struct{}{}:
@@ -165,4 +169,8 @@ func (p *replayPresentation) collect(ctx context.Context, warmup int, started ti
 func (p *replayPresentation) close() {
 	p.program.Quit()
 	<-p.done
+}
+
+func (p *replayPresentation) behind(budget time.Duration) bool {
+	return p.submitted.Load()-p.completed.Load() > 1 || p.pressure.behind(budget)
 }
