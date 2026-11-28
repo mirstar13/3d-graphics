@@ -376,11 +376,18 @@ Set both to **High performance** and confirm Windows lists the GPU you want.
 Then run `py -3 scripts/benchmark_opengl.py --require-renderer "RTX 4050"`
 or substitute a substring of your GPU's renderer name.
 
-The script reports the active OpenGL renderers and checks CPU/OpenGL image
-agreement before timing. It compares scene rasterization with single and
-batched CPU modes and compares the CPU and OpenGL FXAA filters separately.
+When multiple adapters are detected, the script asks which GPU to use.
+Windows and macOS use the graphics driver's adapter selection, which the
+script checks before timing. On Linux the picker sets `DRI_PRIME` by PCI
+address for Mesa. Use `--require-renderer` to skip the interactive picker
+and validate a specific renderer in automation.
+
+The script checks CPU/OpenGL image agreement, then compares single, tiled,
+job-based, batched and OpenGL rasterization with no AA and CPU FXAA. It also
+tests each CPU rasterizer with OpenGL FXAA and keeps the isolated FXAA
+measurements. The engine exposes one OpenGL pass per pipeline.
 It writes raw logs and a `summary.csv` under the ignored `.cache/` directory.
-Use `--cpu` to set the Go CPU budget and batched worker count, `--output` for
+Use `--cpu` to set the Go CPU budget and parallel worker count, `--output` for
 a new results directory, or `--help` for timing options. Recognized software
 renderers require `--allow-software`. On a multi-GPU Mesa system, you can use
 `DRI_PRIME=1` and check the reported renderer to confirm which GPU was used.

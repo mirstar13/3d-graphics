@@ -158,6 +158,9 @@ func (r *TerminalRenderer) InitializeOffscreen() {
 	}
 }
 
+// OpenGLFXAAActive reports whether the FXAA device is available for filtering.
+func (r *TerminalRenderer) OpenGLFXAAActive() bool { return r.fxaaDevice != nil }
+
 // Shutdown cleans up the terminal renderer
 func (r *TerminalRenderer) Shutdown() {
 	if r.rasterDevice != nil {

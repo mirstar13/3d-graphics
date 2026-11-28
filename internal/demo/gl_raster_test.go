@@ -78,35 +78,58 @@ func TestOpenGLRasterDemoParity(t *testing.T) {
 }
 
 func BenchmarkOpenGLSceneRaster(b *testing.B) {
+	modes := []struct {
+		name string
+		mode engine.RenderMode
+	}{
+		{"single", engine.RenderModeSingle},
+		{"tiles", engine.RenderModeParallelTiles},
+		{"jobs", engine.RenderModeParallelJobs},
+		{"batched", engine.RenderModeParallelBatched},
+		{"opengl", engine.RenderModeSingle},
+	}
 	for _, index := range []int{0, 5, 6} {
 		for _, size := range [][2]int{{160, 60}, {320, 120}} {
-			for _, method := range []string{"gl_false", "batched", "gl_true"} {
-				b.Run(fmt.Sprintf("scene%d/%dx%d/%s", index+1, size[0], size[1], method), func(b *testing.B) {
-					useGL := method == "gl_true"
-					scene, lighting := presetScene(index, 1.25, true)
-					r := demoRenderer(index, size[0], size[1], useGL, scene, lighting)
-					if useGL {
-						r.InitializeOffscreen()
-						defer r.Shutdown()
+			for _, raster := range modes {
+				for _, filter := range []string{"none", "cpu_fxaa", "gl_fxaa"} {
+					useGL := raster.name == "opengl"
+					useGLFXAA := filter == "gl_fxaa"
+					// The engine selects one OpenGL offscreen pass per renderer.
+					if useGL && useGLFXAA {
+						continue
 					}
-					var renderer engine.Renderer = r
-					if method == "batched" {
-						renderer = terminal.ComposeRenderer(r, engine.EngineConfig{
-							RenderMode: engine.RenderModeParallelBatched, NumWorkers: runtime.GOMAXPROCS(0), TileSize: 32,
+					b.Run(fmt.Sprintf("scene%d/%dx%d/%s/%s", index+1, size[0], size[1], raster.name, filter), func(b *testing.B) {
+						scene, lighting := presetScene(index, 1.25, true)
+						r := demoRenderer(index, size[0], size[1], useGL, scene, lighting)
+						r.UseOpenGLFXAA = useGLFXAA
+						if useGL || useGLFXAA {
+							r.InitializeOffscreen()
+							defer r.Shutdown()
+						}
+						aa := engine.AANone
+						if filter != "none" {
+							aa = engine.AAFXAA
+						}
+						renderer := terminal.ComposeRenderer(r, engine.EngineConfig{
+							RenderMode: raster.mode, AAMode: aa,
+							NumWorkers: runtime.GOMAXPROCS(0), TileSize: 32,
 						})
-					}
-					renderer.RenderScene(scene)
-					if useGL && !r.UsedOpenGLRaster() {
-						b.Skip("OpenGL raster unavailable or scene uses CPU coverage")
-					}
-					b.ReportAllocs()
-					for b.Loop() {
 						renderer.RenderScene(scene)
-					}
-					if useGL && !r.UsedOpenGLRaster() {
-						b.Fatal("OpenGL raster fell back to CPU during the timed run")
-					}
-				})
+						active := func() bool {
+							return (!useGL || r.UsedOpenGLRaster()) && (!useGLFXAA || r.OpenGLFXAAActive())
+						}
+						if !active() {
+							b.Fatal("requested OpenGL pass fell back to CPU")
+						}
+						b.ReportAllocs()
+						for b.Loop() {
+							renderer.RenderScene(scene)
+						}
+						if !active() {
+							b.Fatal("requested OpenGL pass fell back to CPU during timing")
+						}
+					})
+				}
 			}
 		}
 	}

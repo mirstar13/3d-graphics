@@ -3,11 +3,13 @@
 
 import argparse
 import csv
+import json
 import os
 from pathlib import Path
 import platform
 import re
 import shutil
+import shlex
 import statistics
 import subprocess
 import sys
@@ -59,30 +61,122 @@ def time_ms(samples, name, count):
     return statistics.median(times) / 1e6
 
 
-def compare(log_dir, count, raster, fxaa):
-    rows = []
-    for scene, title in SCENES.items():
-        for grid in ("160x60", "320x120"):
-            prefix = f"BenchmarkOpenGLSceneRaster/{scene}/{grid}/"
-            single, batched, gl = (
-                time_ms(raster, prefix + name, count) for name in ("gl_false", "batched", "gl_true")
-            )
-            rows.append(("Scene raster", title, grid, single, batched, gl, min(single, batched) / gl))
-    for grid in ("120x40", "160x60", "320x120"):
-        prefix = f"BenchmarkFXAADevice/{grid}/"
-        cpu, gl = (time_ms(fxaa, prefix + name, count) for name in ("cpu", "gl"))
-        rows.append(("FXAA", "Color filter", grid, cpu, None, gl, cpu / gl))
+def linux_pci_adapters():
+    adapters = []
+    vendors = {"0x10de": "NVIDIA", "0x1002": "AMD", "0x8086": "Intel"}
+    for device in sorted(Path("/sys/bus/pci/devices").glob("*")):
+        try:
+            if (device / "class").read_text().startswith("0x03"):
+                vendor = (device / "vendor").read_text().strip()
+                adapters.append((vendors.get(vendor, ""), "pci-" + device.name.replace(":", "_").replace(".", "_")))
+        except OSError:
+            continue
+    return adapters
 
+
+def discover_adapters(system):
+    """Return (adapter name, optional Mesa PCI selector) pairs."""
+    if system == "Windows":
+        command = ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+                   "[Console]::OutputEncoding = [Text.Encoding]::UTF8; "
+                   "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name | ConvertTo-Json -Compress"]
+    elif system == "Darwin":
+        command = ["system_profiler", "SPDisplaysDataType", "-json"]
+    else:
+        command = ["lspci", "-Dmm", "-nn"]
+    try:
+        output = subprocess.check_output(command, text=True, encoding="utf-8", errors="replace",
+                                         stderr=subprocess.DEVNULL, timeout=15)
+        if system == "Windows":
+            names = json.loads(output) if output.strip() else []
+            return [(name, None) for name in ([names] if isinstance(names, str) else names or [])
+                    if name and not re.search(r"Microsoft Basic|Remote Display|Virtual Display", name, re.I)]
+        if system == "Darwin":
+            return [(gpu["_name"], None) for gpu in json.loads(output).get("SPDisplaysDataType", [])
+                    if gpu.get("_name")]
+        adapters = []
+        for line in output.splitlines():
+            fields = shlex.split(line)
+            if len(fields) >= 4 and re.search(r"\[03(?:00|02|80)\]$", fields[1]):
+                name = re.sub(r" \[\w{4}:\w{4}\]$", "", fields[3])
+                label = re.search(r"\[([^\]]+)\]$", name)
+                adapters.append((label[1] if label else name, "pci-" + fields[0].replace(":", "_").replace(".", "_")))
+        return adapters
+    except (OSError, ValueError, subprocess.SubprocessError):
+        if system == "Linux":
+            return linux_pci_adapters()
+        print("GPU inventory unavailable. Use --require-renderer to check a specific OpenGL renderer.", flush=True)
+        return []
+
+
+def renderer_matches(name, expected):
+    def normalize(value):
+        return re.sub(r"[^a-z0-9]", "", re.sub(r"\((?:tm|r)\)|[™®]", "", value.casefold()))
+    wanted = normalize(expected)
+    return bool(wanted) and wanted in normalize(name)
+
+
+def select_adapter(system, required):
+    if required:
+        return required
+    adapters = discover_adapters(system)
+    if len(adapters) < 2:
+        return None
+    for index, (name, selector) in enumerate(adapters, 1):
+        label = name or "Display adapter"
+        print(f"  {index}. {label}" + (f" ({selector})" if selector else ""))
+    if not sys.stdin.isatty():
+        raise RuntimeError("multiple GPUs detected. Supply --require-renderer to run without a prompt.")
+    while True:
+        try:
+            choice = input("Choose a GPU by number: ").strip()
+        except (EOFError, KeyboardInterrupt) as error:
+            raise RuntimeError("GPU selection canceled") from error
+        if choice.isascii() and choice.isdigit() and len(choice) <= len(str(len(adapters))):
+            index = int(choice)
+            if 1 <= index <= len(adapters):
+                name, selector = adapters[index - 1]
+                if selector:
+                    os.environ["DRI_PRIME"] = selector
+                # Model numbers survive driver differences such as added OEM names.
+                model = re.search(r"\b(?:RTX|GTX|RX|Arc [AB])\s*\d{3,4}\b", name, re.I)
+                return model[0] if model else name
+        print(f"Enter a number from 1 to {len(adapters)}.")
+
+
+def compare(log_dir, count, raster, fxaa, drivers):
     with (log_dir / "summary.csv").open("w", newline="", encoding="utf-8") as file:
         writer = csv.writer(file)
-        writer.writerow(["pass", "workload", "viewport", "cpu_ms", "batched_ms", "opengl_ms", "speedup_vs_best_cpu"])
-        writer.writerows(rows)
-
-    print(f"\n{'Workload':<21} {'Viewport':>8} {'CPU ms':>9} {'Batched':>9} {'GL ms':>9} {'Speedup':>9}")
-    for _, scene, grid, cpu, batched, gl, ratio in rows:
-        multicore = f"{batched:.3f}" if batched is not None else "-"
-        print(f"{scene:<21} {grid:>8} {cpu:9.3f} {multicore:>9} {gl:9.3f} {ratio:8.2f}x")
-    print("\nSpeedup above 1.00x favors OpenGL against the fastest CPU path in that row.")
+        writer.writerow(["pass", "workload", "viewport", "raster", "filter", "median_ms", "speedup_vs_best_cpu", "opengl_renderer"])
+        print(f"\n{'Workload':<21} {'Viewport':>8}  {'Filter':<8} {'Fastest raster / filter':<24} {'ms':>7}")
+        for scene, title in SCENES.items():
+            for grid in ("160x60", "320x120"):
+                prefix = f"BenchmarkOpenGLSceneRaster/{scene}/{grid}/"
+                timings = {
+                    (mode, filter): time_ms(raster, prefix + mode + "/" + filter, count)
+                    for mode in ("single", "tiles", "jobs", "batched", "opengl")
+                    for filter in ("none", "cpu_fxaa", "gl_fxaa")
+                    if (mode, filter) != ("opengl", "gl_fxaa")
+                }
+                for group in ("none", "FXAA"):
+                    comparable = {k: ms for k, ms in timings.items() if (k[1] == "none") == (group == "none")}
+                    best_cpu = min(ms for (mode, filter), ms in comparable.items() if mode != "opengl" and filter != "gl_fxaa")
+                    winner = min(comparable, key=comparable.get)
+                    label = " / ".join(winner)
+                    print(f"{title:<21} {grid:>8}  {group:<8} {label:<24} {comparable[winner]:7.3f}")
+                    for (mode, filter), ms in sorted(comparable.items(), key=lambda item: item[1]):
+                        gpu = "raster" if mode == "opengl" else "FXAA" if filter == "gl_fxaa" else None
+                        names = ", ".join(sorted(drivers[gpu])) if gpu else ""
+                        writer.writerow(["Scene pipeline", title, grid, mode, filter, ms, best_cpu / ms, names])
+        print("\nIsolated FXAA (CPU ms / OpenGL ms, speedup)")
+        for grid in ("120x40", "160x60", "320x120"):
+            prefix = f"BenchmarkFXAADevice/{grid}/"
+            cpu, gl = (time_ms(fxaa, prefix + mode, count) for mode in ("cpu", "gl"))
+            print(f"{grid:>8}  {cpu:.3f} / {gl:.3f}, {cpu / gl:.2f}x")
+            writer.writerow(["FXAA only", "Color filter", grid, "", "cpu_fxaa", cpu, 1, ""])
+            writer.writerow(["FXAA only", "Color filter", grid, "", "gl_fxaa", gl, cpu / gl,
+                             ", ".join(sorted(drivers["FXAA"]))])
+    print("\nSpeedups in the CSV compare matching filter groups against their fastest CPU pipeline.")
     print("Timings include GL uploads and readback. Terminal painting and simulation are excluded.")
 
 
@@ -134,21 +228,38 @@ def main():
     if args.prepare_only:
         return
 
-    print("Checking the native OpenGL driver and CPU/OpenGL rendering agreement...", flush=True)
+    required = select_adapter(system, args.require_renderer)
+    if required:
+        print(f"Required OpenGL renderer: {required}", flush=True)
     drivers = {}
-    for kind, package in packages.items():
-        parity_log = output / f"parity-{kind.lower()}.txt"
-        parity = run(
-            parity_log, str(executables[kind]), "-test.count=1", "-test.v",
-            "-test.run=^TestOpenGL(RasterDemoParity|VisibilityAndFallback|FXAAMatchesCPU)$",
-            cwd=ROOT / package,
-        )
-        drivers[kind] = renderer_names(parity, kind)
-        if not drivers[kind] or "--- SKIP:" in parity:
-            raise RuntimeError(f"OpenGL {kind} validation was skipped. Check {parity_log}")
-        print(f"OpenGL {kind}: {', '.join(sorted(drivers[kind]))}", flush=True)
-        if args.require_renderer and any(args.require_renderer.casefold() not in name.casefold() for name in drivers[kind]):
-            raise RuntimeError(f"OpenGL {kind} did not select {args.require_renderer!r}. Check the graphics preference for {executables[kind]}")
+    while True:
+        print("Checking the native OpenGL driver and CPU/OpenGL rendering agreement...", flush=True)
+        for kind, package in packages.items():
+            parity_log = output / f"parity-{kind.lower()}.txt"
+            parity = run(
+                parity_log, str(executables[kind]), "-test.count=1", "-test.v",
+                "-test.run=^TestOpenGL(RasterDemoParity|VisibilityAndFallback|FXAAMatchesCPU)$",
+                cwd=ROOT / package,
+            )
+            drivers[kind] = renderer_names(parity, kind)
+            if not drivers[kind] or "--- SKIP:" in parity:
+                raise RuntimeError(f"OpenGL {kind} validation was skipped. Check {parity_log}")
+            print(f"OpenGL {kind}: {', '.join(sorted(drivers[kind]))}", flush=True)
+            if required and any(not renderer_matches(name, required) for name in drivers[kind]):
+                hint = " In Windows Settings → System → Display → Graphics, assign both printed executables to the selected GPU." if system == "Windows" else ""
+                message = f"OpenGL {kind} did not select {required!r}.{hint}"
+                if system != "Windows" or args.require_renderer or not sys.stdin.isatty():
+                    raise RuntimeError(message)
+                print(message, flush=True)
+                try:
+                    retry = input("Press Enter after applying the graphics preferences, or type q to quit: ")
+                except (EOFError, KeyboardInterrupt) as error:
+                    raise RuntimeError("GPU selection canceled") from error
+                if retry.strip():
+                    raise RuntimeError("GPU selection canceled")
+                break
+        else:
+            break
     if any(SOFTWARE.search(name) for names in drivers.values() for name in names):
         if not args.allow_software:
             raise RuntimeError("OpenGL selected a software renderer. Select your GPU driver or use --allow-software.")
@@ -161,10 +272,11 @@ def main():
         print(f"Benchmarking {kind}...", flush=True)
         log = output / f"{kind.lower()}.txt"
         result = run(log, str(executables[kind]), *flags, f"-test.bench=^{benchmark}$", cwd=ROOT / packages[kind])
-        if renderer_names(result, kind) != drivers[kind]:
-            raise RuntimeError(f"OpenGL {kind} renderer changed between validation and timing. Check {log}")
+        for stage in (("raster", "FXAA") if kind == "raster" else ("FXAA",)):
+            if renderer_names(result, stage) != drivers[stage]:
+                raise RuntimeError(f"OpenGL {stage} renderer changed between validation and timing. Check {log}")
         samples[kind] = parse_samples(result)
-    compare(output, args.count, samples["raster"], samples["FXAA"])
+    compare(output, args.count, samples["raster"], samples["FXAA"], drivers)
     print(f"CSV summary: {output / 'summary.csv'}")
 
 
