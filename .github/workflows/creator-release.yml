@@ -24,7 +24,26 @@ jobs:
       - run: go test -v ./...
         working-directory: examples/pulse-dock
       - name: Check native OpenGL build and rendering parity
-        run: go test -tags terminalgl -v -run '^TestOpenGL' ./...
+        shell: bash
+        run: |
+          log="$RUNNER_TEMP/opengl.log"
+          status=0
+          go test -tags terminalgl -v -run '^TestOpenGL' ./... >"$log" 2>&1 || status=$?
+          cat "$log"
+          if [ "$status" -ne 0 ]; then
+            python - "$log" <<'PY'
+          import pathlib
+          import sys
+
+          lines = pathlib.Path(sys.argv[1]).read_text(errors="replace").splitlines()
+          failures = [line for line in lines if any(
+              word in line for word in ("FAIL", "panic:", "fatal error:", ".go:", "SKIP")
+          )]
+          report = "\n".join((failures or lines)[-28:])[-4000:]
+          print("::error title=Native OpenGL check failed::" + report.replace("%", "%25").replace("\n", "%0A"))
+          PY
+            exit "$status"
+          fi
       - name: Build race-enabled terminal engine
         if: runner.os != 'Windows'
         shell: bash
