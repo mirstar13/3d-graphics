@@ -5,6 +5,9 @@ package terminal
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/ebitengine/purego"
 )
@@ -47,7 +50,16 @@ func (d *glContext) initialize() error {
 	}
 
 	const eglNone = 0x3038
-	d.display = e.getPlatformDisplay(0x31DD, 0, nil) // EGL_PLATFORM_SURFACELESS_MESA
+	selector := os.Getenv("GRAPHICS_EGL_PCI")
+	if selector != "" {
+		device, err := d.deviceForPCI(selector)
+		if err != nil {
+			return err
+		}
+		d.display = e.getPlatformDisplay(0x313F, device, nil) // EGL_PLATFORM_DEVICE_EXT
+	} else {
+		d.display = e.getPlatformDisplay(0x31DD, 0, nil) // EGL_PLATFORM_SURFACELESS_MESA
+	}
 	if d.display == 0 || e.initialize(d.display, nil, nil) == 0 {
 		return fmt.Errorf("initialize surfaceless EGL: %#x", e.getError())
 	}
@@ -85,4 +97,36 @@ func (d *glContext) closeNative() {
 	if d.library != 0 {
 		_ = purego.Dlclose(d.library)
 	}
+}
+
+// deviceForPCI resolves the DRM node advertised by EGL to a PCI address.
+func (d *glContext) deviceForPCI(address string) (uintptr, error) {
+	var queryDevices func(int32, *uintptr, *int32) uint32
+	var queryString func(uintptr, int32) string
+	if err := bindGLFunctions(d.egl.getProcAddress, []glBinding{
+		{"eglQueryDevicesEXT", &queryDevices}, {"eglQueryDeviceStringEXT", &queryString},
+	}); err != nil {
+		return 0, err
+	}
+	var count int32
+	if queryDevices(0, nil, &count) == 0 || count < 1 {
+		return 0, errors.New("no EGL devices available")
+	}
+	devices := make([]uintptr, count)
+	if queryDevices(count, &devices[0], &count) == 0 {
+		return 0, errors.New("cannot enumerate EGL devices")
+	}
+	for _, device := range devices[:count] {
+		for _, attr := range []int32{0x3377, 0x3233} { // render node and primary node.
+			path := queryString(device, attr)
+			if path == "" {
+				continue
+			}
+			sysfs, err := filepath.EvalSymlinks(filepath.Join("/sys/class/drm", filepath.Base(path), "device"))
+			if err == nil && strings.EqualFold(filepath.Base(sysfs), address) {
+				return device, nil
+			}
+		}
+	}
+	return 0, fmt.Errorf("EGL device for PCI %s unavailable", address)
 }

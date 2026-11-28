@@ -35,10 +35,14 @@ func (r *switchRoom) camera(s *game.Session) {
 }
 
 func (r *switchRoom) key(s *game.Session, key string) error {
+	return r.keyAt(s, key, time.Now())
+}
+
+func (r *switchRoom) keyAt(s *game.Session, key string, now time.Time) error {
 	switch key {
 	case "w", "a", "s", "d":
 		r.walk = key
-		r.walkUntil = time.Now().Add(180 * time.Millisecond)
+		r.walkUntil = now.Add(180 * time.Millisecond)
 	case "left":
 		r.yaw -= .12
 	case "right":

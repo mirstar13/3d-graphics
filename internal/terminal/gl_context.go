@@ -77,7 +77,11 @@ type glContext struct {
 	gl     glAPI
 	driver string
 	lookup func(string) uintptr
+	timer  gpuTimer
+	stages *DeviceStages
 }
+
+func (d *glContext) measure(stages *DeviceStages) { d.stages = stages }
 
 func openGLContext() (*glContext, error) {
 	d := new(glContext)
@@ -169,4 +173,57 @@ func (d *glContext) name() string { return d.driver }
 func (d *glContext) close() {
 	d.closeNative()
 	runtime.UnlockOSThread()
+}
+
+type gpuTimer struct {
+	id      uint32
+	begin   func(uint32, uint32)
+	end     func(uint32)
+	status  func(uint32, uint32, *uint32)
+	result  func(uint32, uint32, *uint64)
+	checked bool
+}
+
+func (d *glContext) beginTiming(enabled bool) {
+	if !enabled {
+		return
+	}
+	t := &d.timer
+	if !t.checked {
+		t.checked = true
+		var generate func(int32, *uint32)
+		if bindGLFunctions(d.lookup, []glBinding{
+			{"glGenQueries", &generate}, {"glBeginQuery", &t.begin},
+			{"glEndQuery", &t.end}, {"glGetQueryObjectuiv", &t.status},
+			{"glGetQueryObjectui64v", &t.result},
+		}) == nil {
+			generate(1, &t.id)
+		}
+	}
+	if t.id != 0 {
+		t.begin(0x88BF, t.id) // GL_TIME_ELAPSED.
+	}
+}
+
+func (d *glContext) endTiming() {
+	if d.timer.id != 0 {
+		d.timer.end(0x88BF)
+	}
+}
+
+// Read the timer after the required framebuffer readback. Leave the sample
+// empty when the driver has not made the query available yet.
+func (d *glContext) gpuTime() *uint64 {
+	t := &d.timer
+	if t.id == 0 {
+		return nil
+	}
+	var ready uint32
+	t.status(t.id, 0x8867, &ready) // GL_QUERY_RESULT_AVAILABLE.
+	if ready == 0 {
+		return nil
+	}
+	var elapsed uint64
+	t.result(t.id, 0x8866, &elapsed) // GL_QUERY_RESULT.
+	return &elapsed
 }

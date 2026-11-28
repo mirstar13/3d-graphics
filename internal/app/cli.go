@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"runtime/pprof"
 
@@ -22,6 +23,7 @@ type commandOptions struct {
 	cpuProfile            string
 	memoryProfile         string
 	frameTrace            string
+	fillTerminal          bool
 }
 
 func readCommand(args []string, output io.Writer) (config.Settings, commandOptions, error) {
@@ -36,6 +38,7 @@ func readCommand(args []string, output io.Writer) (config.Settings, commandOptio
 	flags.StringVar(&options.path, "config", "renderer.yaml", "YAML settings file")
 	flags.BoolVar(&options.settingsScreen, "settings", false, "open the settings editor")
 	flags.StringVar(&options.cpuProfile, "cpuprofile", "", "write CPU profile to file")
+	flags.BoolVar(&options.fillTerminal, "fill-terminal", false, "render across all usable cells in the current terminal")
 	flags.StringVar(&options.frameTrace, "frame-trace", "", "save up to 600 completed demo frames as CSV on leaving the scene (new file)")
 	flags.StringVar(&options.memoryProfile, "memprofile", "", "write memory profile to file")
 	flags.StringVar(&settings.Renderer, "renderer", settings.Renderer, "registered rendering backend")
@@ -114,8 +117,15 @@ func Run() {
 			}
 		}()
 	}
+	viewport := func() (int, int) {
+		if options.fillTerminal {
+			return math.MaxInt, math.MaxInt
+		}
+		return settings.Width, settings.Height
+	}
 	if options.playProject != "" {
-		if err := runProjectPlayer(options.playProject, options.playerID, false, settings.Color, settings.Physics.WorldOptions(), settings.Width, settings.Height); err != nil {
+		width, height := viewport()
+		if err := runProjectPlayer(options.playProject, options.playerID, false, settings.Color, settings.Physics.WorldOptions(), width, height); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 		}
 		return
@@ -159,8 +169,11 @@ func Run() {
 			path := sampleProjectPath(name)
 			if path == "" {
 				fmt.Fprintln(os.Stderr, "Cannot locate examples/"+name)
-			} else if err := runPlayer(path, exampleProfiles[name], true, settings.Color, settings.Physics.WorldOptions(), settings.Width, settings.Height); err != nil {
-				fmt.Fprintln(os.Stderr, err)
+			} else {
+				width, height := viewport()
+				if err := runPlayer(path, exampleProfiles[name], true, settings.Color, settings.Physics.WorldOptions(), width, height); err != nil {
+					fmt.Fprintln(os.Stderr, err)
+				}
 			}
 			continue
 		}
@@ -175,6 +188,7 @@ func Run() {
 		}
 		for {
 			runtimeConfig = settings.EngineConfig()
+			runtimeConfig.Width, runtimeConfig.Height = viewport()
 			if isTerminalBackend(runtimeConfig.Backend) {
 				if err := terminal.ConfigureTerminal(&runtimeConfig, settings.Color); err != nil {
 					fmt.Fprintln(os.Stderr, err)

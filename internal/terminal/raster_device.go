@@ -3,6 +3,7 @@ package terminal
 import (
 	"fmt"
 	"math"
+	"time"
 
 	"github.com/mirstar13/go-3d-graphics/internal/engine"
 )
@@ -67,6 +68,9 @@ func (r *TerminalRenderer) drawWithOpenGL(nodes []*engine.SceneNode, camera *eng
 	if len(batch.triangles) == 0 {
 		return false
 	}
+	if profiled, ok := r.rasterDevice.(interface{ measure(*DeviceStages) }); ok && r.Stages != nil {
+		profiled.measure(&r.Stages.Raster)
+	}
 	ids, err := r.rasterDevice.visibility(r.Width, r.Height, batch.vertices)
 	if err == nil {
 		err = validateVisibility(ids, r.Width, r.Height, len(batch.triangles))
@@ -78,6 +82,7 @@ func (r *TerminalRenderer) drawWithOpenGL(nodes []*engine.SceneNode, camera *eng
 		return false
 	}
 
+	start := stageStart(r.Stages)
 	for y := 0; y < r.Height; y++ {
 		for x, id := range ids[y*r.Width : (y+1)*r.Width] {
 			if id == 0 {
@@ -99,6 +104,9 @@ func (r *TerminalRenderer) drawWithOpenGL(nodes []*engine.SceneNode, camera *eng
 			r.ColorBuffer[y][x] = color
 			r.Surface[y][x] = r.resolvedGlyph(color, z)
 		}
+	}
+	if r.Stages != nil {
+		r.Stages.ShadeNS = time.Since(start).Nanoseconds()
 	}
 	for _, node := range nodes[prefix:] {
 		r.renderNode(node, node.Transform.GetWorldMatrix(), camera)
@@ -142,6 +150,14 @@ func (r *TerminalRenderer) collectProjectedTriangle(t *engine.Triangle, camera *
 	}
 	batch.vertices = append(batch.vertices, clip[:]...)
 	batch.triangles = append(batch.triangles, projectedTriangle{triangle: *t, normal: normal, x: x, y: y, z: z, area: area})
+}
+
+// OpenGLRasterDriver reports the active visibility device.
+func (r *TerminalRenderer) OpenGLRasterDriver() string {
+	if r.rasterDevice == nil {
+		return ""
+	}
+	return r.rasterDevice.name()
 }
 
 // UsedOpenGLRaster reports whether the last scene frame used the visibility pass.

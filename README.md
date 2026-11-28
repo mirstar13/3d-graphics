@@ -355,42 +355,47 @@ A renderer that needs drawing calls on the calling thread implements
 
 ### Benchmark OpenGL on your machine
 
-The benchmark runs natively on Linux, Windows and macOS (amd64 or arm64).
-It requires Python 3, Go 1.24.6 or newer and a compatible graphics driver.
-Linux uses surfaceless EGL with OpenGL 3.3, Windows uses WGL with OpenGL 3.3
-from a desktop session, and macOS uses the system CGL 4.1 core profile.
-
-Run from the repository checkout:
+The benchmark runs natively on Linux, Windows, and macOS (amd64 or arm64).
+Install Python 3 and Go 1.24.6 or newer. Run from the repository checkout.
 
 ```sh
 python3 scripts/benchmark_opengl.py
 ```
 
-On Windows, use `py -3 scripts/benchmark_opengl.py` from PowerShell.
+On Windows, use `py -3` in place of `python3`. On a hybrid Windows machine,
+run `py -3 scripts/benchmark_opengl.py --prepare-only` once. Under
+**Settings → System → Display → Graphics**, add each printed
+`benchmark-gpu-*.exe` and select its named GPU. Windows stores the preference
+by executable path. Run the script normally afterward to sweep all verified
+adapters without prompts. Linux tries PCI-addressed EGL devices and Mesa
+PRIME routing. macOS probes accelerated renderer IDs exposed by CGL.
 
-For a Windows system with two GPUs, first run
-`py -3 scripts/benchmark_opengl.py --prepare-only`. In **Settings → System →
-Display → Graphics**, add the two desktop apps printed by the script
-(`opengl-raster.exe` and `opengl-fxaa.exe` under `.cache/opengl-bin`).
-Set both to **High performance** and confirm Windows lists the GPU you want.
-Then run `py -3 scripts/benchmark_opengl.py --require-renderer "RTX 4050"`
-or substitute a substring of your GPU's renderer name.
+The default sweep covers every pairing of single, tiles, jobs, batched, and
+per-GPU OpenGL raster with FXAA off, CPU FXAA, or FXAA on any verified GPU.
+Cross-adapter pairs pass host RGB buffers through an FXAA worker process.
+The measured time includes the round trip. The report shows unreachable
+adapters, validation failures, and the renderer observed for each stage.
+Use `--dry-run` to inspect the matrix, `--require-renderer "RTX 4050"` to
+narrow it, or `--cpu-only` to run without GL. Software GL requires
+`--allow-software`.
 
-When multiple adapters are detected, the script asks which GPU to use.
-Windows and macOS use the graphics driver's adapter selection, which the
-script checks before timing. On Linux the picker sets `DRI_PRIME` by PCI
-address for Mesa. Use `--require-renderer` to skip the interactive picker
-and validate a specific renderer in automation.
+```sh
+python3 scripts/benchmark_opengl.py --profile gameplay --live --detail
+python3 scripts/benchmark_opengl.py --profile gameplay --cpu-only --scene physics --pacing uncapped --gc --trace
+```
 
-The script checks CPU/OpenGL image agreement, then compares single, tiled,
-job-based, batched and OpenGL rasterization with no AA and CPU FXAA. It also
-tests each CPU rasterizer with OpenGL FXAA and keeps the isolated FXAA
-measurements. The engine exposes one OpenGL pass per pipeline.
-It writes raw logs and a `summary.csv` under the ignored `.cache/` directory.
-Use `--cpu` to set the Go CPU budget and parallel worker count, `--output` for
-a new results directory, or `--help` for timing options. Recognized software
-renderers require `--allow-software`. On a multi-GPU Mesa system, you can use
-`DRI_PRIME=1` and check the reported renderer to confirm which GPU was used.
+Gameplay runs deterministic Physics Playground and Switch Room replays and
+compares centered and full-grid viewports. Maximize your terminal or use its
+fullscreen shortcut before running `--live`. Use a smaller font to test a
+denser grid. `--grid 320x120` reproduces a grid in a headless run. The game
+itself accepts `-fill-terminal` to render across its available cells.
+
+Open `report.html` under the printed `.cache/` results directory for the
+matrix heatmaps and optional frame breakdowns. `repetitions.csv` and raw
+JSON include frame counts, tail latency, output bytes, and runtime metrics.
+`--gc` writes paired results for normal GC and bounded `GOGC=off` runs.
+Use `--count`, `--frames`, `--benchtime`, and `--scene` to control sweep
+length. `--help` lists available parameters.
 
 ### Experimental offscreen triangle rendering
 

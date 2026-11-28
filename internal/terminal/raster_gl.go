@@ -4,6 +4,7 @@ package terminal
 
 import (
 	"fmt"
+	"time"
 	"unsafe"
 )
 
@@ -134,12 +135,31 @@ func (d *glRaster) visibility(width, height int, vertices []float32) ([]uint32, 
 			return nil, err
 		}
 	}
+	stages := d.stages
+	d.stages = nil
+	start := stageStart(stages)
 	d.bufferData(glArrayBuffer, len(vertices)*4, unsafe.Pointer(&vertices[0]), 0x88E0) // GL_STREAM_DRAW.
+	if stages != nil {
+		stages.UploadNS = time.Since(start).Nanoseconds()
+		stages.UploadBytes = len(vertices) * 4
+		start = time.Now()
+		d.beginTiming(true)
+	}
 	zero := [4]uint32{}
 	d.clearBufferuiv(0x1800, 0, &zero[0]) // GL_COLOR.
 	d.clear(0x0100)                       // GL_DEPTH_BUFFER_BIT.
 	d.gl.drawArrays(4, 0, int32(len(vertices)/4))
+	if stages != nil {
+		d.endTiming()
+		stages.SubmitNS = time.Since(start).Nanoseconds()
+		start = time.Now()
+	}
 	d.gl.readPixels(0, 0, int32(width), int32(height), glRedInteger, glUnsignedInt, unsafe.Pointer(&d.ids[0]))
+	if stages != nil {
+		stages.ReadbackNS = time.Since(start).Nanoseconds()
+		stages.ReadbackBytes = len(d.ids) * 4
+		stages.GPUNS = d.gpuTime()
+	}
 	if code := d.gl.getError(); code != 0 {
 		return nil, fmt.Errorf("visibility draw/readback: %#x", code)
 	}

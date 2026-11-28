@@ -20,6 +20,7 @@ type TerminalRenderer struct {
 	sampleCount         int
 	sampleDepth         []float64
 	sampleColor         []engine.Color
+	Stages              *FrameStages
 	UseOpenGLRaster     bool
 	rasterDevice        rasterDevice
 	rasterError         error
@@ -326,6 +327,7 @@ func (r *TerminalRenderer) MeasureFrameWrite(enabled bool) {
 
 // prepareScene builds frame state on the caller's goroutine before workers read it.
 func (r *TerminalRenderer) prepareScene(scene *engine.Scene) []*engine.SceneNode {
+	start := stageStart(r.Stages)
 	r.BeginFrame()
 	scene.Camera.Transform.GetInverseMatrix()
 	nodes := scene.GetRenderableNodes()
@@ -341,6 +343,9 @@ func (r *TerminalRenderer) prepareScene(scene *engine.Scene) []*engine.SceneNode
 				}
 			}
 		}
+	}
+	if r.Stages != nil {
+		r.Stages.PrepareNS = time.Since(start).Nanoseconds()
 	}
 	return nodes
 }

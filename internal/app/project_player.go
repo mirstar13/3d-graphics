@@ -38,6 +38,9 @@ type projectPlayer struct {
 	pointer                         input.Pointer
 	room                            *switchRoom
 	renderer                        *terminal.TerminalRenderer
+	drawFrame                       func(*terminal.TerminalRenderer)
+	frameClock                      func() time.Time
+	manualTicks                     bool
 	project                         *project.Project
 	options                         physics.Options
 	colorMode                       string
@@ -135,6 +138,14 @@ func (m *projectPlayer) startRound() (tea.Model, tea.Cmd) {
 	return m, tea.Batch(tea.EnableMouseCellMotion, nextEditorTick())
 }
 func (m *projectPlayer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	now := time.Now
+	if m.frameClock != nil {
+		now = m.frameClock
+	}
+	return m.update(msg, now)
+}
+
+func (m *projectPlayer) update(msg tea.Msg, nowFn func() time.Time) (tea.Model, tea.Cmd) {
 	// Motion is accumulated until the next simulation tick. Bubble Tea may
 	// ask for View after every mouse report, so keep the completed frame.
 	if _, motion := msg.(tea.MouseMsg); !motion {
@@ -213,6 +224,9 @@ func (m *projectPlayer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		if !m.session.Objective().Finished() {
+			if m.manualTicks {
+				return m, nil
+			}
 			return m, nextEditorTick()
 		}
 		m.pointer.Reset(false)
@@ -254,7 +268,7 @@ func (m *projectPlayer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.session.BehaviorInput(key)
 		if m.room != nil {
-			m.err = m.room.key(m.session, key)
+			m.err = m.room.keyAt(m.session, key, nowFn())
 			if m.err != nil {
 				return m, tea.Quit
 			}
@@ -355,7 +369,11 @@ func (m *projectPlayer) renderView() string {
 	}
 	r := m.renderer
 	r.SetLightingSystem(m.session.Lighting)
-	r.RenderScene(m.session.Scene)
+	if m.drawFrame != nil {
+		m.drawFrame(r)
+	} else {
+		r.RenderScene(m.session.Scene)
+	}
 	aimX, aimY := -1, -1
 	if m.room != nil {
 		aimX, aimY = w/2, h/2

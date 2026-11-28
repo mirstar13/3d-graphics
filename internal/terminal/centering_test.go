@@ -13,7 +13,7 @@ func TestCenteredPresentationAndMovedMargins(t *testing.T) {
 		var output bytes.Buffer
 		r := NewTerminalRenderer(bufio.NewWriter(&output), 60, 160)
 		r.UseColor = color
-		r.fitTerminal(160, 60, 321, 121)
+		r.FitTerminal(160, 60, 321, 121)
 		if r.OffsetX != 80 || r.OffsetY != 30 {
 			t.Fatalf("wrong offsets: %d,%d", r.OffsetX, r.OffsetY)
 		}
@@ -33,7 +33,7 @@ func TestCenteredPresentationAndMovedMargins(t *testing.T) {
 		output.Reset()
 		// Both terminal sizes use the same framebuffer dimensions. Movement
 		// alone must erase the old location and invalidate the cached status.
-		r.fitTerminal(160, 60, 401, 151)
+		r.FitTerminal(160, 60, 401, 151)
 		r.Present()
 		if !strings.Contains(output.String(), "\033[2J") || !strings.Contains(output.String(), "\033[106;121H") {
 			t.Fatal("old margins or status survived viewport movement")

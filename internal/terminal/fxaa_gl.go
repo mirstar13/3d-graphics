@@ -5,6 +5,7 @@ package terminal
 import (
 	_ "embed"
 	"fmt"
+	"time"
 	"unsafe"
 
 	"github.com/mirstar13/go-3d-graphics/internal/engine"
@@ -83,6 +84,9 @@ func (d *glFXAA) resize(width, height int) error {
 }
 
 func (d *glFXAA) apply(colors [][]engine.Color) error {
+	stages := d.stages
+	d.stages = nil
+	start := stageStart(stages)
 	height, width := len(colors), len(colors[0])
 	if width != d.width || height != d.height {
 		if err := d.resize(width, height); err != nil {
@@ -96,11 +100,32 @@ func (d *glFXAA) apply(colors [][]engine.Color) error {
 			i += 4
 		}
 	}
+	if stages != nil {
+		stages.PackNS = time.Since(start).Nanoseconds()
+		start = time.Now()
+	}
 	g := &d.gl
 	g.bindTexture(glTexture2D, d.source)
 	g.texSubImage2D(glTexture2D, 0, 0, 0, int32(width), int32(height), glRGBAInteger, glUnsignedByte, unsafe.Pointer(&d.pixels[0]))
+	if stages != nil {
+		stages.UploadNS = time.Since(start).Nanoseconds()
+		stages.UploadBytes = len(d.pixels)
+		start = time.Now()
+		d.beginTiming(true)
+	}
 	g.drawArrays(4, 0, 3) // GL_TRIANGLES.
+	if stages != nil {
+		d.endTiming()
+		stages.SubmitNS = time.Since(start).Nanoseconds()
+		start = time.Now()
+	}
 	g.readPixels(0, 0, int32(width), int32(height), glRGBAInteger, glUnsignedByte, unsafe.Pointer(&d.pixels[0]))
+	if stages != nil {
+		stages.ReadbackNS = time.Since(start).Nanoseconds()
+		stages.ReadbackBytes = len(d.pixels)
+		stages.GPUNS = d.gpuTime()
+		start = time.Now()
+	}
 	if status := g.getError(); status != 0 {
 		return fmt.Errorf("OpenGL FXAA filter/readback: %#x", status)
 	}
@@ -110,6 +135,9 @@ func (d *glFXAA) apply(colors [][]engine.Color) error {
 			row[x] = engine.Color{R: d.pixels[i], G: d.pixels[i+1], B: d.pixels[i+2]}
 			i += 4
 		}
+	}
+	if stages != nil {
+		stages.PackNS += time.Since(start).Nanoseconds()
 	}
 	return nil
 }
