@@ -1,4 +1,4 @@
-//go:build terminalgl && (amd64 || arm64)
+//go:build terminalgl && (linux || windows || darwin) && (amd64 || arm64)
 
 package terminal
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare the engine's CPU and OpenGL render paths on a Linux machine."""
+"""Compare the engine's CPU and OpenGL render paths using the native desktop graphics driver."""
 
 import argparse
 import csv
@@ -15,7 +15,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 SCENES = {"scene1": "Kinetic gallery", "scene6": "Wave field", "scene7": "Physics playground"}
-SOFTWARE = re.compile(r"llvmpipe|lavapipe|softpipe|swrast|swiftshader|software rasterizer", re.I)
+SOFTWARE = re.compile(r"llvmpipe|lavapipe|softpipe|swrast|swiftshader|software rasterizer|gdi generic|apple software renderer", re.I)
 BENCHMARK = re.compile(r"^(Benchmark\w+(?:/[\w]+)+)(?:-\d+)?\s+(.*)$")
 SAMPLE = re.compile(r"\s*\d+\s+([\d.]+)\s+ns/op\b")
 
@@ -40,7 +40,7 @@ def parse_samples(output):
         if match:
             pending, line = match.groups()
         sample = SAMPLE.match(line)
-        # The EGL device message may follow the benchmark label on the same
+        # The OpenGL device message may follow the benchmark label on the same
         # line, leaving the timing on the next line.
         if pending and sample:
             samples.setdefault(pending, []).append(float(sample[1]))
@@ -90,13 +90,15 @@ def main():
     parser.add_argument("--cpu", type=int, help="Go CPU budget and batched workers (default: up to 4)")
     parser.add_argument("--allow-software", action="store_true", help="continue with a known software renderer")
     args = parser.parse_args()
-    if platform.system() != "Linux" or platform.machine() not in {"x86_64", "aarch64", "arm64"}:
-        parser.error("the engine's OpenGL backend requires Linux amd64 or arm64 with surfaceless EGL")
+    system = platform.system()
+    if system not in {"Linux", "Windows", "Darwin"} or platform.machine().lower() not in {"amd64", "x86_64", "aarch64", "arm64"}:
+        parser.error("the engine's OpenGL backend requires Linux, Windows, or macOS on amd64 or arm64")
     if not shutil.which("go"):
         parser.error("Go 1.24.6 or newer must be on PATH")
     if args.count < 1 or (args.cpu is not None and args.cpu < 1):
         parser.error("--count and --cpu must be positive")
-    cpu = args.cpu or min(4, len(os.sched_getaffinity(0)))
+    available_cpus = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else (os.cpu_count() or 1)
+    cpu = args.cpu or min(4, available_cpus)
     if args.output is None:
         cache = ROOT / ".cache"
         cache.mkdir(exist_ok=True)
@@ -112,7 +114,7 @@ def main():
         f"{version}\n{platform.system()} {platform.release()} {platform.machine()}\n"
         f"cpu={cpu}\ncount={args.count}\nbenchtime={args.benchtime}\n", encoding="utf-8",
     )
-    print("Checking the EGL driver and CPU/OpenGL rendering agreement...", flush=True)
+    print("Checking the native OpenGL driver and CPU/OpenGL rendering agreement...", flush=True)
     parity = run(
         output / "parity.txt", "test", "-tags", "terminalgl", "-count=1", "-v",
         "-run", "^TestOpenGL(RasterDemoParity|VisibilityAndFallback|FXAAMatchesCPU)$",
@@ -124,10 +126,10 @@ def main():
     for kind, names in drivers.items():
         print(f"OpenGL {kind}: {', '.join(sorted(names))}", flush=True)
     if set(drivers) != {"raster", "FXAA"} or "--- SKIP:" in parity:
-        raise RuntimeError(f"OpenGL validation was skipped. Check the surfaceless EGL driver in {output / 'parity.txt'}")
+        raise RuntimeError(f"OpenGL validation was skipped. Check native OpenGL driver availability in {output / 'parity.txt'}")
     if any(SOFTWARE.search(name) for names in drivers.values() for name in names):
         if not args.allow_software:
-            raise RuntimeError("EGL selected a software renderer. Select your GPU driver or use --allow-software.")
+            raise RuntimeError("OpenGL selected a software renderer. Select your GPU driver or use --allow-software.")
         print("Software rendering enabled. These timings do not measure hardware GPU performance.", flush=True)
 
     flags = ["test", "-tags", "terminalgl", "-run", "^$", "-benchmem",

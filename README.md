@@ -355,14 +355,20 @@ A renderer that needs drawing calls on the calling thread implements
 
 ### Benchmark OpenGL on your machine
 
-On Linux amd64 or arm64 with Python 3, Go 1.24.6 or newer, and surfaceless EGL
-with OpenGL 3.3, run the headless comparison with:
+The benchmark runs natively on Linux, Windows and macOS (amd64 or arm64).
+It requires Python 3, Go 1.24.6 or newer and a compatible graphics driver.
+Linux uses surfaceless EGL with OpenGL 3.3, Windows uses WGL with OpenGL 3.3
+from a desktop session, and macOS uses the system CGL 4.1 core profile.
+
+Run from the repository checkout:
 
 ```sh
 python3 scripts/benchmark_opengl.py
 ```
 
-The script reports the active EGL renderers and checks CPU/OpenGL image
+On Windows, use `py -3 scripts/benchmark_opengl.py` from PowerShell.
+
+The script reports the active OpenGL renderers and checks CPU/OpenGL image
 agreement before timing. It compares scene rasterization with single and
 batched CPU modes and compares the CPU and OpenGL FXAA filters separately.
 It writes raw logs and a `summary.csv` under the ignored `.cache/` directory.
@@ -373,7 +379,7 @@ renderers require `--allow-software`. On a multi-GPU Mesa system, you can use
 
 ### Experimental offscreen triangle rendering
 
-On Linux amd64 or arm64 with surfaceless EGL and OpenGL 3.3, try:
+With a compatible native driver, try:
 
 ```sh
 go run -tags terminalgl . -renderer terminal-gl-raster -demo 1
@@ -390,8 +396,7 @@ nearly coincident surfaces.
 
 ### Experimental offscreen OpenGL FXAA
 
-On Linux amd64 or arm64 with a surfaceless EGL driver that supports OpenGL 3.3,
-build and run with:
+With a compatible native driver, build and run with:
 
 ```sh
 go run -tags terminalgl . -renderer terminal-gl -aa fxaa

@@ -1,4 +1,4 @@
-//go:build terminalgl && (amd64 || arm64)
+//go:build terminalgl && (linux || windows || darwin) && (amd64 || arm64)
 
 package terminal
 
@@ -69,7 +69,7 @@ func openRasterDevice() (rasterDevice, error) {
 }
 
 func (d *glRaster) initializeRaster() error {
-	if err := bindGLFunctions(d.egl.getProcAddress, []glBinding{
+	if err := bindGLFunctions(d.lookup, []glBinding{
 		{"glGenBuffers", &d.genBuffers}, {"glBindBuffer", &d.bindBuffer}, {"glBufferData", &d.bufferData},
 		{"glEnableVertexAttribArray", &d.enableVertexAttribArray}, {"glVertexAttribPointer", &d.vertexAttribPointer},
 		{"glGenRenderbuffers", &d.genRenderbuffers}, {"glBindRenderbuffer", &d.bindRenderbuffer},
